@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from "electron"
 import path from "path"
-import { startBackend } from "./server"
+import { startBackend, stopBackend } from "./server"
 
 let mainWindow: BrowserWindow | null = null
 let backendPort: number | null = null
@@ -56,6 +56,6 @@ app.on("window-all-closed", () => {
   }
 })
 
-app.on("before-quit", () => {
-  // Cleanup placeholder - will be implemented in Task 9
+app.on("before-quit", async () => {
+  await stopBackend()
 })
