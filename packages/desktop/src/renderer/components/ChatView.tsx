@@ -1,10 +1,6 @@
 import { Message } from '../api/protocol'
-
-// TODO: Implement MessageList component
-// import { MessageList } from './MessageList'
-
-// TODO: Implement InputBox component
-// import { InputBox } from './InputBox'
+import { MessageList } from './MessageList'
+import { InputBox } from './InputBox'
 
 interface ChatViewProps {
   messages: Message[]
@@ -16,8 +12,8 @@ interface ChatViewProps {
 export function ChatView({ messages, partialContent, isLoading, onSendMessage }: ChatViewProps) {
   return (
     <div className="flex flex-col h-full bg-gray-900">
-      {/* <MessageList messages={messages} partialContent={partialContent} /> */}
-      {/* <InputBox isLoading={isLoading} onSendMessage={onSendMessage} /> */}
+      <MessageList messages={messages} partialContent={partialContent} isLoading={isLoading} />
+      <InputBox onSend={onSendMessage} disabled={isLoading} />
     </div>
   )
 }
