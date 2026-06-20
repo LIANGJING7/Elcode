@@ -22,7 +22,7 @@ const SidebarPlaceholder = ({ collapsed }: { collapsed: boolean }) => (
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         <div className="text-gray-400 text-sm p-2">
-          Sidebar content placeholder
+          Sidebar placeholder
         </div>
       </div>
     </div>
@@ -31,27 +31,26 @@ const SidebarPlaceholder = ({ collapsed }: { collapsed: boolean }) => (
 
 export default function Layout({
   children,
-  isConnected = false,
+  isConnected,
   model,
   onModelChange
 }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  const connectionStatus = isConnected ? 'connected' : 'disconnected'
-
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-900 overflow-hidden">
+      {/* TitleBar at top */}
       <TitleBar
-        title="OpenCode Desktop"
-        connectionStatus={connectionStatus}
-        selectedModel={model}
+        model={model}
         onModelChange={onModelChange}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
       />
 
+      {/* Sidebar placeholder + main content flex row */}
       <div className="flex-1 flex overflow-hidden">
         <SidebarPlaceholder collapsed={!sidebarOpen} />
 
+        {/* Main content */}
         <main className="flex-1 overflow-hidden">
           {children}
         </main>
