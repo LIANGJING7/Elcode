@@ -1,0 +1,21 @@
+appId: com.opencode.desktop
+productName: OpenCode Desktop
+directories:
+  buildResources: build
+  output: dist
+files:
+  - dist/**/*
+  - build/**/*
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+    - portable
+linux:
+  target:
+    - AppImage
+    - deb
