@@ -6,14 +6,16 @@ interface TitleBarProps {
   selectedModel?: string
   onModelChange?: (model: string) => void
   models?: string[]
+  onMenuClick?: () => void
 }
 
 export default function TitleBar({
-  title = 'OpenCode',
+  title = 'OpenCode Desktop',
   connectionStatus = 'disconnected',
   selectedModel,
   onModelChange,
-  models = ['claude-3-5-sonnet', 'gpt-4o', 'o1-preview']
+  models = ['gpt-4', 'gpt-3.5-turbo', 'claude-3'],
+  onMenuClick
 }: TitleBarProps) {
   const [showModelMenu, setShowModelMenu] = useState(false)
 
@@ -31,25 +33,19 @@ export default function TitleBar({
 
   return (
     <div className="h-12 bg-gray-800 flex items-center justify-between px-4 border-b border-gray-700 select-none">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-200 font-medium">{title}</span>
-        </div>
+      <div className="flex items-center gap-3">
+        {/* Hamburger menu button */}
+        <button
+          onClick={onMenuClick}
+          className="p-1.5 text-gray-300 hover:text-white hover:bg-gray-700 rounded transition-colors"
+          title="Menu"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
         
-        <nav className="flex items-center gap-1">
-          <button className="px-3 py-1 text-sm text-gray-300 hover:bg-gray-700 rounded transition-colors">
-            File
-          </button>
-          <button className="px-3 py-1 text-sm text-gray-300 hover:bg-gray-700 rounded transition-colors">
-            Edit
-          </button>
-          <button className="px-3 py-1 text-sm text-gray-300 hover:bg-gray-700 rounded transition-colors">
-            View
-          </button>
-          <button className="px-3 py-1 text-sm text-gray-300 hover:bg-gray-700 rounded transition-colors">
-            Help
-          </button>
-        </nav>
+        <span className="text-gray-200 font-medium">{title}</span>
       </div>
 
       <div className="flex items-center gap-4">

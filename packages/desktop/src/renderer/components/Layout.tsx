@@ -3,66 +3,54 @@ import TitleBar from './TitleBar'
 
 interface LayoutProps {
   children: ReactNode
-  title?: string
-  connectionStatus?: 'connected' | 'disconnected' | 'connecting'
-  selectedModel?: string
+  isConnected?: boolean
+  model?: string
   onModelChange?: (model: string) => void
-  models?: string[]
 }
+
+// Sidebar placeholder - will be implemented in next task
+const SidebarPlaceholder = ({ collapsed }: { collapsed: boolean }) => (
+  <aside
+    className={`
+      bg-gray-800 border-r border-gray-700 transition-all duration-300 overflow-hidden
+      ${collapsed ? 'w-0' : 'w-64'}
+    `}
+  >
+    <div className="w-64 h-full flex flex-col">
+      <div className="p-3 border-b border-gray-700">
+        <h2 className="text-sm font-medium text-gray-200">Sidebar</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2">
+        <div className="text-gray-400 text-sm p-2">
+          Sidebar content placeholder
+        </div>
+      </div>
+    </div>
+  </aside>
+)
 
 export default function Layout({
   children,
-  title,
-  connectionStatus = 'disconnected',
-  selectedModel,
-  onModelChange,
-  models
+  isConnected = false,
+  model,
+  onModelChange
 }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  const connectionStatus = isConnected ? 'connected' : 'disconnected'
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-900 overflow-hidden">
       <TitleBar
-        title={title}
+        title="OpenCode Desktop"
         connectionStatus={connectionStatus}
-        selectedModel={selectedModel}
+        selectedModel={model}
         onModelChange={onModelChange}
-        models={models}
+        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
       />
-      
-      <div className="flex-1 flex overflow-hidden">
-        <aside 
-          className={`
-            bg-gray-800 border-r border-gray-700 transition-all duration-300 overflow-hidden
-            ${sidebarOpen ? 'w-64' : 'w-0'}
-          `}
-        >
-          <div className="w-64 h-full flex flex-col">
-            <div className="p-3 border-b border-gray-700">
-              <h2 className="text-sm font-medium text-gray-200">Sessions</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              <div className="text-gray-400 text-sm p-2">
-                No sessions yet
-              </div>
-            </div>
-          </div>
-        </aside>
 
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute left-0 top-14 z-10 bg-gray-700 hover:bg-gray-600 text-gray-300 p-1 rounded-r transition-colors"
-          style={{ left: sidebarOpen ? '256px' : '0' }}
-        >
-          <svg 
-            className={`w-4 h-4 transition-transform ${sidebarOpen ? '' : 'rotate-180'}`} 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+      <div className="flex-1 flex overflow-hidden">
+        <SidebarPlaceholder collapsed={!sidebarOpen} />
 
         <main className="flex-1 overflow-hidden">
           {children}
