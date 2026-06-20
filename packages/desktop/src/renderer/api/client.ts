@@ -12,6 +12,9 @@ export class WebSocketClient {
   private options: WebSocketClientOptions = {}
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
+  
+  // Allow dynamic onMessage callback
+  onMessage?: (message: WSMessage) => void
 
   async connect(url: string, options?: WebSocketClientOptions): Promise<void> {
     this.options = options || {}
@@ -29,6 +32,7 @@ export class WebSocketClient {
         try {
           const message = JSON.parse(event.data) as WSMessage
           this.options.onMessage?.(message)
+          this.onMessage?.(message)
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error)
         }
