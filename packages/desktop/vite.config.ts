@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron'
 import path from 'path'
@@ -38,5 +38,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist/renderer'
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/renderer/__tests__/**/*.test.ts'],
+    globals: true
   }
 })
