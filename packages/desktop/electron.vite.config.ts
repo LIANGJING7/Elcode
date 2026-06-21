@@ -6,17 +6,35 @@ import path from 'path'
 
 export default defineConfig({
   main: {
-    plugins: [external()],
+    build: {
+      rollupOptions: {
+        external: [
+          'electron',
+          /^@\/.*/,
+          /^@opencode\/.*/
+        ]
+      }
+    },
     resolve: {
       alias: {
+        '@': path.resolve(__dirname, '../../src'),
         '@opencode': path.resolve(__dirname, '../../src')
       }
     }
   },
   preload: {
-    plugins: [external()]
+    build: {
+      rollupOptions: {
+        external: ['electron']
+      }
+    }
   },
   renderer: {
+    build: {
+      rollupOptions: {
+        external: []
+      }
+    },
     plugins: [react()],
     css: {
       postcss: {
