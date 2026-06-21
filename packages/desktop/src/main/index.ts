@@ -1,61 +1,34 @@
-import { app, BrowserWindow } from "electron"
-import path from "path"
-import { startBackend, stopBackend } from "./server"
+import { app, ipcMain } from 'electron'
+import { createWindow, getMainWindow } from './window'
+import { registerIPCHandlers } from './ipc/handlers'
 
-let mainWindow: BrowserWindow | null = null
-let backendPort: number | null = null
+;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    webPreferences: {
-      preload: path.join(__dirname, "../preload/index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    title: "OpenCode Desktop",
-  })
+app.whenReady().then(() => {
+  registerIPCHandlers()
+  createWindow()
 
-  if (process.env.NODE_ENV === "development") {
-    mainWindow.loadURL("http://localhost:5173")
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"))
-  }
-
-  mainWindow.webContents.on("did-finish-load", () => {
-    if (backendPort && mainWindow) {
-      mainWindow.webContents.send("backend-ready", backendPort)
+  app.on('activate', () => {
+    if (!getMainWindow()) {
+      createWindow()
     }
   })
+})
 
-  mainWindow.on("closed", () => {
-    mainWindow = null
-  })
-}
-
-async function bootstrap(): Promise<void> {
-  try {
-    const { port } = await startBackend()
-    backendPort = port
-    createWindow()
-    console.log(`Backend started on port ${port}`)
-  } catch (error) {
-    console.error("Failed to start backend:", error)
-    app.quit()
-  }
-}
-
-app.whenReady().then(bootstrap)
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
     app.quit()
   }
 })
 
-app.on("before-quit", async () => {
-  await stopBackend()
+app.on('before-quit', () => {
+  ipcMain.removeAllHandlers()
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception in main process:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection in main process:', reason)
 })
