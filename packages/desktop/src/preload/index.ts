@@ -1,12 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge } from 'electron'
+import { desktopAPI } from './api'
 
-const api = {
-  onBackendReady: (callback: (port: number) => void) => {
-    ipcRenderer.on('backend-ready', (_event, port) => callback(port))
-  },
-  removeAllListeners: (channel: string) => {
-    ipcRenderer.removeAllListeners(channel)
+contextBridge.exposeInMainWorld('desktop', desktopAPI)
+
+declare global {
+  interface Window {
+    desktop: typeof desktopAPI
   }
 }
-
-contextBridge.exposeInMainWorld('electronAPI', api)
