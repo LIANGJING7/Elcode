@@ -1,4 +1,4 @@
-import { defineConfig, external } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
@@ -8,17 +8,7 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        external: [
-          'electron',
-          /^@\/.*/,
-          /^@opencode\/.*/
-        ]
-      }
-    },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '../../src'),
-        '@opencode': path.resolve(__dirname, '../../src')
+        external: ['electron']
       }
     }
   },
