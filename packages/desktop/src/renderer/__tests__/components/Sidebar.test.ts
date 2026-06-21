@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { shallowMount } from '@vue/test-utils'
 import Sidebar from '../../components/Sidebar.vue'
 import type { Conversation } from '../../../types/ipc'
 
@@ -18,14 +18,8 @@ describe('Sidebar.vue', () => {
   })
 
   it('should render conversations list', () => {
-    const wrapper = mount(Sidebar, {
-      props: { conversations: mockConversations, currentSessionId: null },
-      global: {
-        stubs: {
-          PlusIcon: { template: '<span class="plus-icon" />' },
-          SearchIcon: { template: '<span class="search-icon" />' }
-        }
-      }
+    const wrapper = shallowMount(Sidebar, {
+      props: { conversations: mockConversations, currentSessionId: null }
     })
     const items = wrapper.findAll('.conversation-item')
     expect(items.length).toBe(2)
@@ -33,28 +27,16 @@ describe('Sidebar.vue', () => {
   })
 
   it('should highlight active conversation', () => {
-    const wrapper = mount(Sidebar, {
-      props: { conversations: mockConversations, currentSessionId: 'session-2' },
-      global: {
-        stubs: {
-          PlusIcon: { template: '<span class="plus-icon" />' },
-          SearchIcon: { template: '<span class="search-icon" />' }
-        }
-      }
+    const wrapper = shallowMount(Sidebar, {
+      props: { conversations: mockConversations, currentSessionId: 'session-2' }
     })
     const items = wrapper.findAll('.conversation-item')
     expect(items[1].classes()).toContain('bg-accent')
   })
 
   it('should emit newChat event', async () => {
-    const wrapper = mount(Sidebar, {
-      props: { conversations: mockConversations, currentSessionId: null },
-      global: {
-        stubs: {
-          PlusIcon: { template: '<span class="plus-icon" />' },
-          SearchIcon: { template: '<span class="search-icon" />' }
-        }
-      }
+    const wrapper = shallowMount(Sidebar, {
+      props: { conversations: mockConversations, currentSessionId: null }
     })
     const button = wrapper.find('.new-chat-button')
     await button.trigger('click')
@@ -62,14 +44,8 @@ describe('Sidebar.vue', () => {
   })
 
   it('should emit selectSession event', async () => {
-    const wrapper = mount(Sidebar, {
-      props: { conversations: mockConversations, currentSessionId: null },
-      global: {
-        stubs: {
-          PlusIcon: { template: '<span class="plus-icon" />' },
-          SearchIcon: { template: '<span class="search-icon" />' }
-        }
-      }
+    const wrapper = shallowMount(Sidebar, {
+      props: { conversations: mockConversations, currentSessionId: null }
     })
     const item = wrapper.find('.conversation-item')
     await item.trigger('click')
@@ -78,14 +54,8 @@ describe('Sidebar.vue', () => {
   })
 
   it('should filter conversations by search', async () => {
-    const wrapper = mount(Sidebar, {
-      props: { conversations: mockConversations, currentSessionId: null },
-      global: {
-        stubs: {
-          PlusIcon: { template: '<span class="plus-icon" />' },
-          SearchIcon: { template: '<span class="search-icon" />' }
-        }
-      }
+    const wrapper = shallowMount(Sidebar, {
+      props: { conversations: mockConversations, currentSessionId: null }
     })
     const searchInput = wrapper.find('input[type="text"]')
     await searchInput.setValue('Chat 2')

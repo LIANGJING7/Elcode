@@ -22,7 +22,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  ipcMain.removeAllHandlers()
+  const channels = Object.values(require('./ipc/channels').IPC_CHANNELS) as string[]
+  channels.forEach(channel => ipcMain.removeHandler(channel))
 })
 
 process.on('uncaughtException', (error) => {
