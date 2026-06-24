@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Conversation, Message } from '../../types/ipc'
+import { ref, computed, watch } from 'vue'
+import type { Conversation, Message, LocationRef, PromptInput } from '../../types/ipc'
+import { useWorkspaceStore } from './workspace'
 
 export const useSessionStore = defineStore('session', () => {
+  const workspaceStore = useWorkspaceStore()
+  
   const currentSessionId = ref<string | null>(null)
   const conversations = ref<Conversation[]>([])
   const isLoading = ref(false)
@@ -18,16 +21,34 @@ export const useSessionStore = defineStore('session', () => {
   )
 
   const hasActiveSession = computed(() => 
-    currentSessionId.value !== null
+    currentSessionId.value !== null && workspaceStore.hasCurrentWorkspace
   )
 
-  async function createSession(workspacePath: string) {
+  watch(
+    () => workspaceStore.currentWorkspace,
+    async (newWorkspace) => {
+      if (newWorkspace) {
+        await loadConversations(newWorkspace.path)
+      } else {
+        conversations.value = []
+        currentSessionId.value = null
+      }
+    }
+  )
+
+  async function createSession(workspacePath: string, workspaceID?: string) {
+    if (!workspaceStore.currentWorkspace) {
+      error.value = 'No workspace selected'
+      return
+    }
+    
     isLoading.value = true
     error.value = null
     try {
-      const sessionId = await window.desktop.session.create(workspacePath)
+      const location: LocationRef = { directory: workspacePath, workspaceID }
+      const sessionId = await window.desktop.session.create(location)
       currentSessionId.value = sessionId
-      await loadConversations()
+      await loadConversations(workspacePath)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to create session'
     } finally {
@@ -35,10 +56,15 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function loadConversations() {
+  async function loadConversations(directory?: string) {
     isLoading.value = true
     try {
-      conversations.value = await window.desktop.session.list()
+      const dir = directory || workspaceStore.currentWorkspace?.path
+      if (!dir) {
+        conversations.value = []
+        return
+      }
+      conversations.value = await window.desktop.session.list(dir)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load conversations'
     } finally {
@@ -62,7 +88,12 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     try {
-      await window.desktop.session.sendMessage(currentSessionId.value, content)
+      const prompt: PromptInput[] = [{ type: 'text', text: content }]
+      await window.desktop.session.prompt(
+        currentSessionId.value, 
+        prompt, 
+        workspaceStore.currentWorkspace?.path
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to send message'
     }
@@ -85,21 +116,20 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function setupStreamListeners() {
-    const removeDataStream = window.desktop.session.onStreamData((data) => {
-      streamingMessage.value = data.message
-    })
-
-    const removeEndStream = window.desktop.session.onStreamEnd(() => {
-      if (streamingMessage.value && currentConversation.value) {
-        currentConversation.value.messages.push(streamingMessage.value)
+    const removeStream = window.desktop.session.onStreamEvent((data) => {
+      const event = data.event as Record<string, unknown>
+      if (event?.type === 'message') {
+        streamingMessage.value = event.message as Message
       }
-      streamingMessage.value = null
+      if (event?.type === 'complete') {
+        if (streamingMessage.value && currentConversation.value) {
+          currentConversation.value.messages.push(streamingMessage.value)
+        }
+        streamingMessage.value = null
+      }
     })
 
-    return () => {
-      removeDataStream()
-      removeEndStream()
-    }
+    return removeStream
   }
 
   return {
