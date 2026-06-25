@@ -1,7 +1,7 @@
 # 桌面端 UI 重设计
 
 **日期**: 2026-06-25
-**状态**: 设计已确认并在 2026-06-25 评审纳入六项结构性修订,待转写实现计划
+**状态**: 设计已确认并在 2026-06-25 评审纳入七项结构性修订,待转写实现计划
 **位置**: `packages/desktop`
 **前置**: 已落地的 `2026-06-21-electron-desktop-design.md` 与 `2026-06-24-desktop-workspace-management-design.md`
 
@@ -526,11 +526,24 @@ type SessionOption<T = unknown> = {
 
 ## store / UI 状态新增
 
-- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 sessionStore 的 computed,见下)
-- `stores/session.ts`(扩展): 会话 metadata 用 `options: Record<SessionOptionKey, unknown>`(取代散字段 model/mode)、`workspaceIds: string[]`、`pinned`(置顶标记);新增 `clearAll` action;新增 `artifacts` computed(从 `messages` 推导 ArtifactInstance[],**单一真源**,不另存)
+- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 artifactStore 的 computed,见下)
+
+- `stores/session.ts`(纯会话元信息与会话列表): `sessions[]` 列表、`currentSessionId`、metadata(`title`/`options: Record<SessionOptionKey, unknown>`/`workspaceIds: string[]`/`pinned`)、会话级 action(`create`/`select`/`rename`/`pin`/`delete`/`clearAll`)。**不持有消息**,不持有 artifacts。会话持久化 metadata 在此层。
+
+- `stores/message.ts`(新增,消息流单一真源): `messages[]`(当前会话的全部消息与 tool 调用,流式更新经此层)、`streamingMessage`、发送/中断动作桥接。**这是 artifact 派生的唯一输入源**。切会话时一次性替换替换为下一会话的消息。
+
+- `stores/artifact.ts`(新增,派生层): 只有 `artifacts: computed(ArtifactInstance[])` —— 遍历 `messageStore.messages` 抽 ToolCall 经 `artifactRegistry` 判定 type,**不持久化、不另存状态**。**独立成 store 而非 sessionStore 字段**,因为派生职责会持续增长(将来 todo/trace/memory/replay 都从消息流派生),独立 store 才不会回流把 sessionStore 撑成上帝对象。还可持纯 UI 派生态(如按 type 分组、聚焦 artifact 索引),只要不改 messageStore 输入。
+
 - `stores/workspace.ts`: 沿用现状,无新增
+
 - `composer/sessionOptionsRegistry`: 模块级常量,注册 SessionOption 定义(首版 model + mode 两项)
 - `composer/artifactRegistry`: 模块级常量,注册 ArtifactRenderer(首版 diff / todo / tool 三类)
+
+**拆分原则**:
+- **单一真源 = messageStore**;artifacts 一切派生于此,sessionStore 不碰消息
+- **sessionStore 切会话时只更新 `currentSessionId` + metadata,消息加载由 messageStore 监听 currentSessionId 触发**
+- **将来加 todo/trace/memory/checkpoint**: 优先复用 artifact.ts 的"派生于消息流"模式;若某产物需要独立持久化(如 checkpoint),才新开对应 store,**永不回流到 sessionStore**
+- 目标上限: 每个 store 单文件不超过 ~400 行,超过即拆
 
 ## IPC 安全约束(沿用 + 扩展)
 
@@ -557,14 +570,15 @@ type SessionOption<T = unknown> = {
 
 ## 已采纳的结构性风险(评审 2026-06-25)
 
-评审识别六个结构性风险,已并入本设计:
+评审识别七个结构性风险,已并入本设计:
 
 1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
 2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` / `tool`,新增 type 仅注册不重构。
 3. **Session 与 Workspace 强耦合**: 跨多目录分析需求已存在(Claude Code 趋势)。Session metadata 改用 `workspaceIds: string[]`(单值时长度 1),为多目录扩展铺路,schema 一次到位不改。UI 过滤仍按 "当前 workspace ∈ workspaceIds"。
 4. **Model / Mode 写死到组件树**: 未来会出 Reasoning / Permission / Profile 等。抽象为 `SessionOptions` + `sessionOptionsRegistry`,Composer 遍历渲染当前注册项,首版只注册 model + mode,新增 option 仅注册不改组件树。Session metadata 用 `options: Record<SessionOptionKey, unknown>` 而非散字段。
 5. **Skill Creator leak core 内部**: 原"激活 skill-creator"会让桌面感知具体 skill 名,以后换 mcp-creator/workflow-creator 桌面要改。改为桌面只调 `core.createSkill({ directory, usage })`,拿 `{ sessionId }` 跳转;由 core 决定激活哪个 skill,桌面零感知实现。
-6. **Artifact 状态多源**: 若 chatStore/artifactStore/toolStore 各持一份,会出现"diff 显示了 tool 没显示""删除消息 artifact 还在"等不同步。自第一天起 artifacts 从消息流推导:`sessionStore.artifacts` 是 `computed`,遍历 messages 抽 ToolCall 经 registry 判定 type;`ArtifactInstance.id = ToolCall.id` 不另生成,`toolCall` 引用消息流对象不复制;不写 artifactStore,uiStore 只持有 `artifactPanelOpen`/`activeArtifactId` 纯 UI 态。删消息/流式更新都经 computed 自动同步,无额外清理逻辑。
+6. **Artifact 状态多源**: 若 chatStore/artifactStore/toolStore 各持一份,会出现"diff 显示了 tool 没显示""删除消息 artifact 还在"等不同步。自第一天起 artifacts 从消息流推导:`artifactStore.artifacts` 是 `computed`,遍历 `messageStore.messages` 抽 ToolCall 经 registry 判定 type;`ArtifactInstance.id = ToolCall.id` 不另生成,`toolCall` 引用消息流对象不复制。删消息/流式更新都经 computed 自动同步,无额外清理逻辑。
+7. **SessionStore 上帝对象**: 若 sessionStore 同时管会话列表/metadata/messages/artifacts,再加 todo/trace/memory/checkpoint 很容易长成 2000+ 行。提前按职责拆: `sessionStore`(会话元信息与列表 + `clearAll`)/ `messageStore`(消息流单一真源,流式更新入口)/ `artifactStore`(只 computed 派生,不持久化)/ `uiStore`/ `workspaceStore`。即使 artifact 不持久化也独立成 store,因为派生职责会持续增长(将来 todo/trace/memory/replay 同模式派生)。切会话时 sessionStore 只更新 `currentSessionId` + metadata,消息加载由 messageStore 监听 currentSessionId 触发。目标单文件上限 ~400 行,超过即拆。
 
 ## 范围与拆分
 
