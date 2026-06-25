@@ -1,7 +1,7 @@
 # 桌面端 UI 重设计
 
 **日期**: 2026-06-25
-**状态**: 设计已确认并在 2026-06-25 评审纳入十项结构性修订,待转写实现计划
+**状态**: 设计已确认并在 2026-06-25 评审纳入十三项结构性修订,待转写实现计划
 **位置**: `packages/desktop`
 **前置**: 已落地的 `2026-06-21-electron-desktop-design.md` 与 `2026-06-24-desktop-workspace-management-design.md`
 
@@ -197,7 +197,7 @@ Session metadata 不写 `workspaceId: string`,而写:
 - **下层 Inspector**: 永远显示"当前 `activeToolCall`"的详情(入参/返回/耗时/状态/stdout 累计),无 Tab。Inspector 是检查器,无概念上的"多个并存",一次只看一个;点对话流里任意 tool 块 → `uiStore.activeToolCallId = tc.id` → 切到那次 tool 的详情。终端类命令的 stdout 累计也在这
 - **Inspector 可独立收起**(上下两区分开关合),上层 Artifact 自动展开规则只看 artifacts 数量,与 Inspector 无关
 
-#### ArtifactType 抽象(避免 Tab 写死)
+#### ArtifactType 抽象 + ArtifactGroup 预留
 
 ```ts
 type ArtifactType = "diff" | "todo" | "terminal" | "preview" | string  // 不含 "tool"
@@ -207,14 +207,24 @@ type ArtifactInstance = {
   type:     ArtifactType     // 持久产物才进 artifact
   toolCall: ToolCall          // 直接引用消息流中的 tool 调用对象,不复制
   props:    unknown
+  groupId?:  string           // 所属 ArtifactGroup id(可选,留扩展)
 }
 
-// 全局注册表: { [type]: { label, icon, render, applicable?(toolName) } }
+type ArtifactGroup = {
+  id:    string               // 同 type 下分组的稳定 id(如 "fix-auth-task" 或按文件目录)
+  type:  ArtifactType
+  title: string              // 分组标题(如 "src/auth/" 或任务名)
+  items: ArtifactInstance[]   // 同组下的多个实例
+}
+
+// 全局注册表: { [type]: { label, icon, render, applicable?(toolName), groupable?, groupBy?(tc) } }
 const artifactRegistry: Record<ArtifactType, ArtifactRenderer>
 ```
 
 - 每条 tool 调用产生 artifact 时,经各 renderer 的 `applicable(toolName)` 判定入哪个 type。`edit_file`/`write_file` → diff;`todo_write` → todo;**其余任意 tool 都不进 artifact,而是被 Inspector 检查**
-- **首版只注册 `diff` / `todo` 两类**(原"手工具详情"已移走);将来加 `terminal` / `preview` / `logs` / `files`,只需在 registry 注册新 type + 渲染组件,面板自动出现新 Tab,无需改面板框架
+- **首版只注册 `diff` / `todo` 两类**(原"工具详情"已移走);将来加 `terminal` / `preview` / `logs` / `files`,只需在 registry 注册新 type + 渲染组件,面板自动出现新 Tab,无需改面板框架
+- **ArtifactGroup 预留**: 当一个任务改 15 个文件时,纯按 ArtifactInstance 平铺会让单 Tab 内 15 条 diff 难导航。引入 group 概念——`groupable?: boolean` + `groupBy?: (tc) => groupId` 在 registry 注册时声明。同 type 下同 groupId 的实例聚成 `ArtifactGroup`(标题如 `src/auth/` 或任务名)。**首版实现先不做分组逻辑,只预留 `groupId` 字段与 registry 字段**;面板渲染层数(Single → Group 二级)留待二期落地,但 schema 与 registry 一次到位
+- 单 Tab 内渲染层数建议:Single 实例直接渲染;Group 状态下进入分组的二级列表(展开/折叠),默认按目录或任务名分组(diff 类型尤为常见)
 
 #### Artifact 状态来源:从消息流推导(单一真源,关键)
 
@@ -567,19 +577,42 @@ type SessionOption<T = unknown> = {
 
 - `stores/session.ts`(纯会话元信息与会话列表): `sessions[]` 列表、`currentSessionId`、metadata(`title`/`options: Record<SessionOptionKey, unknown>`/`primaryWorkspaceId: string`/`workspaceIds: string[]`/`pinned`)、会话级 action(`create`/`select`/`rename`/`pin`/`delete`/`clearAll`)。**不持有消息**,不持有 artifacts。会话持久化 metadata 在此层。
 
-- `stores/message.ts`(新增,消息流单一真源): `messages[]`(当前会话的全部消息与 tool 调用,流式更新经此层)、`streamingMessage`、发送/中断动作桥接。**这是 artifact 派生的唯一输入源**。切会话时一次性替换替换为下一会话的消息。
+- `stores/message.ts`(新增,**稳定消息流单一真源**): `messages[]`(当前会话已提交/持久化的消息与 tool 调用,流式完成即并入)。**这是 artifact 派生的唯一稳定输入源**。切会话时经 `MessageRepository.loadMessages(sessionId)` 重新加载。**不直接调 IPC**。
+- `stores/stream.ts`(新增,**临时流式态**): `streamingMessage`、`streamingToolCall`、`activeRun`(当前 run id/状态)、订阅 `session:stream:event` 的入口。流式完成 → 把 `streamingMessage` 转入 `messageStore.messages`、清空 streamStore。**与 messageStore 物理分离**,避免流式临时态把 messageStore 撑大(将来加 checkpoints/replay/resume 都进 streamStore 的"运行时"职责,不回流 messageStore)。**不直接调 IPC**
+
+#### MessageRepository 接口(store 不碰 IPC)
+
+为以后切 SQLite 而不重写 UI 留后路,store 不直接 `ipcRenderer.invoke` 而经 repo 接口:
+
+```ts
+interface MessageRepository {
+  loadMessages(sessionId: string): Promise<Message[]>
+  appendMessage(sessionId, msg): Promise<void>
+  updateMessage(sessionId, msgId, patch): Promise<void>
+  deleteMessage(sessionId, msgId): Promise<void>
+  subscribeStream(sessionId, handlers): Unsubscribe     // SSE 订阅移到 repo
+}
+
+// 首版实现 = 直接转发既有 IPC 的 thin adapter;
+// 将来换成 SQLite/远程后端只换 adapter,store 一行不改。
+```
+
+- `messageStore` / `streamStore` 都通过注入的 `MessageRepository` 实例工作,**不 import `window.desktop` 也不 import IPC 常量**
+- 切 SQLite / 远程同步等数据源时,仅替换 repository adapter,UI 全保留
+- 控制规模: messageStore 只管稳定流 + 派生契约,streamStore 只管运行时流式态,**两 store 都不持 checkpoints/replay/metadata 字段**(若需,另开 `runStore`/`checkpointStore`)
 
 - `stores/artifact.ts`(新增,派生层): 只有 `artifacts: computed(ArtifactInstance[])` —— 遍历 `messageStore.messages` 抽 ToolCall 经 `artifactRegistry` 判定 type,**不持久化、不另存状态**。**独立成 store 而非 sessionStore 字段**,因为派生职责会持续增长(将来 todo/trace/memory/replay 都从消息流派生),独立 store 才不会回流把 sessionStore 撑成上帝对象。还可持纯 UI 派生态(如按 type 分组、聚焦 artifact 索引),只要不改 messageStore 输入。
 
 - `stores/workspace.ts`: 沿用现状,无新增
 
 - `composer/sessionOptionsRegistry`: 模块级常量,注册 SessionOption 定义(首版 model + mode 两项)
-- `composer/artifactRegistry`: 模块级常量,注册 ArtifactRenderer(首版 diff / todo / tool 三类)
+- `composer/artifactRegistry`: 模块级常量,注册 ArtifactRenderer(首版 diff / todo 两类;`tool` 已移出归 Inspector,见产物面板节)
 
 **拆分原则**:
-- **单一真源 = messageStore**;artifacts 一切派生于此,sessionStore 不碰消息
-- **sessionStore 切会话时只更新 `currentSessionId` + metadata,消息加载由 messageStore 监听 currentSessionId 触发**
-- **将来加 todo/trace/memory/checkpoint**: 优先复用 artifact.ts 的"派生于消息流"模式;若某产物需要独立持久化(如 checkpoint),才新开对应 store,**永不回流到 sessionStore**
+- **单一真源 = messageStore**(稳定消息);artifacts 一切派生于此,sessionStore 不碰消息
+- **messageStore 不直接调 IPC**,经 `MessageRepository` 接口工作;streamStore 同理经 repo 的 `subscribeStream` 与流式 API
+- **sessionStore 切会话时只更新 `currentSessionId` + metadata**: messageStore 监听变更 → `MessageRepository.loadMessages` 重载;streamStore 切会话时清空运行时态(中断未完成流订阅)
+- **将来加 todo/trace/memory/checkpoint**: 优先复用 artifact.ts 的"派生于消息流"模式;若某产物需要独立持久化(如 checkpoint),才新开对应 store,**永不回流到 sessionStore**;checkpoints/replay/resume 进 streamStore 的运行时职责,不进 messageStore
 - 目标上限: 每个 store 单文件不超过 ~400 行,超过即拆
 
 ## IPC 安全约束(沿用 + 扩展)
@@ -594,7 +627,7 @@ type SessionOption<T = unknown> = {
 
 1. **阶段 1 · UI Store + View 状态机**: `uiStore`(`view`/`previousView`/`settingsSection`/面板开关态等)、单一 `view` 枚举(由 `navigationRegistry` 派生)、全局快捷键 3 个(Esc/Ctrl+B/Ctrl+N)、App.vue 按 `view` 切换主区视图骨架。先打骨架,所有后续阶段都在此 state 上长
 2. **阶段 2 · Sidebar 重组**: `navigationRegistry`(首版注册 skills/mcp)驱动顶部导航区 + Workspaces/当前目录 Tab + Sessions(搜索/重命名/置顶/删除)+ 状态栏 `⚙` toggle + WelcomeView 空态。Sidebar 早期定型,后续阶段主区可独立长功能
-3. **阶段 3 · Chat 双栏 + Artifact/Inspector**: 顶部条(标题/操作菜单)+ 右侧面板两层结构(Artifact 区 artifactRegistry 框架 + 首版注册 diff/todo 两渲染器;Inspector 区即时检查 activeToolCall)+ 对话流 B 折叠规则改造 + Shiki 代码块
+3. **阶段 3 · Chat 双栏 + Artifact/Inspector**: 顶部条(标题/操作菜单)+ 右侧面板两层结构(Artifact 区 artifactRegistry 框架 + 首版注册 diff/todo 两渲染器、预留 ArtifactGroup 的 `groupId`/`groupable`/`groupBy`;Inspector 区即时检查 activeToolCall)+ 对话流 B 折叠规则改造 + Shiki 代码块。**本阶段落地 `messageStore` + `streamStore` 分离 + `MessageRepository` 接口(thin IPC adapter)**: 把现有 `sessionStore.sendMessage`/`setupStreamListeners` 迁到新结构,store 经 repo 工作不直接碰 IPC。本阶段是构件地基阶段,后续阶段都立在 store 分离与 repo 解耦之上
 4. **阶段 4 · Composer 增强**: SessionOptions 抽象 + 底部 model/mode 下拉 + `+` 附件/提及合一 + 斜杠命令 + 历史回溯 + Esc 中断
 5. **阶段 5 · Skills/MCP 管理视图**: SkillView(含 `core.createSkill()` chat 循环入口)+ McpView(+ 添加 Server 表单 + 重连)+ 新增 IPC(`SKILL_*`/`MCP_*`)
 6. **阶段 6 · Settings 细化**: 设置项划分(外观/模型/快捷键/关于)+ Session metadata 字段(`primaryWorkspaceId`/`workspaceIds`/`options`/`pinned`)+ 扩 `ALLOWED_CONFIG_KEYS` 白名单 + 危险区操作(清会话/重置)
@@ -612,7 +645,7 @@ type SessionOption<T = unknown> = {
 
 ## 已采纳的结构性风险(评审 2026-06-25)
 
-评审识别十个结构性风险,已并入本设计:
+评审识别十三个结构性风险,已并入本设计:
 
 1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
 2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` **两类**(原 tool 移出,见第 8 项),新增 type 仅注册不重构。
@@ -624,6 +657,9 @@ type SessionOption<T = unknown> = {
 8. **Tool Detail 不该是 Artifact**: Diff/Todo 是持久产物,Tool Detail 是即时检查(查当前那次 tool call)。100 个 tool call 时"tool artifact"语义会变弱。改为参考 Claude Code / VSCode / DevTools 的两层模型: 右侧面板上层 Artifact Tabs(只放持久产物,首版 diff/todo)+ 下层 Inspector(恒显 `activeToolCall` 详情,无 Tab,一次看一个)。`artifactRegistry` 的 `ArtifactType` 不再含 "tool"。新增 `uiStore.activeToolCallId` 切换 Inspector 当前对象,Inspector 与 Artifact 区独立开合。
 9. **View 平级写死**: `view = welcome/chat/skills/mcp/settings` 把 skills/mcp 写死进枚举。pdev facts 未来会加 memory/agents/prompts。改为 `navigationRegistry` 注册导航项(`{ id, label, icon, view, order }`),Sidebar 遍历 registry 渲染,View 允许值由 registry 派生。首版注册 skills/mcp,加 memory/agents/prompts 只需注册不改 Sidebar、不改枚举。
 10. **双主题先做会浪费**: 阶段 1-6 全程暗色(沿用现状);双主题后置到阶段 7。理由: 70% 组件未定型时做亮色,后续阶段新组件还要回头二次适配亮色,成本高。功能稳定 → 统一主题 → 验收 顺序最省。实施策略已据此调整为七阶段顺序。
+11. **ArtifactTab 在大量 diff 时内容爆炸**: 任务改 15 个文件,纯按 ArtifactInstance 平铺让单 Tab 铺成 15 条 diff 难导航。预留 `ArtifactGroup` 概念: `ArtifactInstance.groupId` 可选字段 + registry `groupable`/`groupBy` 字段一次到位;同 type 同 groupId 实例聚成 ArtifactGroup(标题如 `src/auth/`)。首版实现不做分组逻辑,只留 schema 与 registry 字段;面板 Single → Group 二级渲染留待二期。
+12. **messageStore 国王担太重挡运行时态**: 流式临时态(streamingMessage/streamingToolCall/activeRun)若与稳定 messages[] 同处一 store,加 checkpoints/replay/resume 让 messageStore 长 1000+ 行难拆。从第一天 messageStore / streamStore 分离: messageStore 只存稳定消息流(派生契约);streamStore 存临时流式态,流式完成并入 messageStore 并清空。checkpoints/replay/resume 进 streamStore 运行时职责,不回流 messageStore。
+13. **store 直接调 IPC 锁死数据源**: 10000+ 消息 × 100 session 性能未来要切 SQLite/远程;若 store 直接 `ipcRenderer.invoke`,换数据源要重写 UI。引入 `MessageRepository` 接口(`loadMessages`/`appendMessage`/`updateMessage`/`deleteMessage`/`subscribeStream`),messageStore 与 streamStore 都经注入 repo 工作,**不 import `window.desktop` / IPC 常量**。首版实现是既有 IPC 的 thin adapter,将来换 SQLite/远程仅替换 adapter,UI 一行不改。
 
 ## 范围与拆分
 
