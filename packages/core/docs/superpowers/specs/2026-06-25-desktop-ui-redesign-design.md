@@ -1,7 +1,7 @@
 # 桌面端 UI 重设计
 
 **日期**: 2026-06-25
-**状态**: 设计已确认,待转写实现计划
+**状态**: 设计已确认并在 2026-06-25 评审纳入五项结构性修订,待转写实现计划
 **位置**: `packages/desktop`
 **前置**: 已落地的 `2026-06-21-electron-desktop-design.md` 与 `2026-06-24-desktop-workspace-management-design.md`
 
@@ -43,18 +43,25 @@
 - 产物面板默认宽度 360px,可拖拽调整。默认收起,首条产物出现自动展开
 - 窄屏降级: `< 1024px` 产物面板由常驻双栏 → 右侧滑出抽屉,点对话流空白处或 `Esc` 收起
 
-### 主区视图状态机
+### 主区视图状态机(单一状态源)
 
-```
-主区视图 =
-  无 workspace        → WelcomeView(空态)
-  选中会话            → ChatView(顶部条 + 对话流 + Composer + 产物面板)
-  选中 Skills 导航     → SkillsView(全宽管理列表,无双栏/无 Composer)
-  选中 MCP 导航        → McpView(全宽管理列表,无双栏/无 Composer)
-  settingsMode=true   → SettingsView(两栏设置)
+**单一 `view` 枚举,无双状态源**(避免 `view + settingsMode` 的组合爆炸):
+
+```ts
+type View = "welcome" | "chat" | "skills" | "mcp" | "settings"
+
+uiStore = {
+  view: View               // 当前主区视图
+  previousView: View       // 进入 settings 前的视图,退出时回填
+  settingsSection: "appearance" | "models" | "shortcuts" | "about"
+  // ... 其他
+}
 ```
 
-由 `uiStore.view: 'welcome' | 'chat' | 'skills' | 'mcp' | 'settings'` 驱动;`uiStore.settingsMode: boolean` 切换侧栏内容;`uiStore.settingsSection: 'appearance' | 'models' | 'shortcuts' | 'about'` 标记设置选中项。
+- 点击 `⚙` 进入设置: `previousView = view; view = "settings"`
+- 再次点击 `⚙` 退出: `view = previousView`
+- 任何视图都能进入设置,退出后回到进入前的视图(chat / skills / mcp / welcome 均可被记住)
+- **不引入 `settingsMode: boolean`** —— 状态机只有 `view` 一个枚举源,杜绝 `chat + settings` / `mcp + settings` 等组合态
 
 ## 侧栏结构与组件
 
@@ -82,8 +89,14 @@
 ### Workspaces / 当前目录 Tab
 
 - `Workspaces` Tab: 列出 `workspaces.json` 中所有工作目录,当前项高亮,`+` 触发 `openFolderPicker`
-- `当前目录` Tab: 列出当前 workspace 下的会话(按 workspaceId filter)。会话项 hover 显示重命名/置顶/删除;搜索框本地过滤
+- `当前目录` Tab: 列出当前 workspace 下的会话(**过滤条件: 当前 workspace ∈ session.workspaceIds**)。会话项 hover 显示重命名/置顶/删除;搜索框本地过滤
 - 切 workspace 时若在"当前目录"Tab 则刷新会话列表
+
+### Session 与 Workspace 解耦(避免强绑定)
+
+Session metadata 不写 `workspaceId: string`,而写 **`workspaceIds: string[]`** —— 即使当前永远长度 1,也用数组保留扩展能力。
+
+理由: 用户未来会希望一个会话跨多个目录(`frontend / backend / infra` 同时分析,对齐 Claude Code 的趋势)。当前桌面端 UI 仍按"当前 workspace ∈ workspaceIds"过滤显示,数据模型已为多目录铺路;真正多选 workspace 的 UI 留待后续,但 schema 不应回头改。
 
 ### Skills / MCP 导航项
 
@@ -153,12 +166,39 @@
 
 ### 产物面板(右侧,默认收起)
 
-- **入面板规则**: `edit_file`/`write_file` 类 → Diff Tab;`todo_write` 类 → Todo Tab;点任意 tool 块标题 → 工具详情 Tab 并聚焦该次调用
-- **Diff Tab**: 文件级 split diff,加删行着色,顶部文件路径面包屑 + apply/discard 按钮(仅 show 态,apply 经对应 IPC)
-- **Todo Tab**: 对应 core `session/todo.ts`,渲染 checkbox 列表 + 状态(pending/in_progress/completed),来自 agent 的实时更新
-- **工具详情 Tab**: 选中 tool 调用的完整入参 / 返回 / 耗时 / 状态;终端类命令的 stdout 累计也在这
-- **自动展开/收起**: 默认收起(0 宽度);首条产物出现 → 自动展开到 360px。面板顶部 `«` 收起按钮 + 主区工具栏 `»` 图标唤回;**纯靠图标点击,不加全局键**
-- **窄屏降级**: `< 1024px` 由常驻双栏 → 右侧滑出抽屉
+#### ArtifactType 抽象(避免 Tab 写死)
+
+**不写死 "Diff / Todo / 工具详情" 三 Tab**,而是抽象为 artifact 注册表:
+
+```ts
+type ArtifactType = "diff" | "todo" | "tool" | string   // 预留扩面
+
+type ArtifactInstance = {
+  id:   string           // artifact 实例 id(关联某次 tool 调用)
+  type: ArtifactType
+  props: unknown         // 各 type 自定义的渲染 props(diff 给文件路径,tool 给调用 id 等)
+}
+
+// 全局注册表: { [type]: { label, icon, render, applicable?(toolName) } }
+const artifactRegistry: Record<ArtifactType, ArtifactRenderer>
+```
+
+- 面板顶部渲染当前**已注册的 type**对应的 Tab(只渲染有产物的 type)
+- 每条 tool 调用产生 artifact 时,经各 renderer 的 `applicable(toolName)` 判定入哪个 type。`edit_file`/`write_file` → diff;`todo_write` → todo;任意 tool 调用被点击 → tool
+- **首版只注册 `diff` / `todo` / `tool` 三个 type**;将来加 `terminal` / `preview` / `logs` / `files`,只需在 registry 注册新 type + 渲染组件,面板自动出现新 Tab,无需改面板框架
+- 面板行为(展开/收起/抽屉/记忆焦点)与 type 写法解耦,只看 `ArtifactInstance[]` 渲染
+
+#### 首版三类 renderer(均经 registry 注册)
+
+- **diff renderer**: 文件级 split diff,加删行着色,顶部文件路径面包屑 + apply/discard 按钮(仅 show 态,apply 经对应 IPC)
+- **todo renderer**: 对应 core `session/todo.ts`,渲染 checkbox 列表 + 状态(pending/in_progress/completed),来自 agent 的实时更新
+- **tool renderer**: 选中 tool 调用的完整入参 / 返回 / 耗时 / 状态;终端类命令的 stdout 累计也在这
+
+#### 面板行为
+
+- 默认收起(0 宽度);首个 artifact 入表 → 自动展开到 360px("自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉")
+- 面板顶部 `«` 收起按钮 + 主区工具栏 `»` 图标唤回;**纯靠图标点击,不加全局键**
+- 窄屏降级: `< 1024px` 由常驻双栏 → 右侧滑出抽屉,点对话流空白处或 `Esc` 收起
 
 ### 组件拆分
 
@@ -166,7 +206,7 @@
 - `ChatHeader.vue`: 会话标题 + 菜单
 - `ChatTimeline.vue`: 保留,受 B 折叠规则改造,抽出子组件
 - `MessageUser.vue` / `MessageAssistant.vue` / `ReasoningBlock.vue` / `ToolCallBlock.vue` / `CodeBlock.vue`(Shiki 封装)
-- `ArtifactPanel.vue`: 产物面板容器,含 Tab 切换
+- `ArtifactPanel.vue`: 产物面板容器,**遍历 artifactRegistry 渲染已注册 type 的 Tab**(首版三类 renderer 在此注册)
 - `DiffView.vue` / `TodoView.vue` / `ToolDetailView.vue`: 三个 Tab 内容
 
 ## Composer(输入区强化)
@@ -190,7 +230,31 @@
 
 ### 底部一行控件布局
 
-从左到右: `+` 附件/提及合一 / 右侧组: `模型▾  模式▾  发送→`。模型/模式紧贴发送按钮左侧,与发送构成"发送相关控件组"。
+从左到右: `+` 附件/提及合一 / 右侧组: `SessionOptions`(model、mode 等`) + `发送→`。配置项紧贴发送按钮左侧,与发送构成"发送相关控件组"。
+
+### SessionOptions 抽象(避免 Model/Mode 写死)
+
+Composer **不写死 "model" / "mode" 两个下拉**,而是渲染 `SessionOptions` 配置项集合:
+
+```ts
+type SessionOptionKey = "model" | "mode" | "reasoning" | "permission" | ...
+type SessionOption<T = unknown> = {
+  key:    SessionOptionKey
+  label:   string           // 显示文案("模型"/"模式"/...)
+  type:    "select"          // 首版只 select;将来可扩 switch/input
+  value:   T
+  options: { value: T; label: string }[]
+  allowed: ("create" | "runtime")[]   // 允许在哪个时机改
+  default: T
+}
+```
+
+- 桌面维护 `sessionOptionsRegistry: Record<SessionOptionKey, 定义>`,Composer 遍历渲染当前注册的 option 项
+- **首版 registry 只注册 `model` 和 `mode` 两项**(值仍是 "
+  build/plan" 与 models 列表)
+- 将来加 `reasoning` / `permission` / `profile` 等,只需在 registry 注册新 key,Composer 自动渲染新下拉
+- Session metadata 存 `options: Record<SessionOptionKey, unknown>` 而非 `model`/`mode` 散字段;新会话从默认值回填
+- 出 schema 时,core 暴露 "有哪些 option key 默认 enabled" 让桌面按需显示(TODO 由 plan 确认契约)
 
 ### 1. 多行自适应 + 回车规则
 
@@ -213,12 +277,15 @@
 - 选中即插入到输入框(如 `/plan` 后空格继续打 prompt),或作为指令执行(如 `/clear` 清会话)
 - 命令清单来源 core 的 prompt 模板 + 桌面自定义(clear/compact 对应 session 操作)
 
-### 4. 模型 / 模式下拉
+### 4. SessionOptions 配置项(原"模型/模式下拉",已抽象)
 
-- **模型▾**: 取 `config.models`(既有 IPC),下拉当前可用模型列表。选中注入该会话的 model 选项,**持久到会话 metadata 而非全局**
-- **模式▾**: `build` / `plan` 两选项(首版内置仅这两个),选中切换该会话 active mode(对应 agent prompt 模板),发送时生效
-- **默认值**: 模式 = build(首次);模型 = settings 里的 `defaultModel`
-- **记忆**: 默认记住每会话 model/mode(持久到 metadata,新会话回填上次值);settings 提供「每次新建会话重置为默认值」开关(默认 off)
+依据上面「SessionOptions 抽象」,首版 registry 注册两项:
+
+- **model**(select): 值列表取 `config.models`(既有 IPC);持久到会话 metadata 的 `options.model` 而非散字段;默认值取 settings 的 `defaultModel`
+- **mode**(select): 选项 `build` / `plan`(首版内置仅这两个);发送时按 agent prompt 模板选择生效;默认值 `build`
+- Composer 渲染当前 registry 里所有注册项的下拉
+- **记忆**: 默认记住每会话 options(持久到 metadata,新会话回填上次值);settings 提供「每次新建会话重置为默认值」开关(默认 off)
+- 将来加 `reasoning` / `permission` / `profile` 等,只需注册进 registry,Composer 自动渲染,不改组件树
 
 ### 5. 中断 / 发送按钮
 
@@ -233,7 +300,7 @@
 - `AttachmentButton.vue`: `+` + 菜单,封装提及文件 / 添加附件两条入口
 - `AtFilePicker.vue`: `@`(或 `+` 中"提及文件")触发的文件选择下拉
 - `SlashCommandMenu.vue`: `/` 触发的命令菜单
-- `ModelSelect.vue` / `ModeSelect.vue`: 底部两个下拉(可复用)
+- `SessionOptions.vue`(取代 `ModelSelect.vue` / `ModeSelect.vue`): 按 registry 动态渲染所有当前注册的配置项下拉(首版渲染 model + mode 两项)
 - `ComposerToolbar.vue`: 底部一行控件
 
 ### IPC 衔接
@@ -270,22 +337,24 @@
 
 #### 新建技能(chat 循环,非静态表单)
 
-`+ 新建技能` 按钮 → 走 **skill-creator** 这个 skill 的捕获循环,而非桌面自定义生成逻辑:
+`+ 新建技能` 按钮 → 走 chat 循环捕获 intent 生成技能,**桌面端不感知具体 skill 名**:
 
 1. 点击 → 弹轻量预填:
    - 选择技能目录(`.agents/skills` 默认 / `.zcode/skills` / `~/.agents/skills` 三选一)
    - "技能用途"输入框(可选,留空则 agent 在会话里追问)
-2. 确认 → 创建一个新 chat 会话,`activeSkill = 'skill-creator'`,Composer 预填首条 prompt:
-   > 用 skill-creator 帮我创建一个技能。用途:<用户填的内容或让 skill 追问>。目标目录:<选的目录>。
-3. 发送 → agent 走 skill-creator 循环(捕获 intent → 写 SKILL.md → 在选定目录创建技能目录结构 → 试测 → 迭代)
-4. 创建过程桌面就当普通 chat 会话渲染;技能目录的真实文件写入由 agent 的 file 工具完成(buffered 在产物面板 Diff Tab)
+2. 确认 → 调 core `core.createSkill({ directory, usage })`,core 决定激活哪个 skill(当前可能是 skill-creator,未来可能换名或换实现) → 返回 `{ sessionId }`
+3. 桌面用 `sessionId` 跳转进 chat 会话(`view = "chat"` + `selectSession`)
+4. 后续捕获 intent / 写 SKILL.md / 创建目录结构 / 试测 / 迭代全在 chat 会话里渲染;文件写入 buffered 在产物面板 Diff Tab
 
-**为什么这样设计**: skill-creator 本质是 chat 循环(要跟用户问答捕获 intent),必须落到 chat 会话语境;桌面不重新实现 skill 生成逻辑,复用 agent + skill-creator 的能力;产物面板 Diff Tab 天生适合看 skill-creator 写出的 SKILL.md / references 等文件改动。
+**分层约束(关键)**:
+- 桌面**只调 `core.createSkill(payload)`,只拿 `sessionId`**,不在 UI 里写 "skill-creator" 字面量
+- 不传 `activeSkill: 'skill-creator'` 这种 leak core 内部的参数
+- 以后 core 内部把 skill-creator 换成 mcp-creator / workflow-creator / 别的实现,或重命名,桌面端零改动(同契约)
+- core 充当"哪个 skill 负责创建技能"的路由层,实现细节封装在 core
 
-**衔接**:
-- `activeSkill` 作为新会话元信息传给 core(session 已有 mode 传参机制,同类)
-- 用户未填用途 → composer 预填的 prompt 让 skill-creator 主动追问
-- 创建的目录路径不暴露给用户手填(对话框只选预置三选一);agent 写入时 under workspace 或 home,经既有 file IPC 安全约束
+**衔接细节**:
+- 用户未填 usage → core 自行让被激活的 skill 主动追问
+- 创建的目录路径不暴露用户手填(对话框只选预置三选一);agent 写入 under workspace 或 home,经既有 file IPC 安全约束
 
 ### McpView
 
@@ -431,9 +500,11 @@
 
 ## store / UI 状态新增
 
-- `stores/ui.ts`(新增): `view`、`settingsMode`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeToolCallId`(工具详情 Tab 聚焦)
-- `stores/session.ts`(扩展): 会话 metadata 携带 `model` / `mode` / `pinned`(置顶标记);新增 `clearAll` action
+- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(工具详情 Tab 聚焦的 artifact 实例)。**不含 `settingsMode`(已统一进 `view`)**
+- `stores/session.ts`(扩展): 会话 metadata 用 `options: Record<SessionOptionKey, unknown>`(取代散字段 model/mode)、`workspaceIds: string[]`、`pinned`(置顶标记);新增 `clearAll` action
 - `stores/workspace.ts`: 沿用现状,无新增
+- `composer/sessionOptionsRegistry`: 模块级常量,注册 SessionOption 定义(首版 model + mode 两项)
+- `composer/artifactRegistry`: 模块级常量,注册 ArtifactRenderer(首版 diff / todo / tool 三类)
 
 ## IPC 安全约束(沿用 + 扩展)
 
@@ -446,7 +517,7 @@
 **方案一: 分层增量**,按用户感知价值分四阶段:
 
 1. **阶段 1 · 视觉基线**: 暖 accent + 亮色主题切换 + 全局快捷键 3 个 + 设置面板骨架(外观设置项)+ `uiStore` 落地
-2. **阶段 2 · 主内容区 C 双栏**: 顶部条(会话标题/操作菜单)+ 右产物面板三 Tab(Diff/Todo/工具详情)+ 对话流折叠规则改造(B 默认值)+ Shiki 代码块
+2. **阶段 2 · 主内容区 C 双栏**: 顶部条(会话标题/操作菜单)+ 右产物面板(artifactRegistry 框架 + 首版注册 diff/todo/tool 三渲染器)+ 对话流折叠规则改造(B 默认值)+ Shiki 代码块
 3. **阶段 3 · 侧栏重组**: Skills/MCP 导航项 + Workspaces/当前目录 Tab + Sessions(搜索/重命名/置顶/删除)+ Settings 两栏 + 状态栏 `⚙` toggle
 4. **阶段 4 · Composer 强化**: 底部 model/mode 下拉 + `+` 附件/提及 + 斜杠命令 + 历史回溯 + Esc 中断 + Skills/MCP 管理视图(含新建技能 chat 循环)
 
@@ -454,10 +525,19 @@
 
 ## 风险与权衡
 
-- **skill-creator chat 循环引入新 session 元信息 `activeSkill`**: core 是否已支持"按 skill 加载 prompt context"需在 plan 中确认;若 core 未直接支持,则首版可退化为"composer 预填 prompt,不强制激活 skill"也能跑通
 - **双主题维护成本**: 每个新组件都要在两套主题下验证。CSS 变量集中化是关键,plan 中需约束使用变量而非硬编码颜色
 - **Shiki 体积**: Electron 包体积增加(Shiki 含语言包)。首版只加载常用语言(js/ts/json/bash/md),其余按需懒加载
-- **产物面板状态机**: 自动展开/记忆 Tab/聚焦 toolCall 的逻辑较复杂,plan 需明确"自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉"
+- **产物面板状态机**: 自动展开/记忆 Tab/聚焦 artifact 的逻辑较复杂,本设计已规定"自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉",plan 落实时以 artifactRegistry + ArtifactInstance[] 为单一数据源,避免重复状态机
+
+## 已采纳的结构性风险(评审 2026-06-25)
+
+评审识别五个结构性风险,已并入本设计:
+
+1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
+2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` / `tool`,新增 type 仅注册不重构。
+3. **Session 与 Workspace 强耦合**: 跨多目录分析需求已存在(Claude Code 趋势)。Session metadata 改用 `workspaceIds: string[]`(单值时长度 1),为多目录扩展铺路,schema 一次到位不改。UI 过滤仍按 "当前 workspace ∈ workspaceIds"。
+4. **Model / Mode 写死到组件树**: 未来会出 Reasoning / Permission / Profile 等。抽象为 `SessionOptions` + `sessionOptionsRegistry`,Composer 遍历渲染当前注册项,首版只注册 model + mode,新增 option 仅注册不改组件树。Session metadata 用 `options: Record<SessionOptionKey, unknown>` 而非散字段。
+5. **Skill Creator leak core 内部**: 原"激活 skill-creator"会让桌面感知具体 skill 名,以后换 mcp-creator/workflow-creator 桌面要改。改为桌面只调 `core.createSkill({ directory, usage })`,拿 `{ sessionId }` 跳转;由 core 决定激活哪个 skill,桌面零感知实现。
 
 ## 范围与拆分
 
