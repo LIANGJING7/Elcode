@@ -1,7 +1,7 @@
 # 桌面端 UI 重设计
 
 **日期**: 2026-06-25
-**状态**: 设计已确认并在 2026-06-25 评审纳入五项结构性修订,待转写实现计划
+**状态**: 设计已确认并在 2026-06-25 评审纳入六项结构性修订,待转写实现计划
 **位置**: `packages/desktop`
 **前置**: 已落地的 `2026-06-21-electron-desktop-design.md` 与 `2026-06-24-desktop-workspace-management-design.md`
 
@@ -174,9 +174,10 @@ Session metadata 不写 `workspaceId: string`,而写 **`workspaceIds: string[]`*
 type ArtifactType = "diff" | "todo" | "tool" | string   // 预留扩面
 
 type ArtifactInstance = {
-  id:   string           // artifact 实例 id(关联某次 tool 调用)
-  type: ArtifactType
-  props: unknown         // 各 type 自定义的渲染 props(diff 给文件路径,tool 给调用 id 等)
+  id:       string           // = 关联的 tool call id(派生自消息流,无独立 id 生成)
+  type:     ArtifactType
+  toolCall: ToolCall          // 直接引用消息流中的 tool 调用对象,不复制
+  props:    unknown          // 各 type 自定义的渲染 props(diff 给文件路径等)
 }
 
 // 全局注册表: { [type]: { label, icon, render, applicable?(toolName) } }
@@ -188,15 +189,40 @@ const artifactRegistry: Record<ArtifactType, ArtifactRenderer>
 - **首版只注册 `diff` / `todo` / `tool` 三个 type**;将来加 `terminal` / `preview` / `logs` / `files`,只需在 registry 注册新 type + 渲染组件,面板自动出现新 Tab,无需改面板框架
 - 面板行为(展开/收起/抽屉/记忆焦点)与 type 写法解耦,只看 `ArtifactInstance[]` 渲染
 
+#### Artifact 状态来源:从消息流推导(单一真源,关键)
+
+**Artifacts 全部从消息流推导(derived/computed),不另存第二份状态。** 杜绝出现"diff 显示了但 tool 没显示""删除消息后 artifact 还在"等不同步问题。
+
+```ts
+// sessionStore 中 artifacts 是 computed,不是独立 state:
+const artifacts = computed<ArtifactInstance[]>(() => {
+  // 遍历当前会话的所有消息,抽 ToolCall,逐条经 registry 判定
+  return messages
+    .flatMap(m => m.toolCalls ?? [])
+    .map(tc => {
+      const type = pickArtifactType(tc.name)   // 查 registry.applicable
+      return type ? { id: tc.id, type, toolCall: tc, props: tc.args } : null
+    })
+    .filter(Boolean)
+})
+```
+
+**硬约束**:
+- `ArtifactInstance.id` 直接复用 `ToolCall.id`,**不另生成 id**,这样删除某 tool call 时对应 artifact 自动消失(computed 重算)
+- `ArtifactInstance.toolCall` **引用**消息流里的 tool call 对象,**不复制**——tool 的入参/返回/状态更新通过消息流一次到位,artifact 自动同步
+- **不写 artifactStore 也不在 uiStore 持有 artifact 列表**。uiStore 只持有纯 UI 态:`artifactPanelOpen`、`activeArtifactId`(选中焦点)
+- 删除/重置消息 → computed 重算 → 产物面板自动清空对应项,无需手写清理逻辑
+- 流式更新 tool 状态 → 消息流更新 → computed 依赖触发 → 面板自动随动,中间无额外 dispatch
+
 #### 首版三类 renderer(均经 registry 注册)
 
-- **diff renderer**: 文件级 split diff,加删行着色,顶部文件路径面包屑 + apply/discard 按钮(仅 show 态,apply 经对应 IPC)
-- **todo renderer**: 对应 core `session/todo.ts`,渲染 checkbox 列表 + 状态(pending/in_progress/completed),来自 agent 的实时更新
-- **tool renderer**: 选中 tool 调用的完整入参 / 返回 / 耗时 / 状态;终端类命令的 stdout 累计也在这
+- **diff renderer**: 文件级 split diff,加删行着色,顶部文件路径面包屑 + apply/discard 按钮(仅 show 态,apply 经对应 IPC)。数据取自 `toolCall.args`(文件路径)与 `toolCall.result`(diff 内容)
+- **todo renderer**: 对应 core `session/todo.ts`,渲染 checkbox 列表 + 状态(pending/in_progress/completed)。数据取自 `toolCall.result`(todo_write 工具的输出),实时随流式 result 更新
+- **tool renderer**: 选中 tool 调用的完整入参 / 返回 / 耗时 / 状态;终端类命令的 stdout 累计也在这。数据直接读 `toolCall`
 
 #### 面板行为
 
-- 默认收起(0 宽度);首个 artifact 入表 → 自动展开到 360px("自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉")
+- 默认收起(0 宽度);`artifacts.length` 从 0 → >0 时自动展开到 360px("自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉")。由 watcher 监听 `artifacts.length` 跨零触发
 - 面板顶部 `«` 收起按钮 + 主区工具栏 `»` 图标唤回;**纯靠图标点击,不加全局键**
 - 窄屏降级: `< 1024px` 由常驻双栏 → 右侧滑出抽屉,点对话流空白处或 `Esc` 收起
 
@@ -500,8 +526,8 @@ type SessionOption<T = unknown> = {
 
 ## store / UI 状态新增
 
-- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(工具详情 Tab 聚焦的 artifact 实例)。**不含 `settingsMode`(已统一进 `view`)**
-- `stores/session.ts`(扩展): 会话 metadata 用 `options: Record<SessionOptionKey, unknown>`(取代散字段 model/mode)、`workspaceIds: string[]`、`pinned`(置顶标记);新增 `clearAll` action
+- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 sessionStore 的 computed,见下)
+- `stores/session.ts`(扩展): 会话 metadata 用 `options: Record<SessionOptionKey, unknown>`(取代散字段 model/mode)、`workspaceIds: string[]`、`pinned`(置顶标记);新增 `clearAll` action;新增 `artifacts` computed(从 `messages` 推导 ArtifactInstance[],**单一真源**,不另存)
 - `stores/workspace.ts`: 沿用现状,无新增
 - `composer/sessionOptionsRegistry`: 模块级常量,注册 SessionOption 定义(首版 model + mode 两项)
 - `composer/artifactRegistry`: 模块级常量,注册 ArtifactRenderer(首版 diff / todo / tool 三类)
@@ -531,13 +557,14 @@ type SessionOption<T = unknown> = {
 
 ## 已采纳的结构性风险(评审 2026-06-25)
 
-评审识别五个结构性风险,已并入本设计:
+评审识别六个结构性风险,已并入本设计:
 
 1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
 2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` / `tool`,新增 type 仅注册不重构。
 3. **Session 与 Workspace 强耦合**: 跨多目录分析需求已存在(Claude Code 趋势)。Session metadata 改用 `workspaceIds: string[]`(单值时长度 1),为多目录扩展铺路,schema 一次到位不改。UI 过滤仍按 "当前 workspace ∈ workspaceIds"。
 4. **Model / Mode 写死到组件树**: 未来会出 Reasoning / Permission / Profile 等。抽象为 `SessionOptions` + `sessionOptionsRegistry`,Composer 遍历渲染当前注册项,首版只注册 model + mode,新增 option 仅注册不改组件树。Session metadata 用 `options: Record<SessionOptionKey, unknown>` 而非散字段。
 5. **Skill Creator leak core 内部**: 原"激活 skill-creator"会让桌面感知具体 skill 名,以后换 mcp-creator/workflow-creator 桌面要改。改为桌面只调 `core.createSkill({ directory, usage })`,拿 `{ sessionId }` 跳转;由 core 决定激活哪个 skill,桌面零感知实现。
+6. **Artifact 状态多源**: 若 chatStore/artifactStore/toolStore 各持一份,会出现"diff 显示了 tool 没显示""删除消息 artifact 还在"等不同步。自第一天起 artifacts 从消息流推导:`sessionStore.artifacts` 是 `computed`,遍历 messages 抽 ToolCall 经 registry 判定 type;`ArtifactInstance.id = ToolCall.id` 不另生成,`toolCall` 引用消息流对象不复制;不写 artifactStore,uiStore 只持有 `artifactPanelOpen`/`activeArtifactId` 纯 UI 态。删消息/流式更新都经 computed 自动同步,无额外清理逻辑。
 
 ## 范围与拆分
 
