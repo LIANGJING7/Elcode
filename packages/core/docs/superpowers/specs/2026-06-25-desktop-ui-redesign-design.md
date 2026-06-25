@@ -226,8 +226,11 @@ const artifacts = computed<ArtifactInstance[]>(() => {
 
 #### 面板行为
 
-- 默认收起(0 宽度);`artifacts.length` 从 0 → >0 时自动展开到 360px("自动展开只在面板从无到有时触发一次;后续用户切换不过度干涉")。由 watcher 监听 `artifacts.length` 跨零触发
+- 默认收起(0 宽度);`artifacts.length` 从 0 → >0 时自动展开到 360px,但只在 **`uiStore.hasUserClosedArtifactPanel === false`** 时触发(见下)
+- **`hasUserClosedArtifactPanel: boolean`**(uiStore 态, 仅运行时不持久化): 用户点 `«` 主动收起面板 → 置 `true`;此后任何新 artifact(`artifacts.length` 增长)都不再自动展开,**直到用户点 `»` 主动唤回时清回 `false`**。这是"用户已表达不要面板"的尊重,避免任务 B 新出 diff 时面板又弹起打乱布局
+- 规则总结: `autoOpen = artifacts.length 从 0→>0 && !hasUserClosedArtifactPanel`;触发只在"从无到有"边界,**不**在"已有 → 更多"时触发
 - 面板顶部 `«` 收起按钮 + 主区工具栏 `»` 图标唤回;**纯靠图标点击,不加全局键**
+- 切会话: `hasUserClosedArtifactPanel` 重置为 `false`(新会话恢复默认自动展开);若新会话已有 artifacts 立即按规则展开
 - 窄屏降级: `< 1024px` 由常驻双栏 → 右侧滑出抽屉,点对话流空白处或 `Esc` 收起
 
 ### 组件拆分
@@ -530,7 +533,7 @@ type SessionOption<T = unknown> = {
 
 ## store / UI 状态新增
 
-- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 artifactStore 的 computed,见下)
+- `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)、`hasUserClosedArtifactPanel`(用户主动收起后置 `true`,压制未来自动展开,见产物面板行为节)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 artifactStore 的 computed,见下)
 
 - `stores/session.ts`(纯会话元信息与会话列表): `sessions[]` 列表、`currentSessionId`、metadata(`title`/`options: Record<SessionOptionKey, unknown>`/`primaryWorkspaceId: string`/`workspaceIds: string[]`/`pinned`)、会话级 action(`create`/`select`/`rename`/`pin`/`delete`/`clearAll`)。**不持有消息**,不持有 artifacts。会话持久化 metadata 在此层。
 
