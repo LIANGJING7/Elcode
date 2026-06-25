@@ -90,13 +90,17 @@ uiStore = {
 
 - `Workspaces` Tab: 列出 `workspaces.json` 中所有工作目录,当前项高亮,`+` 触发 `openFolderPicker`
 - `当前目录` Tab: 列出当前 workspace 下的会话(**过滤条件: 当前 workspace ∈ session.workspaceIds**)。会话项 hover 显示重命名/置顶/删除;搜索框本地过滤
+- 多目录挂载歧义处理: "当前目录 Tab" 选中态以 `primaryWorkspaceId` 为 anchor(将来支持 `frontend / backend / infra` 多挂载时,会话归属以 primary 为默认显示目录,Tab 头在多目录时显示主目录名 + 其余目录数量徽章,如 `agent-repo +2`);首版单挂载 `primaryWorkspaceId === workspaceIds[0]`,Tab 头无徽章
 - 切 workspace 时若在"当前目录"Tab 则刷新会话列表
 
 ### Session 与 Workspace 解耦(避免强绑定)
 
-Session metadata 不写 `workspaceId: string`,而写 **`workspaceIds: string[]`** —— 即使当前永远长度 1,也用数组保留扩展能力。
+Session metadata 不写 `workspaceId: string`,而写:
 
-理由: 用户未来会希望一个会话跨多个目录(`frontend / backend / infra` 同时分析,对齐 Claude Code 的趋势)。当前桌面端 UI 仍按"当前 workspace ∈ workspaceIds"过滤显示,数据模型已为多目录铺路;真正多选 workspace 的 UI 留待后续,但 schema 不应回头改。
+- **`primaryWorkspaceId: string`** — 主挂载目录,UI 的 anchor(决定"当前目录 Tab"显示谁、当前会话默认归属哪个 workspace)
+- **`workspaceIds: string[]`** — 全部挂载目录,长度 ≥ 1,`primaryWorkspaceId` 必须在其中
+
+理由: 只用 `workspaceIds` 数组,多目录挂载(`frontend / backend / infra`)时"当前目录 Tab"显示哪个会二义。`primaryWorkspaceId` 充当 anchor,对齐 Claude Code 的多目录趋势。当前桌面端 UI 仍只支持单挂载(`workspaceIds.length === 1, primaryWorkspaceId === workspaceIds[0]`),数据模型已为多目录铺路;真正多选 workspace 的 UI 留待后续,但 schema 不应回头改。
 
 ### Skills / MCP 导航项
 
@@ -528,7 +532,7 @@ type SessionOption<T = unknown> = {
 
 - `stores/ui.ts`(新增): `view`、`previousView`、`settingsSection`、`artifactPanelOpen`(产物面板开关)、`activeArtifactId`(选中焦点 = 某个 ToolCall.id)。**不含 `settingsMode`(已统一进 `view`);不含 artifact 列表**(artifacts 是 artifactStore 的 computed,见下)
 
-- `stores/session.ts`(纯会话元信息与会话列表): `sessions[]` 列表、`currentSessionId`、metadata(`title`/`options: Record<SessionOptionKey, unknown>`/`workspaceIds: string[]`/`pinned`)、会话级 action(`create`/`select`/`rename`/`pin`/`delete`/`clearAll`)。**不持有消息**,不持有 artifacts。会话持久化 metadata 在此层。
+- `stores/session.ts`(纯会话元信息与会话列表): `sessions[]` 列表、`currentSessionId`、metadata(`title`/`options: Record<SessionOptionKey, unknown>`/`primaryWorkspaceId: string`/`workspaceIds: string[]`/`pinned`)、会话级 action(`create`/`select`/`rename`/`pin`/`delete`/`clearAll`)。**不持有消息**,不持有 artifacts。会话持久化 metadata 在此层。
 
 - `stores/message.ts`(新增,消息流单一真源): `messages[]`(当前会话的全部消息与 tool 调用,流式更新经此层)、`streamingMessage`、发送/中断动作桥接。**这是 artifact 派生的唯一输入源**。切会话时一次性替换替换为下一会话的消息。
 
@@ -574,7 +578,7 @@ type SessionOption<T = unknown> = {
 
 1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
 2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` / `tool`,新增 type 仅注册不重构。
-3. **Session 与 Workspace 强耦合**: 跨多目录分析需求已存在(Claude Code 趋势)。Session metadata 改用 `workspaceIds: string[]`(单值时长度 1),为多目录扩展铺路,schema 一次到位不改。UI 过滤仍按 "当前 workspace ∈ workspaceIds"。
+3. **Session 与 Workspace 强耦合**: 跨多目录分析需求已存在(Claude Code 趋势)。Session metadata 改用 `primaryWorkspaceId: string` + `workspaceIds: string[]`(单值时 primary === workspaceIds[0]),为多目录扩展铺路,schema 一次到位不改。`primaryWorkspaceId` 是多挂载时"当前目录 Tab"的 anchor,避免二义。UI 过滤仍按 "当前 workspace ∈ workspaceIds"。
 4. **Model / Mode 写死到组件树**: 未来会出 Reasoning / Permission / Profile 等。抽象为 `SessionOptions` + `sessionOptionsRegistry`,Composer 遍历渲染当前注册项,首版只注册 model + mode,新增 option 仅注册不改组件树。Session metadata 用 `options: Record<SessionOptionKey, unknown>` 而非散字段。
 5. **Skill Creator leak core 内部**: 原"激活 skill-creator"会让桌面感知具体 skill 名,以后换 mcp-creator/workflow-creator 桌面要改。改为桌面只调 `core.createSkill({ directory, usage })`,拿 `{ sessionId }` 跳转;由 core 决定激活哪个 skill,桌面零感知实现。
 6. **Artifact 状态多源**: 若 chatStore/artifactStore/toolStore 各持一份,会出现"diff 显示了 tool 没显示""删除消息 artifact 还在"等不同步。自第一天起 artifacts 从消息流推导:`artifactStore.artifacts` 是 `computed`,遍历 `messageStore.messages` 抽 ToolCall 经 registry 判定 type;`ArtifactInstance.id = ToolCall.id` 不另生成,`toolCall` 引用消息流对象不复制。删消息/流式更新都经 computed 自动同步,无额外清理逻辑。
