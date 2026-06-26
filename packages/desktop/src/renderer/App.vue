@@ -1,14 +1,6 @@
 <template>
   <div class="app-container h-screen flex bg-bg overflow-hidden">
-    <Sidebar
-      v-show="ui.sidebarOpen"
-      :conversations="conversations"
-      :current-session-id="currentSessionId"
-      @new-chat="handleNewChat"
-      @select-session="handleSelectSession"
-      @select-workspace="handleSelectWorkspace"
-      @add-workspace="handleAddWorkspace"
-    />
+    <Sidebar v-show="ui.sidebarOpen" />
 
     <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
       <!-- 主区按 uiStore.view 渲染。空 workspace 强制 welcome；
@@ -42,8 +34,6 @@ const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
 
-const conversations = computed(() => sessionStore.conversations)
-const currentSessionId = computed(() => sessionStore.currentSessionId)
 const currentMessages = computed(() => sessionStore.currentMessages)
 const hasActiveSession = computed(() => sessionStore.hasActiveSession)
 const isLoading = computed(() => sessionStore.isLoading)
@@ -89,20 +79,8 @@ onUnmounted(() => {
   cleanupListeners?.()
 })
 
-async function handleNewChat() {
-  const ws = workspaceStore.currentWorkspace
-  if (!ws) return
-  await sessionStore.createSession({ workspaceId: ws.id, path: ws.path })
-}
-
-function handleSelectSession(sessionId: string) {
-  sessionStore.selectSession(sessionId)
-}
-
-async function handleSelectWorkspace(path: string) {
-  await workspaceStore.selectWorkspace(path)
-}
-
+// Sidebar 内的 workspaces/sessions 子组件已直连 store, 不再经 App.vue 中转;
+// 这里只保留 WelcomeView 的 open-folder 与 Composer 的 send.
 async function handleAddWorkspace() {
   await workspaceStore.addWorkspace()
 }
