@@ -68,15 +68,15 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function addProvider(config: { name: string; apiKey: string; baseUrl?: string }): Promise<{ success: boolean; error?: string }> {
+  async function addProvider(config: { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; error?: string }> {
     saving.value = true
     error.value = null
     try {
-      const result = await window.desktop.provider.add(config)
+      const result = await window.desktop.provider.add(config, directory)
       if (result.success && result.provider) {
         providers.value.push(result.provider as ProviderInfo)
         // Auto test and fetch models after adding
-        await testProvider((result.provider as ProviderInfo).id)
+        await testProvider((result.provider as ProviderInfo).id, directory)
       }
       return { success: result.success, error: result.error }
     } catch (e) {
@@ -88,11 +88,11 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function updateProvider(providerId: string, config: { apiKey?: string; baseUrl?: string }): Promise<{ success: boolean; error?: string }> {
+  async function updateProvider(providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; error?: string }> {
     saving.value = true
     error.value = null
     try {
-      const result = await window.desktop.provider.update(providerId, config)
+      const result = await window.desktop.provider.update(providerId, config, directory)
       if (result.success && result.provider) {
         const index = providers.value.findIndex(p => p.id === providerId)
         if (index !== -1) {
@@ -109,11 +109,11 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function deleteProvider(providerId: string): Promise<{ success: boolean; error?: string }> {
+  async function deleteProvider(providerId: string, directory?: string): Promise<{ success: boolean; error?: string }> {
     deleting.value = true
     error.value = null
     try {
-      const result = await window.desktop.provider.delete(providerId)
+      const result = await window.desktop.provider.delete(providerId, directory)
       if (result.success) {
         providers.value = providers.value.filter(p => p.id !== providerId)
         connectedProviders.value = connectedProviders.value.filter(id => id !== providerId)
@@ -128,10 +128,10 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function testProvider(providerId: string): Promise<{ success: boolean; modelCount?: number; error?: string }> {
+  async function testProvider(providerId: string, directory?: string): Promise<{ success: boolean; modelCount?: number; error?: string }> {
     testing.value.add(providerId)
     try {
-      const result = await window.desktop.provider.test(providerId)
+      const result = await window.desktop.provider.test(providerId, directory)
       if (result.success) {
         const index = providers.value.findIndex(p => p.id === providerId)
         if (index !== -1 && result.modelCount !== undefined) {
@@ -150,10 +150,10 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
-  async function refreshModels(providerId: string): Promise<{ success: boolean; changed?: boolean; error?: string }> {
+  async function refreshModels(providerId: string, directory?: string): Promise<{ success: boolean; changed?: boolean; error?: string }> {
     refreshing.value.add(providerId)
     try {
-      const result = await window.desktop.provider.refreshModels(providerId)
+      const result = await window.desktop.provider.refreshModels(providerId, directory)
       if (result.success && result.models) {
         const index = providers.value.findIndex(p => p.id === providerId)
         if (index !== -1) {
