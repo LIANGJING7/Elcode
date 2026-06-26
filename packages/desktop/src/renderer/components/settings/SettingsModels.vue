@@ -50,61 +50,33 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { useModelsStore, type ProviderInfo } from '../../stores/models'
 import ConfigSelect from './ConfigSelect.vue'
 
-interface ProviderModel {
-  id?: string
-  name?: string
-}
-
-interface ProviderInfo {
-  id: string
-  name: string
-  source: string
-  models: Record<string, ProviderModel>
-}
-
 const workspaceStore = useWorkspaceStore()
+const modelsStore = useModelsStore()
 const directory = workspaceStore.currentWorkspace?.path
 
+// Use store state via computed
+const providers = computed(() => modelsStore.providers)
+const connectedProviders = computed(() => modelsStore.connectedProviders)
+const loading = computed(() => modelsStore.loading)
+const modelOptions = computed(() => modelsStore.modelOptions)
+
+// Keep defaultModel local (not in modelsStore)
 const defaultModel = ref('')
-const providers = ref<ProviderInfo[]>([])
-const defaultModelIds = ref<Record<string, string>>({})
-const connectedProviders = ref<string[]>([])
-const loading = ref(false)
+const defaultModelIds = ref<string[]>([])
 
-const modelOptions = computed(() => {
-  // Flatten all models from all providers into select options
-  const options: { value: string; label: string }[] = []
-  for (const provider of providers.value) {
-    for (const [modelId, model] of Object.entries(provider.models)) {
-      options.push({
-        value: modelId,
-        label: `${provider.name} / ${model.name || modelId}`
-      })
-    }
-  }
-  return options.sort((a, b) => a.label.localeCompare(b.label))
-})
-
+// Load default model config on mount
 onMounted(async () => {
-  loading.value = true
-  
   try {
-    // Load current default model
     const configDefaultModel = await window.desktop.config.get('defaultModel', directory)
     if (configDefaultModel) defaultModel.value = String(configDefaultModel)
-    
-    // Load available providers and models
+
     const result = await window.desktop.config.models(directory)
-    providers.value = result.all as ProviderInfo[]
-    defaultModelIds.value = result.default
-    connectedProviders.value = result.connected
+    defaultModelIds.value = result.default || []
   } catch (err) {
-    console.error('Failed to load models:', err)
-    providers.value = []
-  } finally {
-    loading.value = false
+    console.error('Failed to load config:', err)
   }
 })
 </script>
