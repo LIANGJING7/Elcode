@@ -94,8 +94,7 @@ watch(
     } else {
       modelsStore.clearModels()
     }
-  },
-  { immediate: true }
+  }
 )
 
 let cleanupListeners: (() => void) | null = null
@@ -114,6 +113,8 @@ onMounted(async () => {
 
   if (workspaceStore.currentWorkspace) {
     await sessionStore.loadConversations(workspaceStore.currentWorkspace.path)
+    // Load models after workspace is set
+    await modelsStore.loadModels(workspaceStore.currentWorkspace.path)
   }
 })
 

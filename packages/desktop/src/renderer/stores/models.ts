@@ -1,6 +1,6 @@
 // packages/desktop/src/renderer/stores/models.ts
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { registerSessionOption } from '../composer/sessionOptionsRegistry'
 
 export interface ProviderModel {
@@ -34,74 +34,57 @@ export const useModelsStore = defineStore('models', () => {
     return options.sort((a, b) => a.label.localeCompare(b.label))
   })
 
-  async function loadModels(directory?: string) {
-    loading.value = true
-    error.value = null
-    try {
-      const result = await window.desktop.config.models(directory)
-      providers.value = result.all as ProviderInfo[]
-      connectedProviders.value = result.connected || []
+async function loadModels(directory?: string) {
+  loading.value = true
+  error.value = null
+  try {
+    const result = await window.desktop.config.models(directory)
+    providers.value = result.all as ProviderInfo[]
+    connectedProviders.value = result.connected || []
 
-      // Update sessionOptionsRegistry
-      if (modelOptions.value.length > 0) {
-        registerSessionOption<string>({
-          key: 'model',
-          label: '模型',
-          type: 'select',
-          value: '',
-          options: modelOptions.value,
-          allowed: ['create', 'runtime'],
-          default: ''
-        })
-      }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load models'
-      providers.value = []
-      connectedProviders.value = []
-    } finally {
-      loading.value = false
-    }
-  }
-
-  function clearModels() {
-    providers.value = []
-    connectedProviders.value = []
-    error.value = null
-
-    // Clear registry
+    // Update sessionOptionsRegistry after loading
     registerSessionOption<string>({
       key: 'model',
       label: '模型',
       type: 'select',
       value: '',
-      options: [],
+      options: modelOptions.value,
       allowed: ['create', 'runtime'],
       default: ''
     })
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load models'
+    providers.value = []
+    connectedProviders.value = []
+  } finally {
+    loading.value = false
   }
+}
 
-  // Auto-update registry when modelOptions changes
-  watch(modelOptions, (newOptions) => {
-    if (!loading.value) { // Only update after initial load completes
-      registerSessionOption<string>({
-        key: 'model',
-        label: '模型',
-        type: 'select',
-        value: '',
-        options: newOptions,
-        allowed: ['create', 'runtime'],
-        default: ''
-      })
-    }
+function clearModels() {
+  providers.value = []
+  connectedProviders.value = []
+  error.value = null
+
+  // Clear registry
+  registerSessionOption<string>({
+    key: 'model',
+    label: '模型',
+    type: 'select',
+    value: '',
+    options: [],
+    allowed: ['create', 'runtime'],
+    default: ''
   })
+}
 
-  return {
-    providers,
-    connectedProviders,
-    loading,
-    error,
-    modelOptions,
-    loadModels,
-    clearModels
-  }
+return {
+  providers,
+  connectedProviders,
+  loading,
+  error,
+  modelOptions,
+  loadModels,
+  clearModels
+}
 })
