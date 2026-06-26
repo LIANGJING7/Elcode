@@ -40,7 +40,7 @@ export const useThemeStore = defineStore('theme', () => {
   function updateTitleBarOverlay(theme: Theme) {
     if (theme === 'light') {
       window.desktop.window.setTitleBarOverlay({
-        color: '#ffffff',
+        color: '#fafafa',
         symbolColor: '#171717'
       })
     } else {
