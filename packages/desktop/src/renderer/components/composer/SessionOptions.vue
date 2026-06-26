@@ -14,7 +14,6 @@
 
     <!-- Model selector with tree-style dropdown -->
     <ModelSelector
-      v-if="hasModels"
       v-model="localModel"
       :disabled="!isRuntimeAllowed('model') && editingSession"
       @update:model-value="emitUpdate"

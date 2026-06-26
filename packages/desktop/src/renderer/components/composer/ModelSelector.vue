@@ -125,7 +125,7 @@ const displayText = computed(() => {
 })
 
 function toggleDropdown() {
-  if (!props.disabled && modelsStore.modelOptions.length > 0) {
+  if (!props.disabled) {
     isOpen.value = !isOpen.value
     if (!isOpen.value) {
       activeSubMenu.value = null
