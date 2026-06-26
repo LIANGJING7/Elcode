@@ -1,33 +1,53 @@
 <template>
-  <div class="skill-card p-4 rounded-lg bg-bg-surface border border-border hover:border-border-light transition-colors">
-    <div class="flex items-start justify-between">
-      <div class="flex-1 min-w-0">
-        <h3 class="text-sm font-medium text-text truncate">{{ skill.name }}</h3>
-        <p v-if="skill.description" class="text-2xs text-text-muted mt-1 line-clamp-2">
-          {{ skill.description }}
-        </p>
-        <div class="flex items-center gap-2 mt-2">
-          <span v-if="skill.slash" class="text-2xs text-accent font-mono">
-            /{{ skill.name }}
-          </span>
-          <span class="text-2xs text-text-muted">
-            {{ getLocationShort(skill.location) }}
-          </span>
+  <Card 
+    class="skill-card cursor-pointer transition-colors"
+    :class="{ 'selected': selected }"
+    @click="emit('click')"
+  >
+    <CardContent class="p-3">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <h3 class="text-sm font-medium text-foreground truncate">{{ skill.name }}</h3>
+          <p v-if="skill.description" class="text-xs text-muted-foreground mt-1 line-clamp-2">
+            {{ truncatedDescription }}
+          </p>
+          <div class="flex items-center gap-2 mt-2">
+            <span v-if="skill.slash" class="text-xs text-accent font-mono">
+              /{{ skill.name }}
+            </span>
+            <span v-if="skill.location" class="text-xs text-muted-foreground">
+              {{ getLocationShort(skill.location) }}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+    </CardContent>
+  </Card>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SkillInfo } from '../../../types/ipc'
+import { Card, CardContent } from '@/components/ui/card'
 
 const props = defineProps<{
   skill: SkillInfo
+  selected?: boolean
 }>()
 
-// Shorten location path for display
+const emit = defineEmits<{
+  'click': []
+}>()
+
+const truncatedDescription = computed(() => {
+  if (!props.skill.description) return ''
+  return props.skill.description.length > 100 
+    ? props.skill.description.slice(0, 100) + '...' 
+    : props.skill.description
+})
+
 function getLocationShort(location: string): string {
+  if (!location) return ''
   const parts = location.split('/')
   const fileName = parts[parts.length - 1]
   const dirName = parts[parts.length - 2] || ''
@@ -37,8 +57,18 @@ function getLocationShort(location: string): string {
 
 <style scoped>
 .skill-card {
-  cursor: default;
+  border: 1px solid transparent;
 }
+
+.skill-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.skill-card:hover {
+  background: var(--bg-hover);
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
