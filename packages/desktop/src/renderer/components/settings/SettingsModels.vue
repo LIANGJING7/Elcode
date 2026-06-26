@@ -134,7 +134,7 @@ const refreshingProviders = ref(new Set<string>())
 const showAddModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteConfirm = ref(false)
-const editingProvider = ref<ProviderInfo | null>(null)
+const editingProvider = ref<ProviderInfo | undefined>(undefined)
 const deletingProviderId = ref<string | null>(null)
 const deletingProviderName = ref<string>('')
 
@@ -187,7 +187,7 @@ async function handleUpdateProvider(providerId: string, config: { apiKey?: strin
   const result = await modelsStore.updateProvider(providerId, config, directory.value)
   if (result.success) {
     showEditModal.value = false
-    editingProvider.value = null
+    editingProvider.value = undefined
   }
 }
 
