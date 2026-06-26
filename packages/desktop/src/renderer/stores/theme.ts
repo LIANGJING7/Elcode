@@ -22,6 +22,7 @@ export const useThemeStore = defineStore('theme', () => {
       // Config may not have theme key set
     }
     applyTheme()
+    updateTitleBarOverlay(theme.value)
   }
 
   async function setTheme(newTheme: Theme) {
@@ -29,10 +30,25 @@ export const useThemeStore = defineStore('theme', () => {
     await window.desktop.config.set('theme', newTheme)
     await window.desktop.config.set('codeTheme', codeThemeMap[newTheme])
     applyTheme()
+    updateTitleBarOverlay(newTheme)
   }
 
   function applyTheme() {
     document.documentElement.setAttribute('data-theme', theme.value)
+  }
+
+  function updateTitleBarOverlay(theme: Theme) {
+    if (theme === 'light') {
+      window.desktop.window.setTitleBarOverlay({
+        color: '#ffffff',
+        symbolColor: '#171717'
+      })
+    } else {
+      window.desktop.window.setTitleBarOverlay({
+        color: '#18181b',
+        symbolColor: '#a1a1aa'
+      })
+    }
   }
 
   return {

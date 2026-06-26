@@ -151,10 +151,14 @@ export const IPC_CHANNELS = {
   
   // Phase 5: Skills & MCP
   SKILL_LIST: 'skill:list',
+  SKILL_WRITE: 'skill:write',
   MCP_STATUS: 'mcp:status',
   MCP_ADD: 'mcp:add',
   MCP_CONNECT: 'mcp:connect',
-  MCP_DISCONNECT: 'mcp:disconnect'
+  MCP_DISCONNECT: 'mcp:disconnect',
+
+  // Window
+  WINDOW_SET_TITLE_BAR_OVERLAY: 'window:set-title-bar-overlay'
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

@@ -115,7 +115,10 @@ export const desktopAPI = {
   // Phase 5: Skills & MCP
   skill: {
     list: (directory?: string): Promise<SkillInfo[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST, directory)
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST, directory),
+    
+    write: (location: string, content: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_WRITE, location, content)
   },
 
   mcp: {
@@ -130,6 +133,11 @@ export const desktopAPI = {
 
     disconnect: (name: string, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_DISCONNECT, name, directory)
+  },
+
+  window: {
+    setTitleBarOverlay: (options: { color: string; symbolColor: string }): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLE_BAR_OVERLAY, options)
   }
 }
 
