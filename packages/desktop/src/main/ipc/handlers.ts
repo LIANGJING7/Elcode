@@ -5,6 +5,8 @@ import { registerSessionHandlers } from './handlers-session'
 import { registerFileHandlers } from './handlers-file'
 import { registerConfigHandlers } from './handlers-config'
 import { registerWorkspaceHandlers } from './handlers-workspace'
+import { registerSkillHandlers } from './handlers-skill'
+import { registerMcpHandlers } from './handlers-mcp'
 
 ;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
@@ -13,6 +15,8 @@ export async function registerIPCHandlers() {
   registerFileHandlers()
   registerConfigHandlers()
   registerWorkspaceHandlers()
+  registerSkillHandlers()
+  registerMcpHandlers()
 
   ipcMain.handle(CHANNELS.WORKSPACE_GET_CWD, () => {
     return process.cwd()

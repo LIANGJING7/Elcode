@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, Workspace, SessionUpdate } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, Workspace, SessionUpdate, SkillInfo, MCPStatus, MCPAddPayload } from '../types/ipc'
 
 export const desktopAPI = {
   session: {
@@ -84,6 +84,26 @@ export const desktopAPI = {
 
     openFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_OPEN_FOLDER)
+  },
+
+  // Phase 5: Skills & MCP
+  skill: {
+    list: (directory?: string): Promise<SkillInfo[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST, directory)
+  },
+
+  mcp: {
+    status: (directory?: string): Promise<Record<string, MCPStatus>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_STATUS, directory),
+
+    add: (payload: MCPAddPayload, directory?: string): Promise<Record<string, MCPStatus>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_ADD, payload, directory),
+
+    connect: (name: string, directory?: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_CONNECT, name, directory),
+
+    disconnect: (name: string, directory?: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_DISCONNECT, name, directory)
   }
 }
 

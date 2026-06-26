@@ -66,6 +66,30 @@ export interface WorkspacePersistence {
   currentWorkspacePath: string | null
 }
 
+// Phase 5: Skills & MCP types
+export interface SkillInfo {
+  name: string
+  description?: string
+  slash?: boolean
+  location: string
+  content: string
+}
+
+export interface MCPStatus {
+  status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
+  error?: string
+}
+
+export interface MCPAddPayload {
+  name: string
+  type: 'local' | 'remote'
+  command?: string[]
+  url?: string
+  enabled?: boolean
+  environment?: Record<string, string>
+  timeout?: number
+}
+
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
   SESSION_GET: 'session:get',
@@ -94,7 +118,14 @@ export const IPC_CHANNELS = {
   WORKSPACE_ADD: 'workspace:add',
   WORKSPACE_REMOVE: 'workspace:remove',
   WORKSPACE_SELECT: 'workspace:select',
-  WORKSPACE_OPEN_FOLDER: 'workspace:openFolder'
+  WORKSPACE_OPEN_FOLDER: 'workspace:openFolder',
+  
+  // Phase 5: Skills & MCP
+  SKILL_LIST: 'skill:list',
+  MCP_STATUS: 'mcp:status',
+  MCP_ADD: 'mcp:add',
+  MCP_CONNECT: 'mcp:connect',
+  MCP_DISCONNECT: 'mcp:disconnect'
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

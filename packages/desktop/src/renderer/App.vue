@@ -18,8 +18,11 @@
         @delete="handleDeleteSession"
         @inspect="handleInspect"
       />
+      <SkillView v-else-if="effectiveView === 'skills'" />
+      <McpView v-else-if="effectiveView === 'mcp'" />
+      <SettingsView v-else-if="effectiveView === 'settings'" />
       <div v-else class="flex-1 p-6 text-text-muted">
-        {{ placeholderLabel }}
+        Unknown view
       </div>
     </main>
   </div>
@@ -30,6 +33,9 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/chat/ChatView.vue'
 import WelcomeView from './components/WelcomeView.vue'
+import SkillView from './components/skills/SkillView.vue'
+import McpView from './components/mcp/McpView.vue'
+import SettingsView from './components/settings/SettingsView.vue'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
@@ -52,14 +58,6 @@ const effectiveView = computed<'welcome' | 'chat' | 'skills' | 'mcp' | 'settings
   if (!hasCurrentWorkspace.value) return 'welcome'
   if (ui.view === 'welcome') return 'chat'
   return ui.view
-})
-
-// 占位渲染(真视图在 phase 5/6 落地)
-const placeholderLabel = computed(() => {
-  if (effectiveView.value === 'skills') return 'Skills (phase 5)'
-  if (effectiveView.value === 'mcp') return 'MCP (phase 5)'
-  if (effectiveView.value === 'settings') return 'Settings (phase 6)'
-  return ''
 })
 
 let cleanupListeners: (() => void) | null = null
