@@ -139,8 +139,16 @@ watch(() => props.disabled, (val) => {
 })
 
 function handleSend(content: string) {
-  emit('send', content, sessionOptions.value)
-  // Add to history
+  // Degraded approach: Core PromptInput lacks 'mode' parameter.
+  // When mode is 'plan', prefix prompt text with [mode=plan] marker.
+  // Reference: packages/core/src/session/prompt.ts PromptInput has 'agent' not 'mode'.
+  const mode = sessionOptions.value.mode as string
+  const finalContent = mode === 'plan' && !content.startsWith('[mode=plan]')
+    ? `[mode=plan]\n${content}`
+    : content
+
+  emit('send', finalContent, sessionOptions.value)
+  // Add to history (original content without prefix)
   if (content.trim()) {
     inputHistory.value.push(content.trim())
     if (inputHistory.value.length > 50) {

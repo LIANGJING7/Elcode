@@ -2381,19 +2381,47 @@ export function registerSessionOption<T>(opt: SessionOption<T>) {
 - **Step 1-5**: ComposerToolbar 渲染 `+` 在左 + SessionOptions + 发送/停止 在右;发送 disabled/停止按钮在 stream.activeRun 时显示,调 stream.interrupt
 - 提交
 
-### Task 4.5: 后端 prompt 传 mode(若可行)
+### Task 4.5: 后端 prompt 传 mode(若可行) ✓ 已完成
 
 **Files:**
-- Modify: `packages/desktop/src/main/ipc/handlers-session.ts`、`backend-client.ts`
+- Modify: `packages/desktop/src/renderer/components/Composer.vue`
 
-- **Step 1: 验证 core `/session/:id/prompt_async` 是否接收 agent 模板/mode 参数**
+- **Step 1: 验证结果** (已完成探查)
 
-Run: 读 core `packages/core/src/server/routes/instance/httpapi/groups/session.ts` 的 prompt endpoint signature
+探查 `packages/core/src/session/prompt.ts` PromptInput schema:
+```typescript
+export const PromptInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+  model: Schema.optional(ModelRef),
+  agent: Schema.optional(Schema.String),  // 有 agent 字段
+  // 无 mode 字段!
+  noReply: Schema.optional(Schema.Boolean),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  format: Schema.optional(SessionV1.Format),
+  system: Schema.optional(Schema.String),
+  variant: Schema.optional(Schema.String),
+  parts: Schema.Array(...),
+})
+```
 
-- 如接收 mode 参数 → backend-client.prompt 透传,handlers-session SESSION_PROMPT 透传,Composer 发送时附带 options.mode
-- 如不接收 → ‘mode’ 仅影响 composer 首条 prompt 文本(预前缀如 `[mode=plan]`),plan 文档化此退化
+**结论**: Core PromptInput 有 `agent` 字段但 **无 `mode` 字段**。
 
-- **Step 2: 提交**
+- **Step 2: 实现降级方案** (已实现)
+
+采用降级方案: `’mode’ 仅影响 composer 首条 prompt 文本(预前缀如 `[mode=plan]`)`
+
+Composer.vue handleSend 现已:
+- 当 mode=’plan’ 且内容不以 `[mode=plan]` 开头时,自动前缀 `[mode=plan]\n`
+- mode=’build’ 时不前缀
+- 历史记录存原始内容(不含前缀)
+
+- **Step 3: 提交** (待执行)
+
+```bash
+git add packages/desktop/src/renderer/components/Composer.vue
+git commit -m "feat(desktop/composer): prefix [mode=plan] when mode=’plan’ (core lacks mode param)"
+```
 
 ---
 
