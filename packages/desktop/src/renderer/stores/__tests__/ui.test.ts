@@ -14,6 +14,7 @@ describe('uiStore', () => {
     expect(ui.hasUserClosedArtifactPanel).toBe(false)
     expect(ui.inspectorOpen).toBe(true)
     expect(ui.activeToolCallId).toBeNull()
+    expect(ui.sidebarOpen).toBe(true)
   })
 
   it('enterSettings / exitSettings 借 previousView 还原 view', () => {
@@ -72,5 +73,7 @@ describe('uiStore', () => {
     ui.resetForSession()
     expect(ui.hasUserClosedArtifactPanel).toBe(false)
     expect(ui.activeToolCallId).toBeNull()
+    expect(ui.artifactPanelOpen).toBe(false)
+    expect(ui.inspectorOpen).toBe(true)
   })
 })
