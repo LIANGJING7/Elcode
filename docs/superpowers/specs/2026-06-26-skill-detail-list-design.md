@@ -39,7 +39,7 @@ When `skills.length === 0`:
 ### SkillCard Content
 
 **Display**:
-- Basic info: name, truncated description, slash indicator
+- Basic info: name, description (truncated to 100 characters), slash indicator
 - Selected state: accent border or highlighted background
 
 **No action buttons** (actions are in detail panel)
