@@ -3,18 +3,23 @@
     <h2 class="text-lg font-medium text-text mb-4">Appearance</h2>
 
     <div class="space-y-4">
-      <!-- Theme selector (placeholder for Phase 7) -->
-      <ConfigSelect
-        label="Theme"
-        :model-value="themeValue"
-        :options="themeOptions"
-        config-key="theme"
-        :directory="directory"
-        @update:model-value="themeValue = $event"
-      />
-      <p class="text-2xs text-text-muted">
-        Light theme coming in Phase 7
-      </p>
+      <!-- Theme selector -->
+      <div>
+        <label class="text-xs text-text-muted block mb-2">Theme</label>
+        <div class="flex gap-2">
+          <button
+            v-for="opt in themeOptions"
+            :key="opt.value"
+            class="flex-1 px-4 py-2 rounded-lg border text-sm transition-colors duration-fast"
+            :class="currentTheme === opt.value
+              ? 'bg-accent text-accent-foreground border-accent'
+              : 'bg-bg-surface border-border text-text hover:bg-bg-hover'"
+            @click="handleThemeChange(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
 
       <!-- Font size -->
       <ConfigSelect
@@ -64,23 +69,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { useThemeStore } from '../../stores/theme'
 import ConfigSelect from './ConfigSelect.vue'
 
 const workspaceStore = useWorkspaceStore()
+const themeStore = useThemeStore()
 const directory = workspaceStore.currentWorkspace?.path
 
-const themeValue = ref('dark')
+const currentTheme = computed(() => themeStore.theme)
+
+const themeOptions = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' }
+]
+
 const fontSize = ref('14')
 const fontFamily = ref('')
 const monoFontFamily = ref('')
 const codeTheme = ref('github-dark')
-
-const themeOptions = [
-  { value: 'dark', label: 'Dark' }
-  // Light option will be added in Phase 7
-]
 
 const fontSizeOptions = [
   { value: '12', label: '12px' },
@@ -98,21 +106,22 @@ const codeThemeOptions = [
   { value: 'vitesse-light', label: 'Vitesse Light' }
 ]
 
+function handleThemeChange(theme: 'dark' | 'light') {
+  themeStore.setTheme(theme)
+}
+
 onMounted(async () => {
   // Load current values from config
   try {
-    const configTheme = await window.desktop.config.get('theme', directory)
-    if (configTheme) themeValue.value = String(configTheme)
-    
     const configFontSize = await window.desktop.config.get('fontSize', directory)
     if (configFontSize) fontSize.value = String(configFontSize)
-    
+
     const configFontFamily = await window.desktop.config.get('fontFamily', directory)
     if (configFontFamily) fontFamily.value = String(configFontFamily)
-    
+
     const configMonoFont = await window.desktop.config.get('monoFontFamily', directory)
     if (configMonoFont) monoFontFamily.value = String(configMonoFont)
-    
+
     const configCodeTheme = await window.desktop.config.get('codeTheme', directory)
     if (configCodeTheme) codeTheme.value = String(configCodeTheme)
   } catch {
