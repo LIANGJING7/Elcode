@@ -69,14 +69,9 @@ const placeholderLabel = computed(() => {
 let cleanupListeners: (() => void) | null = null
 
 onMounted(async () => {
-  console.log('[App] onMounted called')
-  console.log('[App] window.desktop exists:', !!window.desktop)
-  console.log('[App] window.desktop.workspace exists:', !!window.desktop?.workspace)
-
   cleanupListeners = sessionStore.setupStreamListeners()
 
   await workspaceStore.loadWorkspaces()
-  console.log('[App] loadWorkspaces done, hasWorkspaces:', workspaceStore.hasWorkspaces)
 
   if (!workspaceStore.hasWorkspaces) {
     const newWorkspace = await workspaceStore.addWorkspace()
@@ -108,16 +103,7 @@ async function handleSelectWorkspace(path: string) {
 }
 
 async function handleAddWorkspace() {
-  console.log('[App] handleAddWorkspace called')
-  console.log('[App] window.desktop:', window.desktop)
-  console.log('[App] window.desktop.workspace:', window.desktop?.workspace)
-
-  try {
-    const result = await workspaceStore.addWorkspace()
-    console.log('[App] addWorkspace result:', result)
-  } catch (e) {
-    console.error('[App] addWorkspace error:', e)
-  }
+  await workspaceStore.addWorkspace()
 }
 
 async function handleSend(content: string) {
