@@ -6,10 +6,18 @@
       <!-- 主区按 uiStore.view 渲染。空 workspace 强制 welcome；
            其它 view(skills/mcp/settings)本阶段用占位文字贯通,phase 5/6 落地真组件 -->
       <WelcomeView v-if="effectiveView === 'welcome'" @open-folder="handleAddWorkspace" />
-      <template v-else-if="effectiveView === 'chat'">
-        <ChatTimeline :messages="currentMessages" :streaming="isStreaming" />
-        <Composer :disabled="!hasActiveSession || isLoading" @send="handleSend" />
-      </template>
+      <ChatView
+        v-else-if="effectiveView === 'chat'"
+        :title="currentConversation?.title ?? 'New Chat'"
+        :session-id="currentSessionId ?? ''"
+        :pinned="currentConversation?.pinned"
+        :messages="currentMessages"
+        :streaming-message="sessionStore.streamingMessage"
+        @rename="handleRename"
+        @pin="handleTogglePin"
+        @delete="handleDeleteSession"
+        @inspect="handleInspect"
+      />
       <div v-else class="flex-1 p-6 text-text-muted">
         {{ placeholderLabel }}
       </div>
@@ -20,8 +28,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
-import ChatTimeline from './components/ChatTimeline.vue'   // 阶段 1 沿用现有组件; 阶段 3 改为 ChatView
-import Composer from './components/Composer.vue'
+import ChatView from './components/chat/ChatView.vue'
 import WelcomeView from './components/WelcomeView.vue'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceStore } from './stores/workspace'
@@ -34,10 +41,9 @@ const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
 
+const currentSessionId = computed(() => sessionStore.currentSessionId)
+const currentConversation = computed(() => sessionStore.currentConversation)
 const currentMessages = computed(() => sessionStore.currentMessages)
-const hasActiveSession = computed(() => sessionStore.hasActiveSession)
-const isLoading = computed(() => sessionStore.isLoading)
-const isStreaming = computed(() => sessionStore.streamingMessage !== null)
 const hasCurrentWorkspace = computed(() => workspaceStore.hasCurrentWorkspace)
 
 // view 由两件事驱动: ui.view 与 workspace 是否存在。
@@ -80,13 +86,32 @@ onUnmounted(() => {
 })
 
 // Sidebar 内的 workspaces/sessions 子组件已直连 store, 不再经 App.vue 中转;
-// 这里只保留 WelcomeView 的 open-folder 与 Composer 的 send.
+// 这里只保留 WelcomeView 的 open-folder 与 ChatView 的事件处理.
 async function handleAddWorkspace() {
   await workspaceStore.addWorkspace()
 }
 
-async function handleSend(content: string) {
-  await sessionStore.sendMessage(content)
+async function handleRename(title: string) {
+  if (currentSessionId.value) {
+    await sessionStore.rename(currentSessionId.value, title)
+  }
+}
+
+async function handleTogglePin() {
+  if (currentSessionId.value) {
+    await sessionStore.togglePin(currentSessionId.value)
+  }
+}
+
+async function handleDeleteSession() {
+  if (currentSessionId.value) {
+    await sessionStore.deleteSession(currentSessionId.value)
+  }
+}
+
+function handleInspect(toolCallId: string) {
+  ui.activeToolCallId = toolCallId
+  ui.inspectorOpen = true
 }
 </script>
 
