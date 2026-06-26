@@ -263,15 +263,61 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
       return request("GET", `/config/${key}?${params}`)
     },
-    
+
     set: async (key: string, value: unknown, directory?: string): Promise<void> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
       await request("POST", `/config/${key}?${params}`, { value })
     },
-    
+
     models: async (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
       return request("GET", `/provider?${params}`) as Promise<{ all: unknown[]; default: string[]; connected: string[] }>
+    },
+  },
+
+  provider: {
+    authMethods: async (directory?: string): Promise<Record<string, unknown[]>> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("GET", `/provider/auth?${params}`) as Promise<Record<string, unknown[]>>
+    },
+
+    authorize: async (providerID: string, method: number, inputs?: Record<string, string>, directory?: string): Promise<{ url?: string; method: string; instructions?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("POST", `/provider/${providerID}/oauth/authorize?${params}`, { method, inputs }) as Promise<{ url?: string; method: string; instructions?: string }>
+    },
+
+    authCallback: async (providerID: string, method: number, code?: string, directory?: string): Promise<boolean> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("POST", `/provider/${providerID}/oauth/callback?${params}`, { method, code }) as Promise<boolean>
+    },
+
+    add: async (config: { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("POST", `/provider?${params}`, config) as Promise<{ success: boolean; provider?: unknown; error?: string }>
+    },
+
+    update: async (providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("PATCH", `/provider/${providerId}?${params}`, config) as Promise<{ success: boolean; provider?: unknown; error?: string }>
+    },
+
+    delete: async (providerId: string, directory?: string): Promise<{ success: boolean; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("DELETE", `/provider/${providerId}?${params}`) as Promise<{ success: boolean; error?: string }>
+    },
+
+    test: async (providerIdOrConfig: string | { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; modelCount?: number; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      if (typeof providerIdOrConfig === 'string') {
+        return request("POST", `/provider/${providerIdOrConfig}/test?${params}`) as Promise<{ success: boolean; modelCount?: number; error?: string }>
+      } else {
+        return request("POST", `/provider/test?${params}`, providerIdOrConfig) as Promise<{ success: boolean; modelCount?: number; error?: string }>
+      }
+    },
+
+    refreshModels: async (providerId: string, directory?: string): Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("POST", `/provider/${providerId}/refresh-models?${params}`) as Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }>
     },
   },
   
