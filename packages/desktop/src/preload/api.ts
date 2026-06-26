@@ -62,7 +62,7 @@ export const desktopAPI = {
     set: (key: string, value: unknown, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_SET, key, value, directory),
     
-    models: (directory?: string): Promise<unknown[]> =>
+    models: (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_MODELS, directory)
   },
 

@@ -269,9 +269,9 @@ export const backend = {
       await request("POST", `/config/${key}?${params}`, { value })
     },
     
-    models: async (directory?: string): Promise<unknown[]> => {
+    models: async (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
-      return request("GET", `/provider/models?${params}`) as Promise<unknown[]>
+      return request("GET", `/provider?${params}`) as Promise<{ all: unknown[]; default: string[]; connected: string[] }>
     },
   },
   
