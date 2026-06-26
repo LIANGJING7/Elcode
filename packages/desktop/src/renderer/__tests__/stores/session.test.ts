@@ -105,7 +105,7 @@ describe('sessionStore (phase 2 upgrade)', () => {
     const s = useSessionStore()
     s.conversations = [makeConv({ id: 'sess-1', title: 'old' })]
     await s.rename('sess-1', 'new title')
-    expect(mockSession.update).toHaveBeenCalledWith('sess-1', { title: 'new title' }, 'C:/repo')
+    expect(mockSession.update).toHaveBeenCalledWith('sess-1', { title: 'new title' })
     expect(s.conversations[0].title).toBe('new title')
   })
 
@@ -114,10 +114,10 @@ describe('sessionStore (phase 2 upgrade)', () => {
     s.conversations = [makeConv({ id: 'sess-1', pinned: false })]
     await s.togglePin('sess-1')
     expect(s.conversations[0].pinned).toBe(true)
-    expect(mockSession.update).toHaveBeenCalledWith('sess-1', { pinned: true }, 'C:/repo')
+    expect(mockSession.update).toHaveBeenCalledWith('sess-1', { pinned: true })
     await s.togglePin('sess-1')
     expect(s.conversations[0].pinned).toBe(false)
-    expect(mockSession.update).toHaveBeenLastCalledWith('sess-1', { pinned: false }, 'C:/repo')
+    expect(mockSession.update).toHaveBeenLastCalledWith('sess-1', { pinned: false })
   })
 
   it('clearAll 删当前 workspace 所有的 sessions', async () => {

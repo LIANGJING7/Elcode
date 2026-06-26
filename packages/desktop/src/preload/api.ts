@@ -28,8 +28,9 @@ export const desktopAPI = {
     delete: (sessionId: string, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_DELETE, sessionId, directory),
 
-    update: (sessionID: string, patch: SessionUpdate, directory?: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UPDATE, sessionID, patch, directory),
+    // SESSION_UPDATE 只写本地 sessions.json(keyed by sessionID), 无需 directory 透传。
+    update: (sessionID: string, patch: SessionUpdate): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UPDATE, sessionID, patch),
     
     onStreamEvent: (callback: (data: { sessionID: string; event: unknown }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { sessionID: string; event: unknown }) => callback(data)
@@ -66,35 +67,23 @@ export const desktopAPI = {
   },
 
   workspace: {
-    getCwd: (): Promise<string> => {
-      console.log('[Preload] workspace.getCwd called')
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET_CWD)
-    },
-    
-    list: (): Promise<Workspace[]> => {
-      console.log('[Preload] workspace.list called')
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_LIST)
-    },
-    
-    add: (path?: string): Promise<Workspace | null> => {
-      console.log('[Preload] workspace.add called with path:', path)
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_ADD, path)
-    },
-    
-    remove: (path: string): Promise<boolean> => {
-      console.log('[Preload] workspace.remove called')
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_REMOVE, path)
-    },
-    
-    select: (path: string): Promise<boolean> => {
-      console.log('[Preload] workspace.select called')
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SELECT, path)
-    },
-    
-    openFolder: (): Promise<string | null> => {
-      console.log('[Preload] workspace.openFolder called')
-      return ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_OPEN_FOLDER)
-    }
+    getCwd: (): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET_CWD),
+
+    list: (): Promise<Workspace[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_LIST),
+
+    add: (path?: string): Promise<Workspace | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_ADD, path),
+
+    remove: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_REMOVE, path),
+
+    select: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SELECT, path),
+
+    openFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_OPEN_FOLDER)
   }
 }
 

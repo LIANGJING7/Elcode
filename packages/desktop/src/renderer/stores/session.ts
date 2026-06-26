@@ -131,9 +131,8 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function rename(sessionId: string, title: string) {
-    const dir = directoryOf()
     try {
-      await window.desktop.session.update(sessionId, { title }, dir)
+      await window.desktop.session.update(sessionId, { title })
       const conv = conversations.value.find(c => c.id === sessionId)
       if (conv) conv.title = title
     } catch (e) {
@@ -142,11 +141,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function togglePin(sessionId: string) {
-    const dir = directoryOf()
     const conv = conversations.value.find(c => c.id === sessionId)
     const next = !conv?.pinned
     try {
-      await window.desktop.session.update(sessionId, { pinned: next }, dir)
+      await window.desktop.session.update(sessionId, { pinned: next })
       if (conv) conv.pinned = next
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to pin session'

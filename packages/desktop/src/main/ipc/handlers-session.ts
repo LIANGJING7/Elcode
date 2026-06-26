@@ -22,11 +22,12 @@ function toConversation(raw: Record<string, unknown>, meta?: Record<string, unkn
   const time = (raw.time ?? {}) as { created?: number; updated?: number }
   return {
     id: String(raw.id),
-    title: String(raw.title ?? 'Untitled'),
+    // core 不存桌面端 rename://"sessions.json 的 meta.title 优先; 未改过则 fallback 到 core 的 raw.title"
+    title: String(meta?.title ?? raw.title ?? 'Untitled'),
     messages: [],
     createdAt: new Date(time.created ?? Date.now()),
     updatedAt: new Date(time.updated ?? time.created ?? Date.now()),
-    // 仅覆盖桌面端附加字段, 不动后端权威的 id/title/time
+    // 仅覆盖桌面端附加字段, 不动后端权威的 id/time
     primaryWorkspaceId: meta?.primaryWorkspaceId as string | undefined,
     workspaceIds: meta?.workspaceIds as string[] | undefined,
     pinned: meta?.pinned as boolean | undefined,
