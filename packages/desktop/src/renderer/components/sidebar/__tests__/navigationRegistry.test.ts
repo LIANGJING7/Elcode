@@ -1,10 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { setActivePinia, createPinia } from 'pinia'
+import { describe, it, expect } from 'vitest'
 import { navigationRegistry, getNavigationViewIds, isNavigationView } from '../../../navigation/navigationRegistry'
 
 describe('navigationRegistry', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
   it('首版注册 skills 与 mcp 两个导航项', () => {
     const ids = getNavigationViewIds()
     expect(ids).toEqual(['skills', 'mcp'])
