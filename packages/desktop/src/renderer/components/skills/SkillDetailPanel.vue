@@ -161,9 +161,8 @@ defineExpose({ reset })
 
 <style scoped>
 .skill-detail-panel {
-  width: 500px;
-  max-width: 60%;
-  min-width: 300px;
+  flex: 1;
+  min-width: 0;
 }
 
 .panel-content {

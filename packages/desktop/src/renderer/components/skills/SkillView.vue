@@ -170,14 +170,15 @@ async function handleCreateSkill() {
 
 .skill-list {
   flex: 1;
+  min-width: 280px;
 }
 
 .skill-list.panel-open {
-  flex: 0 0 40%;
+  flex: 0 0 280px;
 }
 
 .skill-detail-panel {
-  flex: 0 0 60%;
-  max-width: 500px;
+  flex: 1;
+  min-width: 0;
 }
 </style>
