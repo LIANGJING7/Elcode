@@ -3,8 +3,8 @@
     <!-- Mode selector -->
     <select
       v-model="localMode"
-      class="mode-select px-2.5 py-1.5 bg-bg-hover border border-border hover:border-border-light rounded-lg text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
-      style="background-image: url('data:image/svg+xml,...'); background-repeat: no-repeat; background-position: right 6px center; background-size: 12px; padding-right: 24px;"
+      class="mode-select px-2 py-1 bg-bg-hover border border-border hover:border-border-light rounded text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
+      style="background-image: url('data:image/svg+xml,...'); background-repeat: no-repeat; background-position: right 6px center; background-size: 12px; padding-right: 20px;"
       :disabled="!isRuntimeAllowed('mode') && editingSession"
       @change="emitUpdate"
     >
@@ -12,17 +12,19 @@
       <option value="plan">Plan</option>
     </select>
 
-    <!-- Future: model selector when registry populated -->
+    <!-- Model selector with provider grouping -->
     <select
       v-if="hasModels"
       v-model="localModel"
-      class="model-select px-2.5 py-1.5 bg-bg-hover border border-border hover:border-border-light rounded-lg text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
+      class="model-select px-2 py-1 bg-bg-hover border border-border hover:border-border-light rounded text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
       :disabled="!isRuntimeAllowed('model') && editingSession"
       @change="emitUpdate"
     >
-      <option v-for="m in modelOptions" :key="m.value" :value="m.value">
-        {{ m.label }}
-      </option>
+      <optgroup v-for="group in groupedModels" :key="group.provider" :label="group.provider">
+        <option v-for="m in group.models" :key="m.value" :value="m.value">
+          {{ m.name }}
+        </option>
+      </optgroup>
     </select>
   </div>
 </template>
@@ -57,6 +59,45 @@ const modelOptions = computed(() => {
   return modelOpt?.options || []
 })
 
+// Group models by provider (parse from label format "Provider / Model")
+const groupedModels = computed(() => {
+  const groups: { provider: string; models: { value: string; name: string }[] }[] = []
+  const providerMap = new Map<string, { value: string; name: string }[]>()
+
+  for (const opt of modelOptions.value) {
+    const parts = opt.label.split(' / ')
+    if (parts.length === 2) {
+      const provider = parts[0]
+      const modelName = parts[1]
+
+      if (!providerMap.has(provider)) {
+        providerMap.set(provider, [])
+      }
+      providerMap.get(provider)!.push({
+        value: opt.value,
+        name: modelName
+      })
+    } else {
+      // Handle ungrouped models (no provider prefix)
+      const fallbackProvider = 'Other'
+      if (!providerMap.has(fallbackProvider)) {
+        providerMap.set(fallbackProvider, [])
+      }
+      providerMap.get(fallbackProvider)!.push({
+        value: opt.value,
+        name: opt.label
+      })
+    }
+  }
+
+  // Convert map to array sorted by provider name
+  for (const [provider, models] of Array.from(providerMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+    groups.push({ provider, models })
+  }
+
+  return groups
+})
+
 // Check if option is allowed at runtime
 function isRuntimeAllowed(key: string): boolean {
   const opt = sessionOptionsRegistry[key] as SessionOption
@@ -79,8 +120,14 @@ function emitUpdate() {
 
 <style scoped>
 .mode-select option,
-.model-select option {
+.model-select option,
+.model-select optgroup {
   background-color: var(--color-bg-elevated);
   color: var(--color-text);
+}
+
+.model-select optgroup {
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 </style>
