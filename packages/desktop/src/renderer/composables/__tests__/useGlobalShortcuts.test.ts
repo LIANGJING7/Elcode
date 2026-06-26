@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { defineComponent, h } from 'vue'
@@ -17,14 +17,7 @@ function mkEvent(key: string, opts: KeyboardEventInit = {}) {
 }
 
 describe('useGlobalShortcuts', () => {
-  let dispatchOrig: typeof document.dispatchEvent
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    dispatchOrig = document.dispatchEvent.bind(document)
-  })
-  afterEach(() => {
-    document.dispatchEvent = dispatchOrig
-  })
+  beforeEach(() => setActivePinia(createPinia()))
 
   it('Ctrl/Cmd+B 切侧栏', () => {
     const ui = useUiStore()
