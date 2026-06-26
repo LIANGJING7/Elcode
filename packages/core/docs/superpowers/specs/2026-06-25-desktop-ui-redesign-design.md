@@ -1,7 +1,7 @@
 # 桌面端 UI 重设计
 
 **日期**: 2026-06-25
-**状态**: 设计已确认并在 2026-06-25 评审纳入十三项结构性修订,待转写实现计划
+**状态**: 设计已确认并在 2026-06-25 评审纳入十四项结构性修订,待转写实现计划
 **位置**: `packages/desktop`
 **前置**: 已落地的 `2026-06-21-electron-desktop-design.md` 与 `2026-06-24-desktop-workspace-management-design.md`
 
@@ -78,23 +78,59 @@ uiStore = {
 │  ✦ Skills               │ ← 导航项: 选中→主区 SkillsView
 │  ⚡ MCP                  │ ← 导航项: 选中→主区 McpView
 ├──────────────────────────┤
-│ [Workspaces][当前目录]   │ ← Tab 切换
+│ [Workspaces][当前目录]   │ ← Tab 切换(两 Tab 的 + 语义不同)
 │  Workspaces Tab:        │
-│   • agent-repo(当前) +  │   目录列表,当前项高亮
+│   • agent-repo(当前)    │   目录列表
+│   + Add Workspace       │   → openFolderPicker()(管理目录)
 │  当前目录 Tab:           │
 │   🔍                     │
 │   • Migrate auth flow    │   属于当前 workspace 的会话
 │   • Refactor db layer    │   hover: 重命名/置顶/删除
+│   + New Session          │   → createSession(workspace 已确定)
 ├──────────────────────────┤
 │ Connected v1.0       ⚙  │ ← 底部状态栏,设置在右
 └──────────────────────────┘
 ```
 
-### Workspaces / 当前目录 Tab
+### Workspaces / 当前目录 Tab(两个 Tab 的 `+` 语义不同)
 
-- `Workspaces` Tab: 列出 `workspaces.json` 中所有工作目录,当前项高亮,`+` 触发 `openFolderPicker`
-- `当前目录` Tab: 列出当前 workspace 下的会话(**过滤条件: 当前 workspace ∈ session.workspaceIds**)。会话项 hover 显示重命名/置顶/删除;搜索框本地过滤
-- 多目录挂载歧义处理: "当前目录 Tab" 选中态以 `primaryWorkspaceId` 为 anchor(将来支持 `frontend / backend / infra` 多挂载时,会话归属以 primary 为默认显示目录,Tab 头在多目录时显示主目录名 + 其余目录数量徽章,如 `agent-repo +2`);首版单挂载 `primaryWorkspaceId === workspaceIds[0]`,Tab 头无徽章
+**关键概念区分**: `Workspace = 本地目录对象`,`Session = 对话对象`。两个 Tab 的 `+` 操作语义不同,绝不能混:
+
+**Workspaces Tab**(管理目录):
+```
+Workspaces
+────────────
+agent-repo
+website
+mobile-app
+────────────
++ Add Workspace
+```
+- 列出 `workspaces.json` 中所有工作目录,当前项高亮
+- `+ Add Workspace` → `openFolderPicker()`:
+  1. 点 `+` → `openFolderPicker()`
+  2. 选目录(原生 `dialog.showOpenDialog({ openDirectory })`)
+  3. 写入 `workspaces.json`(经 `WORKSPACE_ADD` IPC)
+  4. 刷新 Workspace 列表
+- 这是**管理目录**的操作,不是开对话
+
+**当前目录 Tab**(管理该目录下的对话):
+```
+当前目录(agent-repo)
+────────────
+AI 重构
+数据库设计
+前端优化
+────────────
++ New Session
+```
+- 列出当前 workspace 下的会话(**过滤条件: 当前 workspace ∈ session.workspaceIds**);会话项 hover 显示重命名/置顶/删除;搜索框本地过滤
+- `+ New Session` → **`createSession({ workspaceIds: [currentWorkspaceId], primaryWorkspaceId: currentWorkspaceId })`**:
+  1. 点 `+` → workspace 已确定(无需再选目录),直接 createSession
+  2. 不弹目录选择器
+  3. 跳进 `view = "chat"` 新会话
+- 这是**管理对话**的操作,workspace 上下文已就绪
+- 多目录挂载歧义处理: Tab 头以 `primaryWorkspaceId` 为 anchor(将来支持 `frontend / backend / infra` 多挂载,Tab 头显示主目录名 + 其余数量徽章如 `agent-repo +2`);首版单挂载 `primaryWorkspaceId === workspaceIds[0]`,Tab 头无徽章
 - 切 workspace 时若在"当前目录"Tab 则刷新会话列表
 
 ### Session 与 Workspace 解耦(避免强绑定)
@@ -645,7 +681,7 @@ interface MessageRepository {
 
 ## 已采纳的结构性风险(评审 2026-06-25)
 
-评审识别十三个结构性风险,已并入本设计:
+评审识别十四个结构性风险,已并入本设计:
 
 1. **View 状态机双状态源**: 原 `view` + `settingsMode` 同时存在会产生 `chat + settings` / `mcp + settings` 组合爆炸。合并为单一 `view: "welcome" | "chat" | "skills" | "mcp" | "settings"` + `previousView`,进入/退出设置用 `view = previousView` 切换。不再引入 `settingsMode`。
 2. **Artifact Panel 三 Tab 写死**: 未来会长出 Terminal / Logs / Files / Preview 等。已抽象为 `ArtifactType + artifactRegistry`,首版只注册 `diff` / `todo` **两类**(原 tool 移出,见第 8 项),新增 type 仅注册不重构。
@@ -660,6 +696,7 @@ interface MessageRepository {
 11. **ArtifactTab 在大量 diff 时内容爆炸**: 任务改 15 个文件,纯按 ArtifactInstance 平铺让单 Tab 铺成 15 条 diff 难导航。预留 `ArtifactGroup` 概念: `ArtifactInstance.groupId` 可选字段 + registry `groupable`/`groupBy` 字段一次到位;同 type 同 groupId 实例聚成 ArtifactGroup(标题如 `src/auth/`)。首版实现不做分组逻辑,只留 schema 与 registry 字段;面板 Single → Group 二级渲染留待二期。
 12. **messageStore 国王担太重挡运行时态**: 流式临时态(streamingMessage/streamingToolCall/activeRun)若与稳定 messages[] 同处一 store,加 checkpoints/replay/resume 让 messageStore 长 1000+ 行难拆。从第一天 messageStore / streamStore 分离: messageStore 只存稳定消息流(派生契约);streamStore 存临时流式态,流式完成并入 messageStore 并清空。checkpoints/replay/resume 进 streamStore 运行时职责,不回流 messageStore。
 13. **store 直接调 IPC 锁死数据源**: 10000+ 消息 × 100 session 性能未来要切 SQLite/远程;若 store 直接 `ipcRenderer.invoke`,换数据源要重写 UI。引入 `MessageRepository` 接口(`loadMessages`/`appendMessage`/`updateMessage`/`deleteMessage`/`subscribeStream`),messageStore 与 streamStore 都经注入 repo 工作,**不 import `window.desktop` / IPC 常量**。首版实现是既有 IPC 的 thin adapter,将来换 SQLite/远程仅替换 adapter,UI 一行不改。
+14. **两 Tab 的 `+` 操作混用**: Workspaces Tab 的 `+` 与当前目录 Tab 的 `+` 语义完全不同,混用会让用户在新会话里被强行选目录、或错把"开新会话"当"开新目录"。明确区分: Workspaces Tab 的 `+ Add Workspace` = `openFolderPicker()` 选目录写 workspaces.json(管理目录);当前目录 Tab 的 `+ New Session` = `createSession({ workspaceIds: [currentWorkspaceId], primaryWorkspaceId: currentWorkspaceId })` 直接建会话跳 chat(workspace 上下文已就绪,不弹目录选择器)。
 
 ## 范围与拆分
 
