@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { ref, watchEffect, onMounted } from 'vue'
+import { ref, watchEffect, onMounted, computed } from 'vue'
 import { createHighlighter, type Highlighter } from 'shiki'
+import { useThemeStore } from '../../stores/theme'
 
 const props = defineProps<{ code: string; lang: string }>()
 
+const themeStore = useThemeStore()
 const html = ref('')
 let hl: Highlighter | null = null
+
+const codeTheme = computed(() => themeStore.theme === 'light' ? 'github-light' : 'github-dark')
 
 onMounted(async () => {
   try {
     hl = await createHighlighter({
-      themes: ['github-dark'],
+      themes: ['github-dark', 'github-light'],
       langs: [props.lang],
     })
     highlight()
@@ -27,7 +31,7 @@ watchEffect(() => {
 function highlight() {
   if (!hl) return
   try {
-    html.value = hl.codeToHtml(props.code, { lang: props.lang, theme: 'github-dark' })
+    html.value = hl.codeToHtml(props.code, { lang: props.lang, theme: codeTheme.value })
   } catch {
     html.value = `<pre class="shiki">${escapeHtml(props.code)}</pre>`
   }
@@ -46,11 +50,11 @@ function escapeHtml(s: string): string {
 </script>
 
 <template>
-  <div class="code-block relative bg-surface rounded border border-surface my-2">
+  <div class="code-block relative bg-bg-surface rounded border border-border my-2">
     <!-- 语言标签 -->
     <span
       data-testid="lang-label"
-      class="absolute top-2 right-2 text-xs text-accent-muted px-2 py-1 rounded bg-surface"
+      class="absolute top-2 right-2 text-xs text-text-muted px-2 py-1 rounded bg-bg-surface"
     >
       {{ lang }}
     </span>
