@@ -6,59 +6,69 @@
         ? 'border-accent/50 shadow-glow'
         : 'border-border/80 hover:border-border-light'"
     >
-      <div class="flex items-end gap-2 px-4 py-3">
-        <button
-          class="attachment-button p-2 rounded-lg text-text-muted hover:text-accent hover:bg-accent-muted transition-all duration-fast flex-shrink-0"
-          :class="{ 'text-accent bg-accent-muted': isFocused }"
-          title="Attach file (Ctrl+Shift+A)"
-          :disabled="disabled"
-          @click="handleAttach"
-        >
-          <AttachmentIcon class="w-4 h-4" />
-        </button>
+      <!-- Attachment Bar (chips row) -->
+      <AttachmentBar
+        :attachments="attachments"
+        @remove="handleRemoveAttachment"
+      />
 
+      <div class="flex items-end gap-2 px-4 py-3">
+        <!-- Attachment Button (left) -->
+        <AttachmentButton
+          :disabled="disabled || isStreaming"
+          @at-file="handleAtFile"
+          @attach="handleAttach"
+        />
+
+        <!-- Composer Input (center) -->
         <div class="input-container flex-1 min-w-0">
-          <textarea
+          <ComposerInput
             ref="inputRef"
             v-model="inputValue"
-            :disabled="disabled"
-            placeholder="Ask anything... (Shift+Enter for new line)"
-            rows="1"
-            class="input-field w-full bg-transparent text-text text-sm leading-relaxed resize-none outline-none placeholder:text-text-muted disabled:opacity-50"
+            :disabled="disabled || isStreaming"
+            :placeholder="placeholder"
+            :history="inputHistory"
+            @send="handleSend"
+            @slash-command="handleSlashCommand"
             @focus="isFocused = true"
             @blur="isFocused = false"
-            @keydown.enter="handleEnter"
-            @input="adjustHeight"
           />
         </div>
 
+        <!-- SessionOptions + Send/Stop (right) -->
         <div class="flex items-center gap-1.5 flex-shrink-0">
-          <select
-            v-model="selectedModel"
-            class="model-selector px-2.5 py-1.5 bg-bg-hover border border-border hover:border-border-light rounded-lg text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
-            style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2371717a'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E&quot;); background-repeat: no-repeat; background-position: right 6px center; background-size: 12px; padding-right: 24px;"
-          >
-            <option value="default">Default</option>
-            <option value="claude">Claude</option>
-            <option value="gpt4">GPT-4</option>
-          </select>
+          <SessionOptions
+            v-model:options="sessionOptions"
+            :editing-session="hasActiveSession"
+          />
 
+          <!-- Send/Stop Button -->
           <button
+            v-if="!isStreaming"
             class="send-button w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-fast"
             :class="canSend
               ? 'bg-accent hover:bg-accent-hover text-white shadow-sm hover:shadow-glow active:scale-95'
               : 'bg-bg-hover text-text-muted cursor-not-allowed'"
             :disabled="!canSend"
             title="Send (Enter)"
-            @click="handleSend"
+            @click="handleManualSend"
           >
             <SendIcon class="w-3.5 h-3.5" />
+          </button>
+          <button
+            v-else
+            class="stop-button w-8 h-8 flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-fast"
+            title="Stop"
+            @click="handleInterrupt"
+          >
+            <StopIcon class="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
+      <!-- Footer hints -->
       <div
-        v-if="inputValue.length > 0"
+        v-if="inputValue.length > 0 && !isStreaming"
         class="composer-footer flex items-center justify-between px-4 py-2 border-t border-border/40 animate-fade-in"
       >
         <div class="flex items-center gap-3">
@@ -78,72 +88,102 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
-import AttachmentIcon from './icons/AttachmentIcon.vue'
+import ComposerInput from './composer/ComposerInput.vue'
+import AttachmentButton from './composer/AttachmentButton.vue'
+import AttachmentBar from './composer/AttachmentBar.vue'
+import SessionOptions from './composer/SessionOptions.vue'
 import SendIcon from './icons/SendIcon.vue'
+import StopIcon from './icons/StopIcon.vue'
 
-const props = defineProps<{
+interface Attachment {
+  type: 'file' | 'at'
+  name: string
+  path: string
+}
+
+const props = withDefaults(defineProps<{
   disabled?: boolean
-}>()
+  placeholder?: string
+  isStreaming?: boolean
+  hasActiveSession?: boolean
+}>(), {
+  disabled: false,
+  placeholder: 'Ask anything... (Shift+Enter for new line)',
+  isStreaming: false,
+  hasActiveSession: true
+})
 
 const emit = defineEmits<{
-  send: [content: string]
+  send: [content: string, options: Record<string, unknown>]
   attach: []
+  atFile: []
+  interrupt: []
+  slashCommand: [command: string]
 }>()
 
+const inputRef = ref<{ focus: () => void } | null>(null)
 const inputValue = ref('')
-const selectedModel = ref('default')
-const inputRef = ref<HTMLTextAreaElement | null>(null)
 const isFocused = ref(false)
+const attachments = ref<Attachment[]>([])
+const sessionOptions = ref<Record<string, unknown>>({ mode: 'build', model: '' })
 
-const canSend = computed(() => !props.disabled && inputValue.value.trim().length > 0)
+// History of sent messages (for up-arrow navigation)
+const inputHistory = ref<string[]>([])
+
+const canSend = computed(() => !props.disabled && !props.isStreaming && inputValue.value.trim().length > 0)
 
 watch(() => props.disabled, (val) => {
-  if (!val) {
+  if (!val && !props.isStreaming) {
     nextTick(() => inputRef.value?.focus())
   }
 })
 
-function handleEnter(e: KeyboardEvent) {
-  if (e.shiftKey) return
-  e.preventDefault()
-  handleSend()
+function handleSend(content: string) {
+  emit('send', content, sessionOptions.value)
+  // Add to history
+  if (content.trim()) {
+    inputHistory.value.push(content.trim())
+    if (inputHistory.value.length > 50) {
+      inputHistory.value.shift()
+    }
+  }
 }
 
-function handleSend() {
-  if (!canSend.value) return
-  emit('send', inputValue.value)
-  inputValue.value = ''
-  nextTick(() => adjustHeight())
+function handleManualSend() {
+  if (canSend.value) {
+    handleSend(inputValue.value)
+    inputValue.value = ''
+  }
+}
+
+function handleInterrupt() {
+  emit('interrupt')
 }
 
 function handleAttach() {
   emit('attach')
 }
 
-function adjustHeight() {
-  if (!inputRef.value) return
-  inputRef.value.style.height = 'auto'
-  const scrollHeight = inputRef.value.scrollHeight
-  const maxHeight = 200
-  inputRef.value.style.height = Math.min(scrollHeight, maxHeight) + 'px'
+function handleAtFile() {
+  emit('atFile')
+}
+
+function handleRemoveAttachment(index: number) {
+  attachments.value.splice(index, 1)
+}
+
+function handleSlashCommand(command: string) {
+  emit('slashCommand', command)
+  if (command === 'plan') {
+    sessionOptions.value.mode = 'plan'
+  } else if (command === 'build') {
+    sessionOptions.value.mode = 'build'
+  }
 }
 </script>
 
 <style scoped>
 .composer {
   backdrop-filter: blur(12px);
-}
-
-.input-field {
-  field-sizing: content;
-}
-
-.input-field::placeholder {
-  opacity: 0.5;
-}
-
-.model-selector option {
-  background-color: var(--color-bg-elevated);
-  color: var(--color-text);
 }
 </style>
