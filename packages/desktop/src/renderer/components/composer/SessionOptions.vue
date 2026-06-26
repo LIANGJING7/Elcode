@@ -12,26 +12,20 @@
       <option value="plan">Plan</option>
     </select>
 
-    <!-- Model selector with provider grouping -->
-    <select
+    <!-- Model selector with tree-style dropdown -->
+    <ModelSelector
       v-if="hasModels"
       v-model="localModel"
-      class="model-select px-2 py-1 bg-bg-hover border border-border hover:border-border-light rounded text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
       :disabled="!isRuntimeAllowed('model') && editingSession"
-      @change="emitUpdate"
-    >
-      <optgroup v-for="group in groupedModels" :key="group.provider" :label="group.provider">
-        <option v-for="m in group.models" :key="m.value" :value="m.value">
-          {{ m.name }}
-        </option>
-      </optgroup>
-    </select>
+      @update:model-value="emitUpdate"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { sessionOptionsRegistry, type SessionOption } from '../../composer/sessionOptionsRegistry'
+import ModelSelector from './ModelSelector.vue'
 
 const props = withDefaults(defineProps<{
   options?: Record<string, unknown>
@@ -52,50 +46,6 @@ const localModel = ref<string>((props.options?.model as string) || '')
 const hasModels = computed(() => {
   const modelOpt = sessionOptionsRegistry.model as SessionOption<string>
   return modelOpt && modelOpt.options && modelOpt.options.length > 0
-})
-
-const modelOptions = computed(() => {
-  const modelOpt = sessionOptionsRegistry.model as SessionOption<string>
-  return modelOpt?.options || []
-})
-
-// Group models by provider (parse from label format "Provider / Model")
-const groupedModels = computed(() => {
-  const groups: { provider: string; models: { value: string; name: string }[] }[] = []
-  const providerMap = new Map<string, { value: string; name: string }[]>()
-
-  for (const opt of modelOptions.value) {
-    const parts = opt.label.split(' / ')
-    if (parts.length === 2) {
-      const provider = parts[0]
-      const modelName = parts[1]
-
-      if (!providerMap.has(provider)) {
-        providerMap.set(provider, [])
-      }
-      providerMap.get(provider)!.push({
-        value: opt.value,
-        name: modelName
-      })
-    } else {
-      // Handle ungrouped models (no provider prefix)
-      const fallbackProvider = 'Other'
-      if (!providerMap.has(fallbackProvider)) {
-        providerMap.set(fallbackProvider, [])
-      }
-      providerMap.get(fallbackProvider)!.push({
-        value: opt.value,
-        name: opt.label
-      })
-    }
-  }
-
-  // Convert map to array sorted by provider name
-  for (const [provider, models] of Array.from(providerMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-    groups.push({ provider, models })
-  }
-
-  return groups
 })
 
 // Check if option is allowed at runtime
@@ -119,15 +69,8 @@ function emitUpdate() {
 </script>
 
 <style scoped>
-.mode-select option,
-.model-select option,
-.model-select optgroup {
+.mode-select option {
   background-color: var(--color-bg-elevated);
   color: var(--color-text);
-}
-
-.model-select optgroup {
-  font-weight: 600;
-  color: var(--color-text-muted);
 }
 </style>
