@@ -1,8 +1,9 @@
 import { setActivePinia, createPinia } from 'pinia'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useStreamStore } from '../stream'
-import { useMessageStore } from '../message'
+import { useStreamStore, setStreamDependencies } from '../stream'
+import { useMessageStore, setMessageRepository } from '../message'
 import type { MessageRepository, StreamEvent } from '../../repositories/MessageRepository'
+import type { Message } from '../../../types/ipc'
 
 function mkRepo(): MessageRepository {
   return {
@@ -15,7 +16,12 @@ function mkRepo(): MessageRepository {
 }
 
 describe('streamStore', () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const repo = mkRepo()
+    setMessageRepository(repo)
+    setStreamDependencies(repo, useMessageStore())
+  })
 
   it('start 流式期间 streamingMessage 持续以最新 event 覆盖', async () => {
     const repo = mkRepo()
@@ -24,15 +30,16 @@ describe('streamStore', () => {
       emitHandler = h
       return () => { emitHandler = null }
     })
-    const message = useMessageStore(repo)
-    const s = useStreamStore(repo, message)
+    setMessageRepository(repo)
+    setStreamDependencies(repo, useMessageStore())
+
+    const message = useMessageStore()
+    const s = useStreamStore()
     s.start('sess-1', 'C:/repo')
-    // 模拟两条 message 事件
     emitHandler!({ type: 'message', message: { id: 'm1', role: 'assistant', content: 'hello', timestamp: new Date() } })
     expect(s.streamingMessage?.content).toBe('hello')
     emitHandler!({ type: 'message', message: { id: 'm1', role: 'assistant', content: 'hello world', timestamp: new Date() } })
     expect(s.streamingMessage?.content).toBe('hello world')
-    // 完成
     emitHandler!({ type: 'complete' })
     expect(s.streamingMessage).toBeNull()
     expect(message.messages.some(m => m.content === 'hello world')).toBe(true)
@@ -43,13 +50,15 @@ describe('streamStore', () => {
     let emitHandler: ((e: StreamEvent) => void) | null = null
     repo.subscribeStream = vi.fn().mockImplementation((_sid, h) => { emitHandler = h; return () => {} })
     repo.interrupt = vi.fn().mockResolvedValue(true)
-    const message = useMessageStore(repo)
-    const s = useStreamStore(repo, message)
+    setMessageRepository(repo)
+    setStreamDependencies(repo, useMessageStore())
+
+    const message = useMessageStore()
+    const s = useStreamStore()
     s.start('sess-1', 'C:/repo')
     emitHandler!({ type: 'message', message: { id: 'm1', role: 'assistant', content: 'x', timestamp: new Date() } })
     await s.interrupt()
     expect(s.streamingMessage).toBeNull()
-    // interrupt 应传入 start 时记录的 directory
     expect(repo.interrupt).toHaveBeenCalledWith('sess-1', 'C:/repo')
   })
 
@@ -57,10 +66,12 @@ describe('streamStore', () => {
     const repo = mkRepo()
     let emitHandler: ((e: StreamEvent) => void) | null = null
     repo.subscribeStream = vi.fn().mockImplementation((_sid, h) => { emitHandler = h; return () => {} })
-    const message = useMessageStore(repo)
-    const s = useStreamStore(repo, message)
+    setMessageRepository(repo)
+    setStreamDependencies(repo, useMessageStore())
+
+    const message = useMessageStore()
+    const s = useStreamStore()
     s.start('sess-1', 'C:/repo')
-    // 直接 complete, 无前置 message 事件
     emitHandler!({ type: 'complete' })
     expect(s.streamingMessage).toBeNull()
     expect(message.messages.length).toBe(0)
@@ -70,14 +81,16 @@ describe('streamStore', () => {
     const repo = mkRepo()
     let emitHandler: ((e: StreamEvent) => void) | null = null
     repo.subscribeStream = vi.fn().mockImplementation((_sid, h) => { emitHandler = h; return () => {} })
-    const message = useMessageStore(repo)
-    const s = useStreamStore(repo, message)
+    setMessageRepository(repo)
+    setStreamDependencies(repo, useMessageStore())
+
+    const message = useMessageStore()
+    const s = useStreamStore()
     s.start('sess-1', 'C:/repo')
     emitHandler!({ type: 'tool', toolCall: { name: 'read_file', args: { path: '/src/test.ts' } } })
     const tc = s.streamingToolCall as { name: string } | null
     expect(tc?.name).toBe('read_file')
     expect(s.streamingMessage).toBeNull()
-    // complete 清 both
     emitHandler!({ type: 'complete' })
     expect(s.streamingToolCall).toBeNull()
   })
