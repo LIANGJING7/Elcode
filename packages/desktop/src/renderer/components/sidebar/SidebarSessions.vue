@@ -8,7 +8,7 @@ import { useUiStore } from '../../stores/ui'
 const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
-const { conversations } = storeToRefs(sessionStore)
+const { conversations, currentSessionId } = storeToRefs(sessionStore)
 const { currentWorkspace } = storeToRefs(workspaceStore)
 
 const search = ref('')
@@ -30,10 +30,11 @@ async function newSession() {
   ui.setView('chat')
 }
 
+// 选会话: 设 currentSessionId(驱动 currentConversation/currentMessages/hasActiveSession),
+// 再切到 chat 视图. 会话消息的懒加载在 phase 3 messageStore 落地.
 function select(id: string) {
-  // 实际选会话 + 加载消息在 phase 3 messageStore 落地; 本阶段先切到 chat 视图.
+  sessionStore.selectSession(id)
   ui.setView('chat')
-  void id
 }
 </script>
 
@@ -49,20 +50,32 @@ function select(id: string) {
       />
     </div>
 
-    <ul class="flex-1 overflow-y-auto space-y-0.5">
+    <ul v-if="filtered.length > 0" class="flex-1 overflow-y-auto space-y-0.5">
       <li v-for="c in filtered" :key="c.id">
         <button
           :data-session-id="c.id"
-          class="session-row w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors duration-fast"
+          class="session-row w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-xs transition-colors duration-fast"
+          :class="c.id === currentSessionId
+            ? 'is-active bg-accent-muted text-accent ring-1 ring-accent/20'
+            : 'text-text-secondary hover:bg-bg-hover hover:text-text'"
           @click="select(c.id)"
         >
-          <span class="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-bg-active text-text-muted text-2xs font-bold">
-            {{ c.title.charAt(0).toUpperCase() }}
-          </span>
+          <span
+            class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-2xs font-bold"
+            :class="c.id === currentSessionId ? 'bg-accent text-white' : 'bg-bg-active text-text-muted'"
+          >{{ c.title.charAt(0).toUpperCase() }}</span>
           <span class="truncate">{{ c.title }}</span>
         </button>
       </li>
     </ul>
+
+    <div
+      v-else
+      class="flex-1 flex items-center justify-center text-text-muted text-xs text-center px-4"
+    >
+      <span v-if="search">No conversations match "{{ search }}"</span>
+      <span v-else>No conversations yet</span>
+    </div>
 
     <button
       data-testid="new-session"

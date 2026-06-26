@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import SidebarWorkspaces from './SidebarWorkspaces.vue'
 import SidebarSessions from './SidebarSessions.vue'
@@ -10,6 +10,12 @@ import { useWorkspaceStore } from '../../stores/workspace'
 const workspace = useWorkspaceStore()
 const { currentWorkspace } = storeToRefs(workspace)
 const tab = ref<'workspaces' | 'sessions'>('workspaces')
+
+// 当前 workspace 被移除(变为 null)时, sessions tab 失去锚点 → 退回 workspaces tab,
+// 避免 sessions tab 渲染空列表且 New Session 变 no-op 的降级态.
+watch(currentWorkspace, (ws) => {
+  if (!ws) tab.value = 'workspaces'
+})
 </script>
 
 <template>

@@ -46,4 +46,17 @@ describe('SidebarTabs', () => {
     expect(w.find('button[data-tab="sessions"]').classes()).toContain('is-active')
     expect(w.findComponent({ name: 'SidebarSessions' }).exists()).toBe(true)
   })
+
+  it('在 sessions tab 时若当前 workspace 被移除, 退回 workspaces tab', async () => {
+    const ws = useWorkspaceStore()
+    ws.workspaces = [{ id: 'ws-a', name: 'repo', path: 'C:/repo', lastAccessed: new Date(0) }]
+    ws.currentWorkspace = ws.workspaces[0]
+    const w = mount(SidebarTabs)
+    await w.find('button[data-tab="sessions"]').trigger('click')
+    expect(w.find('button[data-tab="sessions"]').classes()).toContain('is-active')
+    // 模拟移除当前 workspace
+    ws.currentWorkspace = null
+    await w.vm.$nextTick()
+    expect(w.find('button[data-tab="workspaces"]').classes()).toContain('is-active')
+  })
 })
