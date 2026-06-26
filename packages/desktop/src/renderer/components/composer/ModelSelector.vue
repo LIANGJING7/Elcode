@@ -12,8 +12,8 @@
       </svg>
     </button>
 
-    <!-- Dropdown menu -->
-    <div v-if="isOpen" class="model-dropdown absolute top-full left-0 mt-1 bg-bg-elevated border border-border rounded shadow-lg z-50 min-w-48">
+    <!-- Dropdown menu (above trigger) -->
+    <div v-if="isOpen" class="model-dropdown absolute bottom-full left-0 mb-1 bg-bg-elevated border border-border rounded shadow-lg z-50 min-w-48">
       <!-- Provider list -->
       <div class="provider-list">
         <div
@@ -29,10 +29,10 @@
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
 
-          <!-- Sub-menu (models for this provider) -->
+          <!-- Sub-menu (models for this provider) - also above -->
           <div
             v-if="activeSubMenu === group.provider"
-            class="model-submenu absolute left-full top-0 ml-1 bg-bg-elevated border border-border rounded shadow-lg min-w-48"
+            class="model-submenu absolute left-full bottom-0 ml-1 bg-bg-elevated border border-border rounded shadow-lg min-w-48"
           >
             <div
               v-for="model in group.models"
@@ -205,7 +205,7 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
