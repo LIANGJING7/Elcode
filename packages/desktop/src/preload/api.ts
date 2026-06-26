@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, Workspace, SessionUpdate, SkillInfo, MCPStatus, MCPAddPayload } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, Workspace, SessionUpdate, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult } from '../types/ipc'
 
 export const desktopAPI = {
   session: {
@@ -64,6 +64,32 @@ export const desktopAPI = {
     
     models: (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_MODELS, directory)
+  },
+
+  provider: {
+    authMethods: (directory?: string): Promise<Record<string, AuthMethod[]>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_AUTH_METHODS, directory),
+    
+    authorize: (providerID: string, method: number, inputs?: Record<string, string>, directory?: string): Promise<AuthorizationResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_AUTHORIZE, providerID, method, inputs, directory),
+    
+    authCallback: (providerID: string, method: number, code?: string, directory?: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_AUTH_CALLBACK, providerID, method, code, directory),
+
+    add: (config: { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_ADD, config, directory),
+
+    update: (providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_UPDATE, providerId, config, directory),
+
+    delete: (providerId: string, directory?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_DELETE, providerId, directory),
+
+    test: (providerIdOrConfig: string | { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; modelCount?: number; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_TEST, providerIdOrConfig, directory),
+
+    refreshModels: (providerId: string, directory?: string): Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_REFRESH_MODELS, providerId, directory)
   },
 
   workspace: {
