@@ -32,22 +32,47 @@ export function registerConfigHandlers() {
   })
 
   ipcMain.handle(CHANNELS.PROVIDER_ADD, async (_event, config: { name: string; apiKey: string; baseUrl?: string }, directory?: string) => {
-    return await backend.provider.add(config, directory)
+    try {
+      return await backend.provider.add(config, directory)
+    } catch (err) {
+      console.error('[ConfigHandler] provider add error:', err)
+      return { success: false, error: 'Failed to add provider' }
+    }
   })
 
   ipcMain.handle(CHANNELS.PROVIDER_UPDATE, async (_event, providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string) => {
-    return await backend.provider.update(providerId, config, directory)
+    try {
+      return await backend.provider.update(providerId, config, directory)
+    } catch (err) {
+      console.error('[ConfigHandler] provider update error:', err)
+      return { success: false, error: 'Failed to update provider' }
+    }
   })
 
   ipcMain.handle(CHANNELS.PROVIDER_DELETE, async (_event, providerId: string, directory?: string) => {
-    return await backend.provider.delete(providerId, directory)
+    try {
+      return await backend.provider.delete(providerId, directory)
+    } catch (err) {
+      console.error('[ConfigHandler] provider delete error:', err)
+      return { success: false, error: 'Failed to delete provider' }
+    }
   })
 
   ipcMain.handle(CHANNELS.PROVIDER_TEST, async (_event, providerIdOrConfig: string | { name: string; apiKey: string; baseUrl?: string }, directory?: string) => {
-    return await backend.provider.test(providerIdOrConfig, directory)
+    try {
+      return await backend.provider.test(providerIdOrConfig, directory)
+    } catch (err) {
+      console.error('[ConfigHandler] provider test error:', err)
+      return { success: false, error: 'Failed to test provider' }
+    }
   })
 
   ipcMain.handle(CHANNELS.PROVIDER_REFRESH_MODELS, async (_event, providerId: string, directory?: string) => {
-    return await backend.provider.refreshModels(providerId, directory)
+    try {
+      return await backend.provider.refreshModels(providerId, directory)
+    } catch (err) {
+      console.error('[ConfigHandler] provider refresh models error:', err)
+      return { success: false, error: 'Failed to refresh models' }
+    }
   })
 }
