@@ -90,6 +90,26 @@ export interface MCPAddPayload {
   timeout?: number
 }
 
+export interface AuthMethodPrompt {
+  type: 'text' | 'select'
+  key: string
+  message: string
+  placeholder?: string
+  options?: { label: string; value: string; hint?: string }[]
+}
+
+export interface AuthMethod {
+  type: 'oauth' | 'api'
+  label: string
+  prompts?: AuthMethodPrompt[]
+}
+
+export interface AuthorizationResult {
+  url?: string
+  method: 'auto' | 'code'
+  instructions?: string
+}
+
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
   SESSION_GET: 'session:get',
@@ -112,6 +132,15 @@ export const IPC_CHANNELS = {
   CONFIG_GET: 'config:get',
   CONFIG_SET: 'config:set',
   CONFIG_MODELS: 'config:models',
+
+  PROVIDER_AUTH_METHODS: 'provider:auth-methods',
+  PROVIDER_AUTHORIZE: 'provider:authorize',
+  PROVIDER_AUTH_CALLBACK: 'provider:auth-callback',
+  PROVIDER_ADD: 'provider:add',
+  PROVIDER_UPDATE: 'provider:update',
+  PROVIDER_DELETE: 'provider:delete',
+  PROVIDER_TEST: 'provider:test',
+  PROVIDER_REFRESH_MODELS: 'provider:refresh-models',
   
   WORKSPACE_GET_CWD: 'workspace:getCwd',
   WORKSPACE_LIST: 'workspace:list',
