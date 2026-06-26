@@ -2,7 +2,30 @@
   <div class="app-container h-screen flex bg-bg overflow-hidden">
     <Sidebar v-show="ui.sidebarOpen" />
 
+    <!-- 侧边栏收起时的浮动按钮 -->
+    <button
+      v-show="!ui.sidebarOpen"
+      class="sidebar-toggle fixed top-3 left-3 z-50 w-8 h-8 rounded-lg bg-accent flex items-center justify-center cursor-pointer hover:bg-accent-hover transition-colors duration-fast no-drag"
+      @click="ui.toggleSidebar()"
+      title="Toggle sidebar"
+    >
+      <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="2.5"/>
+        <circle cx="4" cy="6" r="1.5"/>
+        <circle cx="20" cy="6" r="1.5"/>
+        <circle cx="4" cy="18" r="1.5"/>
+        <circle cx="20" cy="18" r="1.5"/>
+        <line x1="5.5" y1="6.5" x2="9.7" y2="11"/>
+        <line x1="18.5" y1="6.5" x2="14.3" y2="11"/>
+        <line x1="12" y1="14.5" x2="5.5" y2="17.2"/>
+        <line x1="12" y1="14.5" x2="18.5" y2="17.2"/>
+      </svg>
+    </button>
+
     <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
+      <!-- 顶部拖拽区域: 侧边栏收起时整个顶部可拖, 展开时仅主区顶部可拖 -->
+      <div class="drag-region h-12 flex-shrink-0 drag"></div>
+
       <!-- 主区按 uiStore.view 渲染。空 workspace 强制 welcome；
            其它 view(skills/mcp/settings)本阶段用占位文字贯通,phase 5/6 落地真组件 -->
       <WelcomeView v-if="effectiveView === 'welcome'" @open-folder="handleAddWorkspace" />
@@ -29,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/chat/ChatView.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -39,6 +62,7 @@ import SettingsView from './components/settings/SettingsView.vue'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
+import { useModelsStore } from './stores/models'
 import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
 useGlobalShortcuts()
@@ -46,6 +70,7 @@ useGlobalShortcuts()
 const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
+const modelsStore = useModelsStore()
 
 const currentSessionId = computed(() => sessionStore.currentSessionId)
 const currentConversation = computed(() => sessionStore.currentConversation)
@@ -59,6 +84,19 @@ const effectiveView = computed<'welcome' | 'chat' | 'skills' | 'mcp' | 'settings
   if (ui.view === 'welcome') return 'chat'
   return ui.view
 })
+
+// Watch workspace changes to load models
+watch(
+  () => workspaceStore.currentWorkspace,
+  async (newWorkspace) => {
+    if (newWorkspace) {
+      await modelsStore.loadModels(newWorkspace.path)
+    } else {
+      modelsStore.clearModels()
+    }
+  },
+  { immediate: true }
+)
 
 let cleanupListeners: (() => void) | null = null
 
