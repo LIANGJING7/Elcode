@@ -3,6 +3,7 @@ import { CHANNELS } from './channels'
 import { backend } from '../backend-client'
 import type { Conversation, LocationRef, PromptInput, SessionUpdate } from '../../types/ipc'
 import { readSessionMeta, mergeSessionMeta, removeSessionMeta } from './session-persistence'
+import type { SessionRecord } from './session-persistence'
 
 const sessionStreams = new Map<string, () => void>()
 
@@ -18,20 +19,20 @@ const sessionStreams = new Map<string, () => void>()
  * Desktop-only metadata (pinned/options/workspace anchors) is overlaid from
  * `sessions.json` because core does not persist those fields.
  */
-function toConversation(raw: Record<string, unknown>, meta?: Record<string, unknown>): Conversation {
+function toConversation(raw: Record<string, unknown>, meta?: SessionRecord): Conversation {
   const time = (raw.time ?? {}) as { created?: number; updated?: number }
   return {
     id: String(raw.id),
-    // core 不存桌面端 rename://"sessions.json 的 meta.title 优先; 未改过则 fallback 到 core 的 raw.title"
+    // core 不存桌面端 rename: sessions.json 的 meta.title 优先; 未改过则 fallback 到 core 的 raw.title
     title: String(meta?.title ?? raw.title ?? 'Untitled'),
     messages: [],
     createdAt: new Date(time.created ?? Date.now()),
     updatedAt: new Date(time.updated ?? time.created ?? Date.now()),
     // 仅覆盖桌面端附加字段, 不动后端权威的 id/time
-    primaryWorkspaceId: meta?.primaryWorkspaceId as string | undefined,
-    workspaceIds: meta?.workspaceIds as string[] | undefined,
-    pinned: meta?.pinned as boolean | undefined,
-    options: meta?.options as Record<string, unknown> | undefined,
+    primaryWorkspaceId: meta?.primaryWorkspaceId,
+    workspaceIds: meta?.workspaceIds,
+    pinned: meta?.pinned,
+    options: meta?.options,
   }
 }
 
