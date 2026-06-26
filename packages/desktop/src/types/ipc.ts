@@ -38,6 +38,19 @@ export interface Conversation {
   messages: Message[]
   createdAt: Date
   updatedAt: Date
+  // 桌面端附加 metadata (phase 2): core 不存这些, 桌面端在 sessions.json 持久化
+  primaryWorkspaceId?: string          // 该会话直属的"当前目录"锚点(单挂载时 === workspaceIds[0])
+  workspaceIds?: string[]               // 该会话可见的目录集(单挂载即 [primaryWorkspaceId])
+  pinned?: boolean                      // 用户置顶
+  options?: Record<string, unknown>     // SessionOptions 容器, phase 4 填充
+}
+
+export interface SessionUpdate {
+  title?: string
+  pinned?: boolean
+  options?: Record<string, unknown>
+  primaryWorkspaceId?: string
+  workspaceIds?: string[]
 }
 
 export interface Workspace {
@@ -62,6 +75,7 @@ export const IPC_CHANNELS = {
   SESSION_RESUME: 'session:resume',
   SESSION_STREAM_EVENT: 'session:stream:event',
   SESSION_DELETE: 'session:delete',
+  SESSION_UPDATE: 'session:update',
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',

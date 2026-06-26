@@ -36,19 +36,28 @@ export const useSessionStore = defineStore('session', () => {
     }
   )
 
-  async function createSession(workspacePath: string, workspaceID?: string) {
-    if (!workspaceStore.currentWorkspace) {
-      error.value = 'No workspace selected'
+  async function createSession(args: { workspaceId: string; path: string; primaryWorkspaceId?: string; workspaceIds?: string[] }) {
+    if (!args.path) {
+      error.value = 'No workspace path provided'
       return
     }
-    
+
     isLoading.value = true
     error.value = null
     try {
-      const location: LocationRef = { directory: workspacePath, workspaceID }
+      const location: LocationRef = { directory: args.path, workspaceID: args.workspaceId }
       const sessionId = await window.desktop.session.create(location)
       currentSessionId.value = sessionId
-      await loadConversations(workspacePath)
+
+      // 桌面端附加 metadata 落 sessions.json(经 main 进程). 单挂载默认 primaryWorkspaceId = workspaceId.
+      const primary = args.primaryWorkspaceId ?? args.workspaceId
+      const ids = args.workspaceIds ?? [args.workspaceId]
+      await window.desktop.session.update(sessionId, {
+        primaryWorkspaceId: primary,
+        workspaceIds: ids,
+      }).catch(() => { /* 持久化失败不阻塞会话创建 */ })
+
+      await loadConversations(args.path)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to create session'
     } finally {
@@ -111,6 +120,52 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // 改写桌面端附加 metadata. core 无 rename/pin 路由, 全部经 SESSION_UPDATE 落 sessions.json.
+  // directory 取自当前 workspace 的 path(若已选中). 二者仅作为透传给后端的 location hint,
+  // 不影响 sessions.json 的 sessionID 键索引.
+  function directoryOf(workspaceId?: string): string | undefined {
+    if (workspaceId) {
+      return workspaceStore.workspaces.find(w => w.id === workspaceId)?.path
+    }
+    return workspaceStore.currentWorkspace?.path
+  }
+
+  async function rename(sessionId: string, title: string) {
+    const dir = directoryOf()
+    try {
+      await window.desktop.session.update(sessionId, { title }, dir)
+      const conv = conversations.value.find(c => c.id === sessionId)
+      if (conv) conv.title = title
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to rename session'
+    }
+  }
+
+  async function togglePin(sessionId: string) {
+    const dir = directoryOf()
+    const conv = conversations.value.find(c => c.id === sessionId)
+    const next = !conv?.pinned
+    try {
+      await window.desktop.session.update(sessionId, { pinned: next }, dir)
+      if (conv) conv.pinned = next
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to pin session'
+    }
+  }
+
+  async function clearAll(workspaceId: string) {
+    const dir = directoryOf(workspaceId)
+    const targets = conversations.value.filter(c => c.primaryWorkspaceId === workspaceId)
+    for (const c of targets) {
+      try {
+        await window.desktop.session.delete(c.id, dir)
+      } catch (e) {
+        error.value = e instanceof Error ? e.message : 'Failed to delete session'
+      }
+    }
+    await loadConversations(dir)
+  }
+
   function selectSession(sessionId: string) {
     currentSessionId.value = sessionId
   }
@@ -145,6 +200,9 @@ export const useSessionStore = defineStore('session', () => {
     loadConversations,
     sendMessage,
     deleteSession,
+    rename,
+    togglePin,
+    clearAll,
     selectSession,
     setupStreamListeners
   }

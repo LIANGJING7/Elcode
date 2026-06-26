@@ -90,8 +90,9 @@ onUnmounted(() => {
 })
 
 async function handleNewChat() {
-  if (!workspaceStore.currentWorkspace) return
-  await sessionStore.createSession(workspaceStore.currentWorkspace.path)
+  const ws = workspaceStore.currentWorkspace
+  if (!ws) return
+  await sessionStore.createSession({ workspaceId: ws.id, path: ws.path })
 }
 
 function handleSelectSession(sessionId: string) {
