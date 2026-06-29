@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useSessionStore } from '../stores/session'
-import { useWorkspaceStore } from '../stores/workspace'
 import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
 import ComposerInput from './composer/ComposerInput.vue'
 import SessionOptions from './composer/SessionOptions.vue'
 
 const sessionStore = useSessionStore()
-const workspaceStore = useWorkspaceStore()
 const modelsStore = useModelsStore()
 const ui = useUiStore()
 
@@ -43,10 +41,6 @@ function handleManualSend() {
     inputValue.value = ''
   }
 }
-
-function handleWorkspaceChange(workspacePath: string) {
-  workspaceStore.selectWorkspace(workspacePath)
-}
 </script>
 
 <template>
@@ -62,19 +56,6 @@ function handleWorkspaceChange(workspacePath: string) {
         class="bg-bg-elevated rounded-2xl shadow-lg transition-all duration-200 flex flex-col"
         :class="isFocused ? 'shadow-md' : 'shadow-lg'"
       >
-        <!-- 工作区选择器 -->
-        <div class="px-3 py-2 border-b border-border/60">
-          <button
-            class="flex items-center gap-2 text-sm text-text-muted hover:text-text transition-colors"
-          >
-            <span class="text-lg">📁</span>
-            <span class="truncate">{{ workspaceStore.currentWorkspace?.name || 'Select workspace' }}</span>
-            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-        </div>
-
         <!-- 输入区域 -->
         <div class="flex-1 min-h-[80px] px-3 pt-3 pb-1">
           <ComposerInput
