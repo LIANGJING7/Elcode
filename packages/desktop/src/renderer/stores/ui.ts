@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type View = 'welcome' | 'chat' | 'skills' | 'mcp' | 'settings'
-export type SettingsSection = 'appearance' | 'models' | 'shortcuts' | 'about'
+export type View = 'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'
+export type SettingsSection = 'appearance' | 'models' | 'mcp' | 'skills'
 
 export const useUiStore = defineStore('ui', () => {
   // 单一 source of truth: view. previousView 仅在进/出 settings 时记/读
