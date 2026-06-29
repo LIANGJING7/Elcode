@@ -27,6 +27,7 @@ export const useModelsStore = defineStore('models', () => {
   const deleting = ref(false)
   const refreshing = ref(new Set<string>())
   const testing = ref(new Set<string>())
+  const selectedModel = ref<string>('')
 
   const modelOptions = computed<{ value: string; label: string }[]>(() => {
     const options: { value: string; label: string }[] = []
@@ -46,7 +47,9 @@ export const useModelsStore = defineStore('models', () => {
     error.value = null
     try {
       const result = await window.desktop.config.models(directory)
-      providers.value = result.all as ProviderInfo[]
+      // Only show connected providers (same behavior as TUI)
+      const connectedSet = new Set(result.connected || [])
+      providers.value = (result.all as ProviderInfo[]).filter(p => connectedSet.has(p.id))
       connectedProviders.value = result.connected || []
 
       // Update sessionOptionsRegistry after loading
@@ -59,6 +62,12 @@ export const useModelsStore = defineStore('models', () => {
         allowed: ['create', 'runtime'],
         default: ''
       })
+
+      // 恢复持久化的模型选择
+      const saved = await window.desktop.config.get('selectedModel')
+      if (saved && modelOptions.value.some(o => o.value === saved)) {
+        selectedModel.value = saved
+      }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load models'
       providers.value = []
@@ -66,6 +75,11 @@ export const useModelsStore = defineStore('models', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function setSelectedModel(modelId: string) {
+    selectedModel.value = modelId
+    await window.desktop.config.set('selectedModel', modelId)
   }
 
   async function addProvider(config: { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; error?: string }> {
@@ -173,6 +187,7 @@ export const useModelsStore = defineStore('models', () => {
     providers.value = []
     connectedProviders.value = []
     error.value = null
+    selectedModel.value = ''
 
     // Clear registry
     registerSessionOption<string>({
@@ -195,8 +210,10 @@ export const useModelsStore = defineStore('models', () => {
     deleting,
     refreshing,
     testing,
+    selectedModel,
     modelOptions,
     loadModels,
+    setSelectedModel,
     addProvider,
     updateProvider,
     deleteProvider,
