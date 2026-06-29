@@ -1,63 +1,73 @@
 <template>
-  <div class="model-selector">
-    <!-- Trigger button -->
-    <button
-      class="model-trigger px-2 py-1 bg-bg-hover border border-border hover:border-border-light rounded text-text text-2xs font-medium cursor-pointer transition-all duration-fast flex items-center gap-1"
-      @click="toggleDropdown"
-      @blur="handleBlur"
+  <DropdownMenu>
+    <DropdownMenuTrigger as-child>
+      <button
+        class="h-7 px-2.5 rounded-lg bg-bg-elevated hover:bg-bg-hover text-xs text-text font-medium flex items-center gap-1 transition-colors"
+      >
+        <span>{{ displayText }}</span>
+        <svg class="w-3 h-3 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent
+      ref="contentRef"
+      class="max-h-64"
+      align="end"
+      side="top"
+      :side-offset="4"
     >
-      <span>{{ displayText }}</span>
-      <svg class="w-3 h-3 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="6 9 12 15 18 9"></polyline>
-      </svg>
-    </button>
-
-    <!-- Dropdown menu (above trigger) -->
-    <div v-if="isOpen" class="model-dropdown absolute bottom-full left-0 mb-1 bg-bg-elevated border border-border rounded shadow-lg z-50 min-w-48">
-      <!-- Provider list -->
-      <div class="provider-list">
-        <div
-          v-for="group in groupedModels"
-          :key="group.provider"
-          class="provider-item px-2 py-1.5 hover:bg-bg-hover cursor-pointer flex items-center justify-between relative"
-          @mouseenter="showSubMenu(group.provider)"
-          @mouseleave="hideSubMenu"
-          @click.stop="selectProvider(group.provider)"
+      <!-- Provider groups -->
+      <DropdownMenuSub
+        v-for="group in groupedModels"
+        :key="group.provider"
+        :open="openProvider === group.provider"
+      >
+        <DropdownMenuSubTrigger
+          class="px-3 py-1.5 text-xs text-text"
+          @pointerenter="onProviderEnter(group.provider)"
+          @pointerleave="onProviderLeave"
         >
-          <span class="text-2xs text-text">{{ group.provider }}</span>
-          <svg class="w-3 h-3 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-
-          <!-- Sub-menu (models for this provider) - also above -->
-          <div
-            v-if="activeSubMenu === group.provider"
-            class="model-submenu absolute left-full bottom-0 ml-1 bg-bg-elevated border border-border rounded shadow-lg min-w-48"
+          <span>{{ group.provider }}</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent
+          class="max-h-48 overflow-y-auto"
+          :side-offset="2"
+          @pointerenter="isInsideSub = true"
+          @pointerleave="isInsideSub = false"
+        >
+          <DropdownMenuItem
+            v-for="model in group.models"
+            :key="model.value"
+            class="px-3 py-1.5 text-xs text-text"
+            :class="{ 'bg-accent/10': model.value === selectedModel }"
+            @click="selectModel(model.value)"
           >
-            <div
-              v-for="model in group.models"
-              :key="model.value"
-              class="model-item px-2 py-1.5 hover:bg-bg-hover cursor-pointer"
-              :class="{ 'bg-accent/10': model.value === selectedModel }"
-              @click.stop="selectModel(model.value)"
-              @mousedown.stop
-            >
-              <span class="text-2xs text-text">{{ model.name }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+            {{ model.name }}
+          </DropdownMenuItem>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
 
       <!-- Empty state -->
-      <div v-if="groupedModels.length === 0" class="px-3 py-2 text-2xs text-text-muted">
+      <div v-if="groupedModels.length === 0" class="px-3 py-2 text-xs text-text-muted">
         No models available
       </div>
-    </div>
-  </div>
+    </DropdownMenuContent>
+  </DropdownMenu>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch } from 'vue'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu'
 import { useModelsStore } from '../../stores/models'
 
 const props = defineProps<{
@@ -71,9 +81,43 @@ const emit = defineEmits<{
 
 const modelsStore = useModelsStore()
 
-const isOpen = ref(false)
-const activeSubMenu = ref<string | null>(null)
-const selectedModel = ref(props.modelValue || '')
+const contentRef = ref<InstanceType<typeof DropdownMenuContent> | null>(null)
+
+// Track which provider submenu is open
+const openProvider = ref<string | null>(null)
+const isInsideSub = ref(false)
+
+// Debounce close so hovering submenu content doesn't flicker
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function onProviderEnter(provider: string) {
+  if (closeTimer) clearTimeout(closeTimer)
+  openProvider.value = provider
+}
+
+function onProviderLeave() {
+  // Small delay so entering the submenu content works
+  closeTimer = setTimeout(() => {
+    if (!isInsideSub.value) {
+      openProvider.value = null
+    }
+  }, 100)
+}
+
+// Listen for wheel on provider list — close submenu on scroll
+watch(contentRef, (el) => {
+  if (!el) return
+  const root = (el as any).$el as HTMLElement | undefined
+  if (!root) return
+  root.addEventListener('wheel', () => {
+    openProvider.value = null
+  }, { passive: true })
+}, { immediate: true })
+
+const selectedModel = computed({
+  get: () => props.modelValue || '',
+  set: (val) => emit('update:modelValue', val)
+})
 
 // Group models by provider
 const groupedModels = computed(() => {
@@ -105,7 +149,6 @@ const groupedModels = computed(() => {
     }
   }
 
-  // Convert map to array sorted by provider name
   for (const [provider, models] of Array.from(providerMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
     groups.push({ provider, models })
   }
@@ -113,114 +156,16 @@ const groupedModels = computed(() => {
   return groups
 })
 
-// Display text for trigger button
 const displayText = computed(() => {
   if (!selectedModel.value) {
     return 'Select model'
   }
-
-  // Find the full label
   const opt = modelsStore.modelOptions.find(o => o.value === selectedModel.value)
   return opt?.label || selectedModel.value
 })
 
-function toggleDropdown() {
-  if (!props.disabled) {
-    isOpen.value = !isOpen.value
-    if (!isOpen.value) {
-      activeSubMenu.value = null
-    }
-  }
-}
-
-function handleBlur() {
-  // Delay to allow click events to fire first
-  setTimeout(() => {
-    isOpen.value = false
-    activeSubMenu.value = null
-  }, 200)
-}
-
-function showSubMenu(provider: string) {
-  activeSubMenu.value = provider
-}
-
-function hideSubMenu() {
-  // Only hide if not clicking in sub-menu
-  setTimeout(() => {
-    if (!isOpen.value) {
-      activeSubMenu.value = null
-    }
-  }, 100)
-}
-
-function selectProvider(provider: string) {
-  // Don't select provider itself - wait for model selection
-  // But could be used to select first model in provider if needed
-}
-
-function selectModel(value: string) {
+async function selectModel(value: string) {
   selectedModel.value = value
-  emit('update:modelValue', value)
-  isOpen.value = false
-  activeSubMenu.value = null
+  await modelsStore.setSelectedModel(value)
 }
-
-// Sync with prop changes
-watch(() => props.modelValue, (newVal) => {
-  selectedModel.value = newVal || ''
-})
-
-// Close on escape key
-function handleEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && isOpen.value) {
-    isOpen.value = false
-    activeSubMenu.value = null
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleEscape)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleEscape)
-})
 </script>
-
-<style scoped>
-.model-selector {
-  position: relative;
-  display: inline-block;
-}
-
-.model-dropdown {
-  animation: fadeIn 0.1s ease-out;
-}
-
-.model-submenu {
-  animation: slideIn 0.1s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-</style>
