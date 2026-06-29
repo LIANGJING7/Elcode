@@ -9,22 +9,32 @@
           @click="ui.toggleSidebar()"
           title="Toggle sidebar"
         >
-          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="2.5"/>
-            <circle cx="4" cy="6" r="1.5"/>
-            <circle cx="20" cy="6" r="1.5"/>
-            <circle cx="4" cy="18" r="1.5"/>
-            <circle cx="20" cy="18" r="1.5"/>
-            <line x1="5.5" y1="6.5" x2="9.7" y2="11"/>
-            <line x1="18.5" y1="6.5" x2="14.3" y2="11"/>
-            <line x1="12" y1="14.5" x2="5.5" y2="17.2"/>
-            <line x1="12" y1="14.5" x2="18.5" y2="17.2"/>
+          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none">
+            <defs>
+              <linearGradient id="sidebarIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#1A1A1A"/>
+                <stop offset="100%" stop-color="#F5F5F5"/>
+              </linearGradient>
+            </defs>
+            <!-- L 竖线碎片 -->
+            <polygon points="5,4 7,4 6.5,7 4.5,7" fill="url(#sidebarIconGradient)"/>
+            <polygon points="7.5,4.5 9.5,4 9,7.5 7,8" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+            <polygon points="4,7.5 6.5,7 6,10.5 3.5,11" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+            <polygon points="7,8 9,7.5 8.5,11 6.5,11.5" fill="url(#sidebarIconGradient)" opacity="0.8"/>
+            <polygon points="3.5,11.5 6,11 5.5,14.5 3,15" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+            <polygon points="6.5,12 8.5,11.5 8,15 6,15.5" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+            <!-- L 横线碎片 -->
+            <polygon points="6,15.5 8,15 8.5,17.5 6.5,18" fill="url(#sidebarIconGradient)"/>
+            <polygon points="8.5,15.5 11,16 12,18.5 9.5,18" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+            <polygon points="11.5,16.5 14.5,17 15.5,19.5 12.5,19" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+            <polygon points="15,17.5 17.5,16.5 18,19 15.5,20" fill="url(#sidebarIconGradient)" opacity="0.8"/>
+            <polygon points="18,17 20,16 19.5,19 17.5,20" fill="url(#sidebarIconGradient)" opacity="0.9"/>
           </svg>
         </button>
         <span class="ml-3 text-text text-base font-medium select-none">Model Agent Desktop</span>
       </div>
 
-      <!-- 中间: 会话标题 + 置顶标记 + 菜单 (拖拽区域, 交互元素除外) -->
+      <!-- 中间: 会话标题 + 菜单 (拖拽区域, 交互元素除外) -->
       <div v-if="effectiveView === 'chat'" class="drag flex-1 flex items-center gap-2 px-4 min-w-0">
         <button
           v-if="!editingTitle"
@@ -41,8 +51,6 @@
           @blur="commitEditTitle"
         />
 
-        <span v-if="currentConversation?.pinned" class="no-drag text-accent-muted flex-shrink-0"></span>
-
         <button
           class="no-drag px-2 py-1 rounded hover:bg-bg-hover text-text-muted flex-shrink-0"
           @click.stop="titleMenuOpen = !titleMenuOpen"
@@ -56,7 +64,6 @@
         >
           <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doCopy; closeTitleMenu()">复制</button></li>
           <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="startEditTitle; closeTitleMenu()">重命名</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="handleTogglePin; closeTitleMenu()">{{ currentConversation?.pinned ? '取消置顶' : '置顶' }}</button></li>
           <li><button class="w-full px-4 py-2 text-sm text-error hover:bg-bg-hover text-left" @click="handleDeleteSession; closeTitleMenu()">删除</button></li>
           <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doExport; closeTitleMenu()">导出 Markdown</button></li>
         </ul>
@@ -73,6 +80,7 @@
 
       <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
         <WelcomeView v-if="effectiveView === 'welcome'" @open-folder="handleAddWorkspace" />
+        <NewSessionView v-else-if="effectiveView === 'newSession'" />
         <ChatView
           v-else-if="effectiveView === 'chat'"
           :session-id="currentSessionId ?? ''"
@@ -96,6 +104,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/chat/ChatView.vue'
 import WelcomeView from './components/WelcomeView.vue'
+import NewSessionView from './components/NewSessionView.vue'
 import SkillView from './components/skills/SkillView.vue'
 import McpView from './components/mcp/McpView.vue'
 import SettingsView from './components/settings/SettingsView.vue'
@@ -151,8 +160,9 @@ function doExport() {
 }
 
 // view 由两件事驱动: ui.view 与 workspace 是否存在。
-const effectiveView = computed<'welcome' | 'chat' | 'skills' | 'mcp' | 'settings'>(() => {
+const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'>(() => {
   if (!hasCurrentWorkspace.value) return 'welcome'
+  if (sessionStore.isPendingNewSession) return 'newSession'
   if (ui.view === 'welcome') return 'chat'
   return ui.view
 })
@@ -204,12 +214,6 @@ async function handleRename(title: string) {
   }
 }
 
-async function handleTogglePin() {
-  if (currentSessionId.value) {
-    await sessionStore.togglePin(currentSessionId.value)
-  }
-}
-
 async function handleDeleteSession() {
   if (currentSessionId.value) {
     await sessionStore.deleteSession(currentSessionId.value)
@@ -225,7 +229,7 @@ function handleInspect(toolCallId: string) {
 <style scoped>
 .app-container {
   background-image:
-    radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at bottom right, rgba(99, 102, 241, 0.05) 0%, transparent 50%);
+    radial-gradient(ellipse at top left, var(--color-accent-glow) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, var(--color-accent-muted) 0%, transparent 50%);
 }
 </style>
