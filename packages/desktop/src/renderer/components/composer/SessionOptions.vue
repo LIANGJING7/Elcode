@@ -1,16 +1,19 @@
 <template>
-  <div class="session-options flex items-center gap-2">
+  <div class="session-options flex items-center gap-1.5">
     <!-- Mode selector -->
-    <select
+    <Select
       v-model="localMode"
-      class="mode-select px-2 py-1 bg-bg-hover border border-border hover:border-border-light rounded text-text text-2xs font-medium outline-none cursor-pointer transition-all duration-fast appearance-none"
-      style="background-image: url('data:image/svg+xml,...'); background-repeat: no-repeat; background-position: right 6px center; background-size: 12px; padding-right: 20px;"
       :disabled="!isRuntimeAllowed('mode') && editingSession"
-      @change="emitUpdate"
+      @update:model-value="emitUpdate"
     >
-      <option value="build">Build</option>
-      <option value="plan">Plan</option>
-    </select>
+      <SelectTrigger class="h-7 px-2.5 text-xs rounded-lg bg-bg-elevated hover:bg-bg-hover">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="build">Build</SelectItem>
+        <SelectItem value="plan">Plan</SelectItem>
+      </SelectContent>
+    </Select>
 
     <!-- Model selector with tree-style dropdown -->
     <ModelSelector
@@ -22,9 +25,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { sessionOptionsRegistry, type SessionOption } from '../../composer/sessionOptionsRegistry'
 import ModelSelector from './ModelSelector.vue'
+import { useModelsStore } from '../../stores/models'
+
+const modelsStore = useModelsStore()
 
 const props = withDefaults(defineProps<{
   options?: Record<string, unknown>
@@ -39,7 +46,21 @@ const emit = defineEmits<{
 }>()
 
 const localMode = ref<string>((props.options?.mode as string) || 'build')
-const localModel = ref<string>((props.options?.model as string) || '')
+const localModel = ref<string>((props.options?.model as string) || modelsStore.selectedModel || '')
+
+// 初始化时从 modelsStore.selectedModel 获取默认值
+onMounted(() => {
+  if (!props.options?.model && modelsStore.selectedModel) {
+    localModel.value = modelsStore.selectedModel
+  }
+})
+
+// 监听 modelsStore.selectedModel 变化
+watch(() => modelsStore.selectedModel, (newModel) => {
+  if (newModel && !props.options?.model) {
+    localModel.value = newModel
+  }
+})
 
 // Check if registry has model options
 const hasModels = computed(() => {
@@ -66,10 +87,3 @@ function emitUpdate() {
   })
 }
 </script>
-
-<style scoped>
-.mode-select option {
-  background-color: var(--color-bg-elevated);
-  color: var(--color-text);
-}
-</style>
