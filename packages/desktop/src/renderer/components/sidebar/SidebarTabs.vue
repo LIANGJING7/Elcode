@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import SidebarWorkspaces from './SidebarWorkspaces.vue'
 import SidebarSessions from './SidebarSessions.vue'
 import { useWorkspaceStore } from '../../stores/workspace'
@@ -19,38 +20,31 @@ watch(currentWorkspace, (ws) => {
 </script>
 
 <template>
-  <div class="sidebar-tabs flex flex-col flex-1 min-h-0">
-    <div class="tab-row flex px-2 pt-2 border-b border-border/60">
-      <button
-        data-tab="workspaces"
-        class="flex-1 px-2 py-1.5 text-xs font-medium border-b-2 transition-colors duration-fast"
-        :class="tab === 'workspaces'
-          ? 'is-active border-accent text-text'
-          : 'border-transparent text-text-muted hover:text-text-secondary'"
-        @click="tab = 'workspaces'"
+  <Tabs v-model="tab" class="flex flex-col flex-1 min-h-0">
+    <TabsList class="grid w-full grid-cols-2 px-2 pt-2 bg-transparent border-b border-border/60">
+      <TabsTrigger 
+        value="workspaces" 
+        class="text-xs"
       >
         Workspaces
-      </button>
-      <button
-        data-tab="sessions"
-        class="flex-1 px-2 py-1.5 text-xs font-medium border-b-2 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
-        :class="tab === 'sessions'
-          ? 'is-active border-accent text-text'
-          : 'border-transparent text-text-muted hover:text-text-secondary'"
+      </TabsTrigger>
+      <TabsTrigger 
+        value="sessions" 
+        class="text-xs"
         :disabled="!currentWorkspace"
-        @click="tab = 'sessions'"
       >
-        当前目录<span v-if="currentWorkspace" class="ml-1 text-text-muted">({{ currentWorkspace.name }})</span>
-      </button>
-    </div>
-
-    <SidebarWorkspaces v-if="tab === 'workspaces'" />
-    <SidebarSessions v-else />
-  </div>
+        当前目录<span
+          v-if="currentWorkspace"
+          class="ml-1 text-muted-foreground inline-block truncate max-w-[72px] align-bottom"
+          :title="currentWorkspace.name"
+        >({{ currentWorkspace.name }})</span>
+      </TabsTrigger>
+    </TabsList>
+    <TabsContent value="workspaces" class="flex-1 min-h-0 m-0">
+      <SidebarWorkspaces />
+    </TabsContent>
+    <TabsContent value="sessions" class="flex-1 min-h-0 m-0">
+      <SidebarSessions />
+    </TabsContent>
+  </Tabs>
 </template>
-
-<style scoped>
-.is-active {
-  font-weight: 600;
-}
-</style>
