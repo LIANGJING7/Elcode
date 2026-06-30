@@ -50,8 +50,8 @@ export function streamingReducer(
     case 'STEP_ENDED':
       // Don't set status to 'done' — backend may send more steps.
       // Only STREAM_DONE (final terminal event) sets done.
-      // Reset reasoning status so next step's REASONING_STARTED can trigger 'thinking' again.
-      state.reasoning.status = 'idle'
+      // Don't touch reasoning status here — let REASONING_STARTED/ENDED manage it.
+      // Reset reasoning pending so deltas from this step are flushed.
       state.reasoning.pending = []
       return state
 
