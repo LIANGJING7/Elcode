@@ -10,13 +10,15 @@ const emit = defineEmits<{ inspect: [id: string] }>()
 
 // 提取代码块 (简化实现: 正则匹配 ```lang\ncode```)
 const codeBlocks = computed(() => {
-  const matches = props.message.content.matchAll(/```(\w+)\n([\s\S]*?)```/g)
+  const content = props.message.content || ''
+  const matches = content.matchAll(/```(\w+)\n([\s\S]*?)```/g)
   return Array.from(matches, (m) => ({ lang: m[1], code: m[2].trim() }))
 })
 
 // 去掉代码块后的纯文本
 const textContent = computed(() => {
-  return props.message.content.replace(/```(\w+)\n([\s\S]*?)```/g, '').trim()
+  const content = props.message.content || ''
+  return content.replace(/```(\w+)\n([\s\S]*?)```/g, '').trim()
 })
 
 function handleInspect(tc: ToolCall) {
@@ -28,16 +30,16 @@ function handleInspect(tc: ToolCall) {
   <div class="message-assistant mb-4">
     <div
       data-testid="assistant-bubble"
-      class="bg-surface border border-surface px-4 py-2 rounded-lg max-w-[80%]"
+      class="max-w-[80%]"
     >
       <!-- reasoning -->
       <ReasoningBlock v-if="message.reasoning" :content="message.reasoning" />
 
       <!-- 纯文本内容 -->
-      <div v-if="textContent" class="whitespace-pre-wrap mb-2">{{ textContent }}</div>
+      <div v-if="textContent" class="whitespace-pre-wrap mb-2 text-sm leading-relaxed">{{ textContent }}</div>
 
       <!-- tool calls -->
-      <div v-if="message.toolCalls?.length" class="space-y-2">
+      <div v-if="message.toolCalls?.length" class="space-y-0.5">
         <ToolCallBlock
           v-for="tc in message.toolCalls"
           :key="tc.id"
