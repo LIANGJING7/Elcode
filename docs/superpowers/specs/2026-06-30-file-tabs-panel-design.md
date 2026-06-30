@@ -301,8 +301,102 @@ function buildReadFileModel(filePath: string, content: string, tool: ToolCall): 
 }
 
 function buildDiffModel(filePath: string, diff: string, tool: ToolCall): DiffModel {
-  // 解析 Unified Diff，预构建 lines 和 hunks
-  // ...（详见实现）
+  const lines = diff.split('\n')
+  const diffLines: DiffLine[] = []
+  const hunks: HunkInfo[] = []
+  let currentHunk: HunkInfo | null = null
+  let oldLine = 0
+  let newLine = 0
+
+  for (const rawLine of lines) {
+    const id = nanoid()
+
+    // Hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+    if (rawLine.startsWith('@@')) {
+      const match = rawLine.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/)
+      if (match) {
+        oldLine = parseInt(match[1])
+        newLine = parseInt(match[2])
+      }
+      currentHunk = { id: nanoid(), startLine: newLine, lines: [], collapsed: false }
+      hunks.push(currentHunk!)
+      diffLines.push({ id, type: 'hunk', text: rawLine })
+      continue
+    }
+
+    // Meta: --- a/ +++ b/
+    if (rawLine.startsWith('---') || rawLine.startsWith('+++')) {
+      diffLines.push({ id, type: 'meta', text: rawLine })
+      continue
+    }
+
+    // Add line
+    if (rawLine.startsWith('+')) {
+      const line = { id, type: 'add' as const, newLine, text: rawLine.slice(1) }
+      diffLines.push(line)
+      currentHunk?.lines.push(line)
+      newLine++
+      continue
+    }
+
+    // Remove line
+    if (rawLine.startsWith('-')) {
+      const line = { id, type: 'remove' as const, oldLine, text: rawLine.slice(1) }
+      diffLines.push(line)
+      currentHunk?.lines.push(line)
+      oldLine++
+      continue
+    }
+
+    // Context line
+    const line = { id, type: 'context' as const, oldLine, newLine, text: rawLine }
+    diffLines.push(line)
+    currentHunk?.lines.push(line)
+    oldLine++
+    newLine++
+  }
+
+  const parts = filePath.split('/')
+  const fileName = parts.pop() ?? filePath
+  const directory = parts.length > 0 ? parts.join('/') + '/' : undefined
+
+  return {
+    _kind: 'diff',
+    filePath,
+    fileName,
+    directory,
+    hunks,
+    lines: diffLines,
+    statistics: {
+      additions: diffLines.filter(l => l.type === 'add').length,
+      deletions: diffLines.filter(l => l.type === 'remove').length,
+    },
+    options: { mode: 'unified', showMeta: true, wrap: false },
+  }
+}
+
+// 辅助函数：从 ToolCall 提取 Read 内容
+function extractReadContent(tool: ToolCall): string {
+  const structured = tool.output?.structured
+  if (structured && structured.type === 'read' && structured.content) {
+    return structured.content
+  }
+  const result = tool.output?.result
+  if (typeof result === 'string') return result
+  if (result && typeof result === 'object' && result.content) {
+    return result.content
+  }
+  return ''
+}
+
+// 辅助函数：从 ToolCall 提取 Diff
+function extractDiff(tool: ToolCall): string {
+  const structured = tool.output?.structured
+  if (structured && structured.type === 'edit' && structured.diff) {
+    return structured.diff
+  }
+  const result = tool.output?.result as { diff?: string } | undefined
+  return result?.diff ?? ''
 }
 ```
 
