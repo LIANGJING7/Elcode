@@ -338,29 +338,10 @@ export const useSessionStore = defineStore('session', () => {
         return
       }
       
-      // Handle V1 events for message content (still needed for legacy format)
+      // Handle V1 events for message content (session.diff is legacy, no longer pushes messages)
+      // Historical messages are loaded via loadMessages(), new messages via STREAM_DONE watch
       if (eventType === 'session.diff') {
-        const diff = props?.diff as Array<{ type: string; text?: string } | undefined> | undefined
-        if (diff && Array.isArray(diff)) {
-          const textParts = diff.filter(p => p?.type === 'text')
-          if (textParts.length > 0) {
-            const fullText = textParts.map(p => p?.text || '').join('\n')
-            const conv = conversations.value.find(c => c.id === eventSessionId)
-            if (conv && fullText) {
-              const existingAssistant = conv.messages.find(m => m.role === 'assistant' && m.content === fullText)
-              if (!existingAssistant) {
-                const assistantMsg: Message = {
-                  id: eventSessionId + '_assistant_' + Date.now(),
-                  role: 'assistant',
-                  content: fullText,
-                  timestamp: new Date()
-                }
-                conv.messages.push(assistantMsg)
-                console.log('[SSE] Added assistant message from session.diff')
-              }
-            }
-          }
-        }
+        return
       }
       
       // Handle message.updated for role mapping
@@ -372,30 +353,9 @@ export const useSessionStore = defineStore('session', () => {
         return
       }
       
-      // Handle message.part.updated for text content (V1 format)
+      // Handle message.part.updated for text content (V1 legacy, no longer used)
+      // All streaming events now go through the streaming store
       if (eventType === 'message.part.updated') {
-        const part = props?.part as { type?: string; text?: string; messageID?: string } | undefined
-        if (part?.type === 'text' && part?.text && part?.messageID) {
-          const messageRole = messageIdToRole.get(part.messageID)
-          if (messageRole === 'assistant' || !messageRole) {
-            const conv = conversations.value.find(c => c.id === eventSessionId)
-            if (conv) {
-              let assistantMsg = conv.messages.find(m => m.id === part.messageID)
-              if (!assistantMsg) {
-                assistantMsg = {
-                  id: part.messageID,
-                  role: 'assistant',
-                  content: part.text,
-                  timestamp: new Date()
-                }
-                conv.messages.push(assistantMsg)
-                messageIdToRole.set(part.messageID, 'assistant')
-              } else {
-                assistantMsg.content += part.text
-              }
-            }
-          }
-        }
         return
       }
       
