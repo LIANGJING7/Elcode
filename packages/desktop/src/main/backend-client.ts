@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process"
 import path from "path"
 import { fileURLToPath } from "url"
 import http from "http"
+import fs from "fs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -54,11 +55,15 @@ export async function startBackend(): Promise<{ port: number }> {
   console.log(`Project root: ${projectRoot}`)
 
   return new Promise((resolve, reject) => {
-    // Run the launcher from source (bun handles TS natively). The launcher lives
-    // at packages/desktop/src/main/backend-launcher.ts; from dist/main that's
-    // ../src/main/backend-launcher.ts. cwd is the repo root so the launcher's
-    // relative imports resolve against the monorepo root.
-    const launcherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
+    // Run the launcher. In development, we use the source file directly.
+    // In production (packaged), we use the compiled JS in dist/main/.
+    // The launcher lives at packages/desktop/src/main/backend-launcher.ts
+    // or dist/main/backend-launcher.js after build.
+    const launcherPath = path.resolve(__dirname, "../backend-launcher.js")
+    const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
+    const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
+    console.log(`Launcher path: ${actualLauncherPath}`)
+    
     // The backend is a local, loopback-only subprocess that we spawn and talk
     // to ourselves — there's no network exposure to protect. The core server
     // enables HTTP Basic Auth whenever LCODE_SERVER_PASSWORD is set (see
@@ -69,7 +74,7 @@ export async function startBackend(): Promise<{ port: number }> {
     const childEnv = { ...process.env }
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_PASSWORD
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_USERNAME
-    backendProcess = spawn("bun", ["run", launcherPath], {
+    backendProcess = spawn("bun", ["run", actualLauncherPath], {
       cwd: projectRoot,
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
@@ -189,9 +194,9 @@ export const backend = {
       return request("GET", `/session/${sessionID}/message?${params.toString()}`) as Promise<unknown[]>
     },
     
-    prompt: async (sessionID: string, prompt: unknown[], directory?: string): Promise<void> => {
+    prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; id: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
-      await request("POST", `/session/${sessionID}/prompt_async?${params}`, { prompt })
+      await request("POST", `/session/${sessionID}/prompt_async?${params}`, payload)
     },
     
     interrupt: async (sessionID: string, directory?: string): Promise<void> => {
@@ -210,30 +215,64 @@ export const backend = {
       return result === true || result === null
     },
     
+    update: async (sessionID: string, patch: { title?: string }, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("PATCH", `/session/${sessionID}?${params}`, patch)
+    },
+    
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
       
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
-      const url = `http://localhost:${backendPort}/session/${sessionID}/events?${params}`
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", directory)
+      // 后端 SSE 端点是 /event（不是 /session/:id/events）
+      const url = `http://localhost:${backendPort}/event?${params.toString()}`
+      console.log('[SSE CONNECT] url:', url)
+      console.log('[SSE CONNECT] sessionID:', sessionID)
+      console.log('[SSE CONNECT] directory param:', directory)
       const req = http.request(url, { method: "GET" }, (res) => {
+        if (res.statusCode !== 200) {
+          console.error('[SSE CONNECT] HTTP', res.statusCode, res.statusMessage)
+          return
+        }
+        console.log('[SSE CONNECT] connected (200)')
         let buffer = ""
+        let eventCount = 0
         res.on("data", (chunk) => {
           buffer += chunk.toString()
           const lines = buffer.split("\n")
           buffer = lines.pop() || ""
           for (const line of lines) {
-            if (line.startsWith("data:")) {
+            const trimmed = line.trim()
+            if (trimmed.startsWith("data:")) {
               try {
-                onEvent(JSON.parse(line.slice(5)))
-              } catch {}
+                const payload = JSON.parse(trimmed.slice(5))
+                eventCount++
+                // Log all events with more detail
+                console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
+                if (payload.type && !payload.type.startsWith('server.')) {
+                  console.log('[SSE RAW #' + eventCount + '] full:', JSON.stringify(payload).slice(0, 500))
+                }
+                onEvent(payload)
+              } catch (e) {
+                console.error('[SSE PARSE] failed:', trimmed.slice(0, 100), e)
+              }
             }
           }
         })
+        res.on("end", () => {
+          console.log('[SSE] stream ended, total events:', eventCount)
+          // Notify renderer that stream is fully complete
+          onEvent({ type: 'stream.ended', sessionID })
+        })
       })
-      req.on("error", () => {})
+      req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
       req.end()
       
-      return () => req.destroy()
+      return () => {
+        console.log('[SSE] destroying request')
+        req.destroy()
+      }
     },
   },
   
@@ -266,12 +305,21 @@ export const backend = {
 
     set: async (key: string, value: unknown, directory?: string): Promise<void> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
-      await request("POST", `/config/${key}?${params}`, { value })
+      // Use PATCH /config to update config (supports partial updates)
+      // The key is mapped to the config field name
+      await request("PATCH", `/config?${params}`, { [key]: value })
     },
 
     models: async (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
       return request("GET", `/provider?${params}`) as Promise<{ all: unknown[]; default: string[]; connected: string[] }>
+    },
+  },
+
+  console: {
+    get: async (directory?: string): Promise<{ consoleManagedProviders: string[]; activeOrgName?: string; switchableOrgCount: number }> => {
+      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      return request("GET", `/experimental/console?${params}`) as Promise<{ consoleManagedProviders: string[]; activeOrgName?: string; switchableOrgCount: number }>
     },
   },
 
