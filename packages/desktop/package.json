@@ -34,6 +34,7 @@
     "reka-ui": "^2.10.1",
     "shiki": "^1.26.1",
     "tailwind-merge": "^3.6.0",
+    "xdg-basedir": "^5.1.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {

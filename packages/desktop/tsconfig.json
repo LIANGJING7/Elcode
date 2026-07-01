@@ -1,25 +1,23 @@
 {
-  "extends": "../../tsconfig.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "esModuleInterop": true,
     "strict": true,
     "jsx": "preserve",
     "jsxImportSource": "vue",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "esModuleInterop": true,
-    "lib": ["ES2022", "DOM"],
-    "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/renderer/*"],
-      "@model-agent/core": ["../../src/core"],
-      "@model-agent/session": ["../../src/session"],
-      "@model-agent/storage": ["../../src/storage"]
-    }
+      "@/*": ["./src/renderer/*"]
+    },
+    "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
