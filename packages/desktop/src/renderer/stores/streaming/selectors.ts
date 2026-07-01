@@ -209,7 +209,7 @@ export interface TimelineNode {
   id: string
   type: 'reasoning' | 'tool' | 'text'
   order: number
-  payload: StreamingToolCall | { content: string; status: string } | { content: string }
+  payload: StreamingToolCall | { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null } | { content: string }
 }
 
 /**
@@ -220,15 +220,65 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     const nodes: TimelineNode[] = []
     let order = 0
 
-    // Add reasoning if thinking/done
+    // Merge all reasoning blocks into one node at the top
+    const allReasoning: Array<{
+      id: string
+      content: string
+      status: 'idle' | 'thinking' | 'done'
+      startedAt: number
+      endedAt: number | null
+    }> = []
+
+    // Add completed reasoning blocks from previous steps
+    for (const block of state.reasoningHistory) {
+      allReasoning.push({
+        id: block.id,
+        content: block.content,
+        status: 'done',
+        startedAt: block.startedAt,
+        endedAt: block.endedAt
+      })
+    }
+
+    // Add current reasoning if thinking/done
     if (state.reasoning.status !== 'idle') {
+      allReasoning.push({
+        id: state.reasoning.id ?? 'current-reasoning',
+        content: state.reasoning.content + state.reasoning.pending.join(''),
+        status: state.reasoning.status,
+        startedAt: state.reasoning.startedAt ?? Date.now(),
+        endedAt: state.reasoning.endedAt
+      })
+    }
+
+    // If there's any reasoning, merge and add as first node
+    if (allReasoning.length > 0) {
+      // Merge content directly without separators
+      const mergedContent = allReasoning.map(r => r.content).join('')
+
+      // Status: if any is thinking, show thinking; otherwise done
+      const mergedStatus = allReasoning.some(r => r.status === 'thinking')
+        ? 'thinking'
+        : 'done'
+
+      // Calculate total duration
+      let totalDuration = 0
+      for (const r of allReasoning) {
+        if (r.startedAt && r.endedAt) {
+          totalDuration += r.endedAt - r.startedAt
+        } else if (r.startedAt && r.status === 'thinking') {
+          totalDuration += Date.now() - r.startedAt
+        }
+      }
+
       nodes.push({
-        id: state.reasoning.id ?? 'reasoning',
+        id: 'merged-reasoning',
         type: 'reasoning',
         order: order++,
         payload: {
-          content: state.reasoning.content + state.reasoning.pending.join(''),
-          status: state.reasoning.status
+          content: mergedContent,
+          status: mergedStatus,
+          duration: totalDuration > 0 ? formatDuration(totalDuration) : null
         }
       })
     }
@@ -236,7 +286,7 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     // Add tools in order
     const tools = Array.from(state.tools.entities.values())
       .sort((a, b) => a.startedAt - b.startedAt)
-    
+
     for (const tool of tools) {
       nodes.push({
         id: tool.id,
@@ -275,6 +325,38 @@ function formatToolSummary(name: string, args: Record<string, unknown>): ToolSum
     return str.length > maxLen ? str.slice(0, maxLen) + '...' : str
   }
 
+  // Helper: find first string value from args
+  const firstString = (): string => {
+    const priorityKeys = [
+      'path', 'filePath', 'file',
+      'command', 'cmd',
+      'pattern',
+      'query',
+      'url',
+      'description',
+      'skill', 'name',
+      'prompt', 'message',
+    ]
+    for (const key of priorityKeys) {
+      if (typeof args[key] === 'string' && String(args[key]).length > 0) {
+        return String(args[key])
+      }
+    }
+    for (const val of Object.values(args)) {
+      if (typeof val === 'string' && val.length > 0) return val
+    }
+    return ''
+  }
+
+  // Clean up display name: "codegraph_codegraph_files" → "codegraph_files"
+  const cleanName = (n: string): string => {
+    const parts = n.split('_')
+    if (parts.length >= 2 && parts[0] === parts[1]) {
+      return parts.slice(1).join('_')
+    }
+    return n
+  }
+
   switch (name) {
     case 'read':
       return { name: 'read', summary: truncate(String(args.filePath ?? args.path ?? '')), detail: null }
@@ -299,8 +381,42 @@ function formatToolSummary(name: string, args: Record<string, unknown>): ToolSum
       return { name: 'todo', summary: 'Update todo list', detail: null }
     case 'skill':
       return { name: 'skill', summary: truncate(String(args.skill ?? args.name ?? '')), detail: null }
-    default:
-      return { name, summary: name, detail: null }
+    // MCP / codegraph tools
+    case 'codegraph_codegraph_files':
+    case 'codegraph_files':
+      return { name: 'files', summary: truncate(String(args.pattern ?? args.path ?? '')), detail: null }
+    case 'codegraph_codegraph_search':
+    case 'codegraph_search':
+      return { name: 'search', summary: truncate(String(args.query ?? '')), detail: null }
+    case 'codegraph_codegraph_explore':
+    case 'codegraph_explore':
+      return { name: 'explore', summary: truncate(String(args.query ?? '')), detail: null }
+    case 'codegraph_codegraph_context':
+    case 'codegraph_context':
+      return { name: 'context', summary: truncate(String(args.task ?? args.query ?? '')), detail: null }
+    case 'codegraph_codegraph_callers':
+    case 'codegraph_callers':
+      return { name: 'callers', summary: truncate(String(args.symbol ?? '')), detail: null }
+    case 'codegraph_codegraph_callees':
+    case 'codegraph_callees':
+      return { name: 'callees', summary: truncate(String(args.symbol ?? '')), detail: null }
+    case 'codegraph_codegraph_node':
+    case 'codegraph_node':
+      return { name: 'node', summary: truncate(String(args.symbol ?? '')), detail: null }
+    case 'codegraph_codegraph_impact':
+    case 'codegraph_impact':
+      return { name: 'impact', summary: truncate(String(args.symbol ?? '')), detail: null }
+    case 'codegraph_codegraph_trace':
+    case 'codegraph_trace':
+      return { name: 'trace', summary: truncate(String(args.from ?? '')), detail: args.to ? `→ ${truncate(String(args.to))}` : null }
+    case 'codegraph_codegraph_status':
+    case 'codegraph_status':
+      return { name: 'status', summary: '', detail: null }
+    // Generic fallback: show tool name, try to find a summary from args
+    default: {
+      const summary = firstString()
+      return { name: cleanName(name), summary: truncate(summary), detail: null }
+    }
   }
 }
 

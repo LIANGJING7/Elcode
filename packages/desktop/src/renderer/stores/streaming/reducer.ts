@@ -115,6 +115,17 @@ export function streamingReducer(
       return state
 
     // ============================================
+    // Pending Delta (waiting for partType)
+    // ============================================
+    case 'PENDING_DELTA':
+      // Store delta in pending buffer, waiting for message.part.updated to provide partType
+      const pendingList = state.pendingDeltas.get(action.partId) || []
+      pendingList.push(action.delta)
+      state.pendingDeltas.set(action.partId, pendingList)
+      console.log('[Reducer] PENDING_DELTA stored for partId:', action.partId, 'count:', pendingList.length)
+      return state
+
+    // ============================================
     // Tool Input
     // ============================================
     case 'TOOL_INPUT_STARTED':

@@ -19,8 +19,20 @@ export interface StreamingState {
   reasoning: ReasoningState
   /** Tool calls state */
   tools: ToolStore
+  /** Pending deltas for message.part events - keyed by partId */
+  pendingDeltas: Map<string, string[]>
+  /** Completed reasoning blocks from previous steps */
+  reasoningHistory: ReasoningBlock[]
   /** Stream start timestamp (optional, set when streaming starts) */
   startedAt?: number
+}
+
+/** Completed reasoning block from a previous step */
+export interface ReasoningBlock {
+  id: string
+  content: string
+  startedAt: number
+  endedAt: number
 }
 
 export type StreamingStatus = 'idle' | 'streaming' | 'done' | 'error'
@@ -128,6 +140,9 @@ export type StreamAction =
   | { type: 'REASONING_DELTA'; delta: string; messageId: string; version: number }
   | { type: 'REASONING_ENDED'; text: string; reasoningId: string; messageId: string; version: number }
   
+  // Pending Delta (waiting for partType from message.part.updated)
+  | { type: 'PENDING_DELTA'; partId: string; delta: string; messageId: string; version: number }
+  
   // Tool Input
   | { type: 'TOOL_INPUT_STARTED'; callId: string; name: string; messageId: string; version: number }
   | { type: 'TOOL_INPUT_DELTA'; callId: string; delta: string; version: number }
@@ -165,7 +180,11 @@ export function createInitialState(version: number = 0): StreamingState {
       // Note: Map needs special handling for Vue reactivity
       // It will be wrapped in reactive() in the store
       entities: new Map()
-    }
+    },
+    // Pending deltas for message.part events - also wrapped in reactive() in the store
+    pendingDeltas: new Map(),
+    // Completed reasoning blocks from previous steps
+    reasoningHistory: []
   }
 }
 

@@ -22,9 +22,11 @@ interface RawSSEEvent {
   timestamp?: number
 }
 
-/** Normalizer context - provides current version */
+/** Normalizer context - provides current version and partTypeMap */
 interface NormalizerContext {
   getVersion: () => number
+  /** Part type mapping from message.part.updated events */
+  getPartType?: (partID: string) => 'text' | 'reasoning' | undefined
 }
 
 // ============================================
@@ -91,19 +93,48 @@ export function createNormalizer(ctx: NormalizerContext) {
     }
     
     // Handle message.part.delta - V1 streaming delta event
+    // V1 format: delta + field + partID, but no partType. Need partTypeMap to distinguish.
     if (type === 'message.part.delta') {
       const delta = props.delta as string
       const field = props.field as string
-      if (delta && field === 'text') {
-        console.log('[Normalizer] message.part.delta text:', delta.slice(0, 50))
-        return {
-          type: 'TEXT_DELTA',
-          delta,
-          messageId: props.messageID as string,
-          version
+      const partID = props.partID as string
+      
+      // Only handle text field (reasoning also uses 'text' field in V1)
+      if (!delta || field !== 'text') return null
+      
+      // Check partTypeMap for this partID
+      if (partID && ctx.getPartType) {
+        const mappedType = ctx.getPartType(partID)
+        if (mappedType === 'reasoning') {
+          console.log('[Normalizer] message.part.delta -> REASONING_DELTA (partTypeMap)')
+          return {
+            type: 'REASONING_DELTA',
+            delta,
+            messageId: props.messageID as string,
+            version
+          }
+        }
+        if (mappedType === 'text') {
+          console.log('[Normalizer] message.part.delta -> TEXT_DELTA (partTypeMap)')
+          return {
+            type: 'TEXT_DELTA',
+            delta,
+            messageId: props.messageID as string,
+            version
+          }
         }
       }
-      return null
+      
+      // No partTypeMap entry yet - store as pending delta
+      // Will be flushed when message.part.updated arrives
+      console.log('[Normalizer] message.part.delta -> PENDING_DELTA (no partTypeMap)')
+      return {
+        type: 'PENDING_DELTA',
+        partId: partID,
+        delta,
+        messageId: props.messageID as string,
+        version
+      }
     }
     
     // Handle session.status - V1 status event (busy/idle)
@@ -138,18 +169,14 @@ export function createNormalizer(ctx: NormalizerContext) {
     }
     
     if (type === 'message.part.updated') {
-      // Message part update - contains actual text content
-      const part = props.part as { type?: string; text?: string } | undefined
-      if (part?.type === 'text' && part.text) {
-        console.log('[Normalizer] message.part.updated text length:', part.text.length)
-        return {
-          type: 'TEXT_DELTA',
-          delta: part.text,
-          messageId: 'legacy',
-          version
-        }
+      // Message part update - used to build partTypeMap (handled in store.ts)
+      // DO NOT return any action here - partTypeMap updated in store.ts pre-process
+      // The pending deltas will be flushed by store.ts after partTypeMap is updated
+      const part = props.part as { type?: string; id?: string } | undefined
+      if (part?.type) {
+        console.log('[Normalizer] message.part.updated part type:', part.type, 'id:', part.id)
       }
-      return null
+      return null  // No action - partTypeMap updated in store.ts
     }
 
     // Text events
@@ -312,8 +339,11 @@ export function createNormalizer(ctx: NormalizerContext) {
 /**
  * Simple normalizer for testing - accepts version as parameter
  */
-export function normalizeEvent(rawEvent: unknown, version: number): StreamAction | null {
-  const ctx = { getVersion: () => version }
+export function normalizeEvent(rawEvent: unknown, version: number, partTypeMap?: Map<string, 'text' | 'reasoning'>): StreamAction | null {
+  const ctx: NormalizerContext = {
+    getVersion: () => version,
+    getPartType: partTypeMap ? (id) => partTypeMap.get(id) : undefined
+  }
   const normalizer = createNormalizer(ctx)
   return normalizer(rawEvent)
 }
