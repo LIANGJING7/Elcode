@@ -7,3 +7,32 @@ script/build-*.ts
 temporary-*.md
 .artifacts
 .worktrees
+packages/core/docs/
+
+# IDE and tooling
+.idea/
+.codegraph/
+.superpowers/
+.omo/
+
+# GitHub
+.github/
+
+# Project files
+AGENTS.md
+
+# Dependencies
+node_modules/
+packages/*/node_modules/
+
+# Build outputs
+packages/desktop/build/
+*.tsbuildinfo
+
+# Temp files
+trellis-temp/
+
+# Local config
+config.json
+
+
