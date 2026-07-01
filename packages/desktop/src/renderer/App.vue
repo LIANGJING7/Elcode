@@ -9,7 +9,7 @@
           @click="ui.toggleSidebar()"
           title="Toggle sidebar"
         >
-          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none">
+          <svg class="w-5 h-5 text-bg" viewBox="0 0 24 24" fill="none">
             <defs>
               <linearGradient id="sidebarIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stop-color="#1A1A1A"/>
@@ -31,7 +31,6 @@
             <polygon points="18,17 20,16 19.5,19 17.5,20" fill="url(#sidebarIconGradient)" opacity="0.9"/>
           </svg>
         </button>
-        <span class="ml-3 text-text text-base font-medium select-none">Model Agent Desktop</span>
       </div>
 
       <!-- 中间: 会话标题 + 菜单 (拖拽区域, 交互元素除外) -->
@@ -74,27 +73,35 @@
       <div class="drag flex-shrink-0" style="width: 138px"></div>
     </div>
 
-    <!-- 主体: 侧边栏 + 内容区 -->
+    <!-- 主体: 侧边栏 + 内容区 + Inspector -->
     <div class="flex flex-1 min-h-0">
       <Sidebar v-show="ui.sidebarOpen" />
 
       <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
-        <WelcomeView v-if="effectiveView === 'welcome'" @open-folder="handleAddWorkspace" />
-        <NewSessionView v-else-if="effectiveView === 'newSession'" />
+        <WelcomeView v-if="effectiveView === 'welcome'" key="welcome" @open-folder="handleAddWorkspace" />
+        <NewSessionView v-else-if="effectiveView === 'newSession'" key="newSession" />
         <ChatView
           v-else-if="effectiveView === 'chat'"
+          key="chat"
           :session-id="currentSessionId ?? ''"
           :messages="currentMessages"
           :streaming-message="sessionStore.streamingMessage"
           @inspect="handleInspect"
+          @open-file="handleOpenFile"
         />
-        <SkillView v-else-if="effectiveView === 'skills'" />
-        <McpView v-else-if="effectiveView === 'mcp'" />
-        <SettingsView v-else-if="effectiveView === 'settings'" />
+        <SkillView v-else-if="effectiveView === 'skills'" key="skills" />
+        <McpView v-else-if="effectiveView === 'mcp'" key="mcp" />
+        <SettingsView v-else-if="effectiveView === 'settings'" key="settings" />
         <div v-else class="flex-1 p-6 text-text-muted">
           Unknown view
         </div>
       </main>
+
+      <!-- Right Panel: FileTabsPanel (文件标签页) -->
+      <FileTabsPanel />
+
+      <!-- Inspector (Glob/Grep 等 inspect 工具，当 FileTabsPanel 无标签时显示) -->
+      <Inspector v-if="showInspector" :messages="currentMessages" />
     </div>
   </div>
 </template>
@@ -108,6 +115,10 @@ import NewSessionView from './components/NewSessionView.vue'
 import SkillView from './components/skills/SkillView.vue'
 import McpView from './components/mcp/McpView.vue'
 import SettingsView from './components/settings/SettingsView.vue'
+import Inspector from './components/artifacts/Inspector.vue'
+import FileTabsPanel from './components/file-tabs/FileTabsPanel.vue'
+import { toolToPresentationModel } from './services/tool-presentation'
+import type { ToolCall } from './types/ipc'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
@@ -169,10 +180,12 @@ const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'm
 
 watch(
   () => workspaceStore.currentWorkspace,
-  async (newWorkspace) => {
-    if (newWorkspace) {
+  async (newWorkspace, oldWorkspace) => {
+    // 只在 currentWorkspace 变化时加载，不立即执行（避免初始化时清空）
+    if (newWorkspace && newWorkspace !== oldWorkspace) {
       await modelsStore.loadModels(newWorkspace.path)
-    } else {
+    } else if (!newWorkspace && oldWorkspace) {
+      // 只在从有值变成 null 时清空，而不是初始化时
       modelsStore.clearModels()
     }
   }
@@ -224,6 +237,23 @@ function handleInspect(toolCallId: string) {
   ui.activeToolCallId = toolCallId
   ui.inspectorOpen = true
 }
+
+// 处理工具调用点击文件名 → 打开 FileTabsPanel
+function handleOpenFile(tool: ToolCall) {
+  const tab = toolToPresentationModel(tool)
+  if (tab) {
+    // Read/Edit/Write → 打开 FileTabsPanel
+    ui.openFileTab(tab)
+  } else {
+    // Glob/Grep 等 → 保持 inspect 行为
+    handleInspect(tool.id)
+  }
+}
+
+// Inspector 仅在 FileTabsPanel 无标签且 inspect 激活时显示
+const showInspector = computed(() =>
+  ui.inspectorOpen && Boolean(ui.activeToolCallId) && ui.fileTabs.length === 0,
+)
 </script>
 
 <style scoped>

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Message, ToolCall } from '../../../types/ipc'
-import ToolCallBlock from './ToolCallBlock.vue'
+import ToolRenderer from '../tool/ToolRenderer.vue'
 import ReasoningBlock from './ReasoningBlock.vue'
 import CodeBlock from './CodeBlock.vue'
 
 const props = defineProps<{ message: Message }>()
-const emit = defineEmits<{ inspect: [id: string] }>()
+const emit = defineEmits<{ inspect: [id: string]; openFile: [tool: ToolCall] }>()
 
 // 提取代码块 (简化实现: 正则匹配 ```lang\ncode```)
 const codeBlocks = computed(() => {
@@ -21,8 +21,8 @@ const textContent = computed(() => {
   return content.replace(/```(\w+)\n([\s\S]*?)```/g, '').trim()
 })
 
-function handleInspect(tc: ToolCall) {
-  emit('inspect', tc.id)
+function handleInspect(id: string) {
+  emit('inspect', id)
 }
 </script>
 
@@ -40,11 +40,12 @@ function handleInspect(tc: ToolCall) {
 
       <!-- tool calls -->
       <div v-if="message.toolCalls?.length" class="space-y-0.5">
-        <ToolCallBlock
+        <ToolRenderer
           v-for="tc in message.toolCalls"
           :key="tc.id"
-          :tool-call="tc"
-          @inspect="handleInspect(tc)"
+          :tool="tc"
+          @inspect="handleInspect"
+          @open-file="(tool) => emit('openFile', tool)"
         />
       </div>
 
