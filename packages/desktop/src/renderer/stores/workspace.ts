@@ -110,6 +110,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return await window.desktop.workspace.openFolder()
   }
 
+  async function pickAndAddWorkspace() {
+    const path = await openFolderPicker()
+    if (!path) return // 用户取消
+    await addWorkspace(path)
+  }
+
   return {
     workspaces,
     currentWorkspace,
@@ -121,6 +127,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     addWorkspace,
     selectWorkspace,
     removeWorkspace,
-    openFolderPicker
+    openFolderPicker,
+    pickAndAddWorkspace
   }
 })

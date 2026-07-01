@@ -5,6 +5,7 @@ import { useModelsStore } from '../stores/models'
 import { useUiStore } from '../stores/ui'
 import ComposerInput from './composer/ComposerInput.vue'
 import SessionOptions from './composer/SessionOptions.vue'
+import WorkspaceSelector from './composer/WorkspaceSelector.vue'
 
 const sessionStore = useSessionStore()
 const modelsStore = useModelsStore()
@@ -26,14 +27,22 @@ onMounted(() => {
 const canSend = computed(() => inputValue.value.trim().length > 0)
 
 async function handleSend(content: string) {
-  const mode = sessionOptions.value.mode as string
-  const finalContent = mode === 'plan' && !content.startsWith('[mode=plan]')
-    ? `[mode=plan]\n${content}`
-    : content
+    console.log('[DEBUG NewSessionView] === handleSend CALLED ===')
+    console.log('[DEBUG NewSessionView] Content:', content.slice(0, 50))
+    
+    const mode = sessionOptions.value.mode as string
+    const finalContent = mode === 'plan' && !content.startsWith('[mode=plan]')
+      ? `[mode=plan]\n${content}`
+      : content
 
-  await sessionStore.sendMessage(finalContent)
-  ui.setView('chat')
-}
+    console.log('[DEBUG NewSessionView] Final content:', finalContent.slice(0, 50))
+    console.log('[DEBUG NewSessionView] Calling sessionStore.sendMessage')
+    
+    await sessionStore.sendMessage(finalContent)
+    
+    console.log('[DEBUG NewSessionView] ✓ sendMessage completed')
+    ui.setView('chat')
+  }
 
 function handleManualSend() {
   if (canSend.value) {
@@ -47,8 +56,13 @@ function handleManualSend() {
   <div class="new-session-view flex-1 flex items-center justify-center bg-bg">
     <div class="w-full max-w-2xl mx-6">
       <!-- LCODE 标识 -->
-      <div class="text-4xl font-bold text-text-muted/30 mb-8 text-center select-none">
+      <div class="text-4xl font-bold text-text-muted/30 mb-4 text-center select-none">
         LCODE
+      </div>
+
+      <!-- 工作区选择器（左对齐） -->
+      <div class="flex justify-start mb-6">
+        <WorkspaceSelector />
       </div>
 
       <!-- 输入卡片 -->
@@ -60,7 +74,7 @@ function handleManualSend() {
         <div class="flex-1 min-h-[80px] px-3 pt-3 pb-1">
           <ComposerInput
             ref="inputRef"
-            v-model="inputValue"
+            v-model:value="inputValue"
             placeholder="Ask anything... (Shift+Enter for new line)"
             @send="handleSend"
             @focus="isFocused = true"
