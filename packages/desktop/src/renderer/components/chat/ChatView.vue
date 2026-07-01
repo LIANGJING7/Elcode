@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Message, ToolCall } from '../../../types/ipc'
+import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
 import ChatTimeline from './ChatTimeline.vue'
 import Composer from '../Composer.vue'
@@ -21,8 +21,12 @@ const emit = defineEmits<{
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
 
-function handleSend(content: string, _options: Record<string, unknown>, _attachments: unknown[]) {
-  sessionStore.sendMessage(content)
+function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
+  // Convert mode to agent (plan/build)
+  const mode = options.mode as string | undefined
+  const agent = mode === 'plan' ? 'plan' : 'build'
+  const promptOptions: PromptOptions = { agent }
+  sessionStore.sendMessage(content, promptOptions)
 }
 
 function handleInterrupt() {
@@ -59,8 +63,8 @@ function handleRemoveQueued(pendingId: string) {
     <Composer
       :has-active-session="true"
       :is-streaming="streamingStore.isCurrentStreaming.value"
-      :queue-count="sessionStore.pendingQueue.length"
-      :pending-queue="sessionStore.pendingQueue"
+      :queue-count="sessionStore.currentPendingQueue.length"
+      :pending-queue="sessionStore.currentPendingQueue"
       class="flex-shrink-0"
       @send="handleSend"
       @interrupt="handleInterrupt"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import type { Message, ToolCall } from '../../../types/ipc'
 import MessageUser from './MessageUser.vue'
 import MessageAssistant from './MessageAssistant.vue'
@@ -11,6 +11,15 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ inspect: [id: string]; openFile: [tool: ToolCall] }>()
+
+// Debug logging
+watch(() => props.messages, (msgs) => {
+  console.log('[DEBUG ChatTimeline] messages updated:', msgs.length, msgs.map(m => ({ id: m.id, role: m.role, content: m.content?.slice(0, 20) })))
+}, { immediate: true })
+
+watch(() => props.streamingMessage, (msg) => {
+  console.log('[DEBUG ChatTimeline] streamingMessage updated:', msg ? { id: msg.id, role: msg.role, content: msg.content?.slice(0, 20) } : null)
+}, { immediate: true })
 
 // 一个 user turn 的多步 agentic 响应会被后端持久化为多条 assistant message
 // (每个 step.started 都 appendMessage 一条)，每条各带自己的 reasoning。
@@ -39,6 +48,8 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
       .filter(c => Boolean(c && c.trim()))
       .join('\n\n')
     const toolCalls = group.flatMap(m => m.toolCalls ?? [])
+    // Sum up durations from all assistant messages in the group
+    const totalDuration = group.reduce((sum, m) => sum + (m.duration ?? 0), 0)
     const merged: Message = {
       id: group[0].id,
       role: 'assistant',
@@ -46,6 +57,7 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
       timestamp: group[0].timestamp,
       ...(reasoning ? { reasoning } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      ...(totalDuration > 0 ? { duration: totalDuration } : {}),
     }
     items.push({ key: groupKeys.join('|'), role: 'assistant', message: merged })
     group = []
@@ -80,8 +92,9 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
       <MessageAssistant v-else :message="item.message" @inspect="emit('inspect', $event)" @open-file="emit('openFile', $event)" />
     </div>
 
-    <!-- 流式消息 -->
-    <div v-if="streamingMessage">
+    <!-- 流式消息 - DEBUG: always render when streamingMessage exists -->
+    <div v-if="streamingMessage" class="streaming-container">
+      {{ console.log('[DEBUG ChatTimeline] Rendering StreamingMessage, streamingMessage:', streamingMessage) }}
       <StreamingMessage @open-file="emit('openFile', $event)" />
     </div>
     </div>
