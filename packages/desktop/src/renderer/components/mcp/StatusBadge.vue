@@ -1,14 +1,12 @@
 <template>
-  <span
-    class="status-badge px-1.5 py-0.5 rounded text-2xs font-medium"
-    :class="badgeClass"
-  >
+  <Badge :variant="badgeVariant">
     {{ label }}
-  </span>
+  </Badge>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Badge } from '@/components/ui/badge'
 
 const props = defineProps<{
   status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
@@ -25,20 +23,14 @@ const label = computed(() => {
   }
 })
 
-const badgeClass = computed(() => {
+const badgeVariant = computed(() => {
   switch (props.status) {
-    case 'connected': return 'bg-green-500/20 text-green-400'
-    case 'disabled': return 'bg-text-muted/20 text-text-muted'
-    case 'failed': return 'bg-red-500/20 text-red-400'
-    case 'needs_auth': return 'bg-amber-500/20 text-amber-400'
-    case 'needs_client_registration': return 'bg-amber-500/20 text-amber-400'
-    default: return 'bg-text-muted/20 text-text-muted'
+    case 'connected': return 'success'
+    case 'disabled': return 'secondary'
+    case 'failed': return 'destructive'
+    case 'needs_auth': return 'warning'
+    case 'needs_client_registration': return 'warning'
+    default: return 'secondary'
   }
 })
 </script>
-
-<style scoped>
-.status-badge {
-  display: inline-flex;
-}
-</style>
