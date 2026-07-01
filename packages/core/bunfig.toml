@@ -1,0 +1,11 @@
+# Bun configuration for @model-agent/core
+# Configure JSX to use @opentui/solid instead of default React
+
+[run]
+# JSX runtime configuration
+jsx = "solid"
+jsxImportSource = "@opentui/solid"
+
+[test]
+jsx = "solid"
+jsxImportSource = "@opentui/solid"
