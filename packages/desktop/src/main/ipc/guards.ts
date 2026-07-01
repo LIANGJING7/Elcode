@@ -32,6 +32,7 @@ export function resolveWithinWorkspace(target: string): string {
 // Keys the UI is allowed to read/write through the generic config channel.
 // Anything else must go through dedicated, validated IPC. This is deliberately
 // a small allowlist; widen it only when a concrete UI need appears.
+// Note: recentModels is now stored in global state (lcode.json), accessed via globalState API.
 export const ALLOWED_CONFIG_KEYS = new Set<string>([
   'theme',
   'codeTheme',
@@ -39,6 +40,7 @@ export const ALLOWED_CONFIG_KEYS = new Set<string>([
   'fontFamily',
   'monoFontFamily',
   'defaultModel',
+  'model',  // 当前选中的模型，格式为 provider/modelId (project-level config)
 ])
 
 export function assertConfigKeyAllowed(key: string): void {

@@ -9,6 +9,19 @@ export interface PromptInput {
   toolResult?: unknown
 }
 
+// Model reference matching backend's ModelRef
+export interface ModelRef {
+  providerID: string
+  modelID: string
+}
+
+// Prompt options for session.prompt (matching backend PromptInput)
+export interface PromptOptions {
+  model?: ModelRef
+  agent?: string
+  variant?: string
+}
+
 export interface Session {
   id: string
   workspacePath: string
@@ -22,15 +35,47 @@ export interface Message {
   timestamp: Date
   toolCalls?: ToolCall[]
   reasoning?: string
+  /** Response duration in milliseconds (for assistant messages) */
+  duration?: number
+  /** Reasoning duration in milliseconds */
+  reasoningDuration?: number
 }
 
+// ============================================
+// Tool call unified model (IPC / Streaming / History shared)
+// ============================================
+
+/** 类型化的 structured 元数据（按工具区分，TS 自动推导）。后端发送的是
+ *  `Record<string, unknown>`，桌面端在 createViewModel 内部按 tool.name
+ *  推导出对应的判别分支，不污染数据层。 */
+export type ToolStructured =
+  | { type: 'bash'; exitCode?: number; duration?: number; truncated?: boolean; timedOut?: boolean }
+  | { type: 'edit'; diff?: string; additions?: number; deletions?: number }
+  | { type: 'write'; existed?: boolean }
+  | { type: 'task'; subagentType?: string; state?: string; summary?: string }
+  | { type: 'todo'; todos?: Array<{ status: string; content: string }> }
+  | { type: 'unknown'; [key: string]: unknown }
+
+/** 收口的工具输出。result/structured/content 归入 output，后续扩展
+ *  stderr/附件/文件列表等字段时不污染顶层 ToolCall 结构。 */
+export interface ToolOutput {
+  result?: unknown
+  structured?: ToolStructured
+  content?: Array<{ type: 'text'; text: string } | { type: 'file'; mime: string; name?: string }>
+}
+
+/** 统一业务模型：IPC、Streaming、History 共用，不再三份漂移。
+ *  - StreamingToolCall extends ToolCall 增量缓冲字段
+ *  - History Message.toolCalls: ToolCall[] */
 export interface ToolCall {
   id: string
   name: string
-  args: Record<string, unknown>
   status: 'pending' | 'running' | 'completed' | 'error'
-  result?: unknown
+  args: Record<string, unknown>
+  output?: ToolOutput
   error?: string
+  /** 执行时长 (ms)，流式和历史都填充 */
+  duration?: number
 }
 
 export interface Conversation {
@@ -39,19 +84,7 @@ export interface Conversation {
   messages: Message[]
   createdAt: Date
   updatedAt: Date
-  // 桌面端附加 metadata (phase 2): core 不存这些, 桌面端在 sessions.json 持久化
-  primaryWorkspaceId?: string          // 该会话直属的"当前目录"锚点(单挂载时 === workspaceIds[0])
-  workspaceIds?: string[]               // 该会话可见的目录集(单挂载即 [primaryWorkspaceId])
-  pinned?: boolean                      // 用户置顶
-  options?: Record<string, unknown>     // SessionOptions 容器, phase 4 填充
-}
-
-export interface SessionUpdate {
-  title?: string
-  pinned?: boolean
-  options?: Record<string, unknown>
-  primaryWorkspaceId?: string
-  workspaceIds?: string[]
+  directory: string                     // 会话所属目录 (用于匹配 workspace)
 }
 
 export interface Workspace {
@@ -110,6 +143,12 @@ export interface AuthorizationResult {
   instructions?: string
 }
 
+export interface ConsoleState {
+  consoleManagedProviders: string[]
+  activeOrgName?: string
+  switchableOrgCount: number
+}
+
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
   SESSION_GET: 'session:get',
@@ -120,11 +159,12 @@ export const IPC_CHANNELS = {
   SESSION_RESUME: 'session:resume',
   SESSION_STREAM_EVENT: 'session:stream:event',
   SESSION_DELETE: 'session:delete',
-  SESSION_UPDATE: 'session:update',
+  SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
   FILE_LIST: 'file:list',
+  FILE_PICK: 'file:pick',
   
   TOOL_EXECUTE: 'tool:execute',
   TOOL_LIST: 'tool:list',
@@ -141,6 +181,8 @@ export const IPC_CHANNELS = {
   PROVIDER_DELETE: 'provider:delete',
   PROVIDER_TEST: 'provider:test',
   PROVIDER_REFRESH_MODELS: 'provider:refresh-models',
+
+  CONSOLE_GET: 'console:get',
   
   WORKSPACE_GET_CWD: 'workspace:getCwd',
   WORKSPACE_LIST: 'workspace:list',
@@ -158,7 +200,11 @@ export const IPC_CHANNELS = {
   MCP_DISCONNECT: 'mcp:disconnect',
 
   // Window
-  WINDOW_SET_TITLE_BAR_OVERLAY: 'window:set-title-bar-overlay'
+  WINDOW_SET_TITLE_BAR_OVERLAY: 'window:set-title-bar-overlay',
+
+  // Global state (lcode.json - cross-project UI preferences)
+  GLOBAL_STATE_GET: 'global-state:get',
+  GLOBAL_STATE_SET: 'global-state:set',
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

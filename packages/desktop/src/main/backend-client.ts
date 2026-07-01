@@ -3,6 +3,8 @@ import path from "path"
 import { fileURLToPath } from "url"
 import http from "http"
 import fs from "fs"
+import type { SessionListQuery, SessionListResult } from "../types/session"
+import type { Conversation } from "../types/ipc"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -58,8 +60,8 @@ export async function startBackend(): Promise<{ port: number }> {
     // Run the launcher. In development, we use the source file directly.
     // In production (packaged), we use the compiled JS in dist/main/.
     // The launcher lives at packages/desktop/src/main/backend-launcher.ts
-    // or dist/main/backend-launcher.js after build.
-    const launcherPath = path.resolve(__dirname, "../backend-launcher.js")
+    // or dist/main/backend-launcher.js after build (same directory as index.js).
+    const launcherPath = path.resolve(__dirname, "./backend-launcher.js")
     const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
     const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
     console.log(`Launcher path: ${actualLauncherPath}`)
@@ -248,10 +250,14 @@ export const backend = {
               try {
                 const payload = JSON.parse(trimmed.slice(5))
                 eventCount++
-                // Log all events with more detail
-                console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
-                if (payload.type && !payload.type.startsWith('server.')) {
+                // DEBUG: Enhanced logging for all events including content events
+                if (payload.type?.startsWith('session.next.') || payload.type?.startsWith('message.part')) {
+                  console.log('[SSE RAW #' + eventCount + '] CONTENT:', payload.type, 'full:', JSON.stringify(payload).slice(0, 500))
+                } else if (payload.type && !payload.type.startsWith('server.')) {
+                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
                   console.log('[SSE RAW #' + eventCount + '] full:', JSON.stringify(payload).slice(0, 500))
+                } else {
+                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
                 }
                 onEvent(payload)
               } catch (e) {
@@ -398,6 +404,71 @@ export const backend = {
       return request("POST", `/mcp/${name}/disconnect?${params}`) as Promise<boolean>
     },
   },
+
+// Experimental API with pagination support
+  experimental: {
+    session: {
+      /**
+       * List sessions - using Instance API /session
+       * Supports start, search, limit parameters
+       * Note: Instance API doesn't support cursor pagination
+       */
+      list: async (query: SessionListQuery): Promise<SessionListResult> => {
+        if (!backendPort || !backendReady) {
+          throw new Error("Backend not ready")
+        }
+        
+        const params = new URLSearchParams()
+        if (query.directory) params.set('directory', query.directory)
+        if (query.workspace) params.set('workspaceID', query.workspace)
+        if (query.start) params.set('start', String(query.start))
+        if (query.search) params.set('search', query.search)
+        if (query.limit) params.set('limit', String(query.limit))
+        
+        const url = `http://localhost:${backendPort}/session?${params.toString()}`
+        
+        return new Promise((resolve, reject) => {
+          const req = http.request(url, { method: "GET" }, (res) => {
+            let data = ""
+            res.on("data", chunk => data += chunk)
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const rawSessions = data ? JSON.parse(data) : []
+                  const conversations = (rawSessions as Array<Record<string, unknown>>).map(toConversation)
+                  resolve({
+                    conversations: conversations,
+                    nextCursor: undefined  // Instance API doesn't support cursor pagination
+                  })
+                } catch {
+                  reject(new Error(`Failed to parse response: ${data}`))
+                }
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}: ${data}`))
+              }
+            })
+          })
+          req.on("error", reject)
+          req.end()
+        })
+      },
+    },
+  },
+}
+
+/**
+ * Map a raw backend session to the renderer's Conversation shape.
+ */
+function toConversation(raw: Record<string, unknown>): Conversation {
+  const time = (raw.time ?? {}) as { created?: number; updated?: number }
+  return {
+    id: String(raw.id),
+    title: String(raw.title ?? 'Untitled'),
+    messages: [],
+    createdAt: new Date(time.created ?? Date.now()),
+    updatedAt: new Date(time.updated ?? time.created ?? Date.now()),
+    directory: String(raw.directory ?? ''),
+  }
 }
 
 export { request }

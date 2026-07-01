@@ -32,8 +32,26 @@ async function writeWorkspacesFile(data: WorkspacePersistence): Promise<void> {
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
 }
 
+/**
+ * Resolve the currently-selected workspace root (the renderer's trusted
+ * working directory). Used by the capability guards so file/config IPC can
+ * be confined to within the active workspace instead of the whole disk.
+ */
+let activeWorkspaceRoot: string | null = null
+
+export function setActiveWorkspaceRoot(root: string | null): void {
+  activeWorkspaceRoot = root
+}
+
+export function getActiveWorkspaceRoot(): string | null {
+  return activeWorkspaceRoot
+}
+
 export function registerWorkspaceHandlers() {
+  console.log('[Workspace] Registering handlers...')
+  
   ipcMain.handle(CHANNELS.WORKSPACE_LIST, async () => {
+    console.log('[Workspace] LIST called')
     const data = await readWorkspacesFile()
     return data.workspaces.sort((a, b) => 
       new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime()
@@ -41,17 +59,26 @@ export function registerWorkspaceHandlers() {
   })
 
   ipcMain.handle(CHANNELS.WORKSPACE_ADD, async (_event, workspacePath?: string) => {
+    console.log('[Workspace] ADD called with path:', workspacePath)
     let selectedPath = workspacePath
     
     if (!selectedPath) {
-      const result = await dialog.showOpenDialog({
-        properties: ['openDirectory']
+      console.log('[Workspace] Opening folder picker dialog...')
+      const { getMainWindow } = await import('../window')
+      const mainWindow = getMainWindow()
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openDirectory'],
+        title: 'Select Workspace Folder'
       })
+      console.log('[Workspace] Dialog result:', JSON.stringify(result))
       if (result.canceled || result.filePaths.length === 0) {
+        console.log('[Workspace] Dialog canceled or no selection')
         return null
       }
       selectedPath = result.filePaths[0]
     }
+
+    console.log('[Workspace] Selected path:', selectedPath)
 
     const data = await readWorkspacesFile()
     
@@ -60,6 +87,7 @@ export function registerWorkspaceHandlers() {
       existing.lastAccessed = new Date()
       data.currentWorkspacePath = selectedPath
       await writeWorkspacesFile(data)
+      setActiveWorkspaceRoot(selectedPath)
       return existing
     }
 
@@ -69,11 +97,12 @@ export function registerWorkspaceHandlers() {
       path: selectedPath,
       lastAccessed: new Date()
     }
-    
+
     data.workspaces.push(newWorkspace)
     data.currentWorkspacePath = selectedPath
     await writeWorkspacesFile(data)
-    
+    setActiveWorkspaceRoot(selectedPath)
+
     return newWorkspace
   })
 
@@ -100,6 +129,7 @@ export function registerWorkspaceHandlers() {
     workspace.lastAccessed = new Date()
     data.currentWorkspacePath = workspacePath
     await writeWorkspacesFile(data)
+    setActiveWorkspaceRoot(workspacePath)
     return true
   })
 

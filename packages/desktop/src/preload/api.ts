@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, Workspace, SessionUpdate, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef } from '../types/ipc'
+import type { SessionListQuery, SessionListResult } from '../types/session'
 
 export const desktopAPI = {
   session: {
@@ -10,14 +11,14 @@ export const desktopAPI = {
     get: (sessionID: string, directory?: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET, sessionID, directory),
     
-    list: (directory?: string, workspaceID?: string): Promise<Conversation[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST, { directory, workspaceID }),
+    list: (query?: SessionListQuery): Promise<SessionListResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST, query),
     
     messages: (sessionID: string, limit?: number, directory?: string): Promise<Message[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_MESSAGES, sessionID, limit, directory),
     
-    prompt: (sessionID: string, prompt: PromptInput[], directory?: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_PROMPT, sessionID, prompt, directory),
+    prompt: (sessionID: string, prompt: PromptInput[], options?: PromptOptions, directory?: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_PROMPT, sessionID, prompt, options, directory),
     
     interrupt: (sessionID: string, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_INTERRUPT, sessionID, directory),
@@ -28,12 +29,28 @@ export const desktopAPI = {
     delete: (sessionId: string, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_DELETE, sessionId, directory),
 
-    // SESSION_UPDATE 只写本地 sessions.json(keyed by sessionID), 无需 directory 透传。
-    update: (sessionID: string, patch: SessionUpdate): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UPDATE, sessionID, patch),
+    update: (sessionID: string, patch: { title?: string }, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UPDATE, sessionID, patch, directory),
     
     onStreamEvent: (callback: (data: { sessionID: string; event: unknown }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { sessionID: string; event: unknown }) => callback(data)
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionID: string; event: unknown }) => {
+        const e = data.event as Record<string, unknown>
+        // Log all events with more detail for session events
+        if (e?.type) {
+          // DEBUG: Enhanced logging for content events
+          if (e.type.startsWith('session.next.') || e.type.startsWith('message.part')) {
+            console.log('[SSE PRELOAD] CONTENT event:', e.type, 'full:', JSON.stringify(e).slice(0, 500))
+          } else if (e.type.startsWith('server.')) {
+            console.log('[SSE PRELOAD] server event:', e.type)
+          } else if (e.type.startsWith('session.')) {
+            console.log('[SSE PRELOAD] SESSION event:', e.type)
+            console.log('[SSE PRELOAD] SESSION full:', JSON.stringify(e).slice(0, 300))
+          } else {
+            console.log('[SSE PRELOAD] unknown event:', e.type, 'keys:', Object.keys(e).slice(0, 10))
+          }
+        }
+        callback(data)
+      }
       ipcRenderer.on(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
     }
@@ -47,7 +64,10 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, filePath, content, directory),
     
     list: (cwd: string, pattern?: string, directory?: string): Promise<unknown[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, cwd, pattern, directory)
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, cwd, pattern, directory),
+
+    pick: (): Promise<{ filePath: string; content: string; name: string } | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK)
   },
 
   tool: {
@@ -64,6 +84,11 @@ export const desktopAPI = {
     
     models: (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_MODELS, directory)
+  },
+
+  console: {
+    get: (directory?: string): Promise<ConsoleState> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONSOLE_GET, directory)
   },
 
   provider: {
@@ -138,6 +163,14 @@ export const desktopAPI = {
   window: {
     setTitleBarOverlay: (options: { color: string; symbolColor: string }): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLE_BAR_OVERLAY, options)
+  },
+
+  globalState: {
+    get: (): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_STATE_GET),
+
+    set: (data: Record<string, unknown>): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_STATE_SET, data)
   }
 }
 

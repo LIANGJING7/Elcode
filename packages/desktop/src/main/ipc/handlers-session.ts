@@ -1,38 +1,232 @@
 import { ipcMain } from 'electron'
 import { CHANNELS } from './channels'
 import { backend } from '../backend-client'
-import type { Conversation, LocationRef, PromptInput, SessionUpdate } from '../../types/ipc'
-import { readSessionMeta, mergeSessionMeta, removeSessionMeta } from './session-persistence'
-import type { SessionRecord } from './session-persistence'
+import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
+import type { SessionListQuery, SessionListResult } from '../../types/session'
 
 const sessionStreams = new Map<string, () => void>()
 
 /**
- * Map a raw backend session (the HTTP `session` resource) to the renderer's
- * `Conversation` shape. The backend nests timestamps under `time.created` /
- * `time.updated` as epoch milliseconds and exposes no top-level
- * `createdAt`/`updatedAt`, so without this mapping the renderer would feed
- * `undefined` to `new Date(...)` and `date-fns` would throw
- * "Invalid time value". Messages are intentionally left empty here — the
- * renderer loads a session's messages lazily via `session.messages`.
- *
- * Desktop-only metadata (pinned/options/workspace anchors) is overlaid from
- * `sessions.json` because core does not persist those fields.
+ * V1 backend message (SessionV1.WithParts) — returned when limit=0 or undefined
+ * Structure: { info: { id, role, timestamp, ... }, parts: [...] }
  */
-function toConversation(raw: Record<string, unknown>, meta?: SessionRecord): Conversation {
+interface V1BackendMessage {
+  info: {
+    id: string
+    role: 'user' | 'assistant'
+    timestamp: number
+    [key: string]: unknown
+  }
+  parts: Array<{
+    type: string
+    text?: string
+    callID?: string
+    tool?: string
+    state?: {
+      status: string
+      input?: Record<string, unknown> | string
+      result?: unknown
+      structured?: Record<string, unknown>
+      content?: unknown[]
+      error?: { message?: string }
+    }
+    [key: string]: unknown
+  }>
+}
+
+/**
+ * V2 backend message (SessionMessage.Message) — returned when limit > 0
+ * Structure: { id, type, time, text?, content? }
+ */
+interface V2BackendMessage {
+  id: string
+  type: 'user' | 'assistant' | 'system' | 'shell' | 'synthetic' | 'agent-switched' | 'model-switched' | 'compaction'
+  time: { created: number; completed?: number }
+  text?: string | string[]
+  content?: Array<{
+    type: string
+    id?: string
+    text?: string
+    name?: string
+    state?: {
+      status: string
+      input?: Record<string, unknown> | string
+      result?: unknown
+      structured?: Record<string, unknown>
+      content?: unknown[]
+      error?: { message?: string }
+    }
+    time?: { created?: number; ran?: number; completed?: number }
+    [key: string]: unknown
+  }>
+  [key: string]: unknown
+}
+
+type BackendMessage = V1BackendMessage | V2BackendMessage
+
+function isV1Message(msg: BackendMessage): msg is V1BackendMessage {
+  return 'info' in msg && 'parts' in msg
+}
+
+/**
+ * Build a ToolCall from a backend tool part (shared by V1 and V2 paths).
+ * Captures input/structured/content/result/duration — previously these were
+ * dropped (args was hardcoded to {} and only result was kept).
+ */
+function toToolCall(
+  id: string,
+  name: string,
+  state: {
+    status: string
+    input?: Record<string, unknown> | string
+    result?: unknown
+    structured?: Record<string, unknown>
+    content?: unknown[]
+    error?: { message?: string }
+  } | undefined,
+  time?: { created?: number; ran?: number; completed?: number },
+): ToolCall {
+  // input may be a JSON string (pending state) or an object (running/completed)
+  const rawInput = state?.input
+  const args: Record<string, unknown> =
+    typeof rawInput === 'string'
+      ? safeParseToolArgs(rawInput)
+      : (rawInput as Record<string, unknown>) ?? {}
+
+  const ran = time?.ran
+  const completed = time?.completed
+  const duration =
+    typeof ran === 'number' && typeof completed === 'number' && completed > ran
+      ? completed - ran
+      : undefined
+
+  const hasOutput = state?.result !== undefined || state?.structured || state?.content
+
+  return {
+    id,
+    name,
+    args,
+    status: (state?.status || 'pending') as ToolCall['status'],
+    ...(hasOutput
+      ? {
+          output: {
+            ...(state?.result !== undefined ? { result: state.result } : {}),
+            ...(state?.structured ? { structured: state.structured as never } : {}),
+            ...(state?.content ? { content: state.content as never } : {}),
+          },
+        }
+      : {}),
+    ...(state?.error?.message ? { error: state.error.message } : {}),
+    ...(duration !== undefined ? { duration } : {}),
+  }
+}
+
+/** Parse a JSON string to args object; tolerate plain strings. */
+function safeParseToolArgs(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { raw }
+  } catch {
+    return { raw }
+  }
+}
+
+/**
+ * Convert backend message (V1 or V2) to desktop Message format.
+ * Returns null for non-displayable types (compaction, agent-switched, etc.).
+ */
+function toMessage(msg: BackendMessage): Message | null {
+  if (isV1Message(msg)) {
+    // V1 format: SessionV1.WithParts
+    const textParts = msg.parts.filter(p => p.type === 'text' && p.text)
+    const toolParts = msg.parts.filter(p => p.type === 'tool')
+    const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
+
+    const content = textParts.map(p => p.text!).join('\n')
+    const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
+
+    const toolCalls: ToolCall[] | undefined = toolParts.length > 0
+      ? toolParts.map(p => toToolCall(p.callID || '', p.tool || '', p.state))
+      : undefined
+
+    return {
+      id: msg.info.id,
+      role: msg.info.role,
+      content,
+      timestamp: new Date(msg.info.timestamp),
+      ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+      ...(reasoning ? { reasoning } : {}),
+    }
+  }
+
+  // V2 format: SessionMessage.Message
+  if (msg.type === 'assistant' && msg.content) {
+    const textParts = msg.content.filter(p => p.type === 'text' && p.text)
+    const reasoningParts = msg.content.filter(p => p.type === 'reasoning' && p.text)
+    const toolParts = msg.content.filter(p => p.type === 'tool')
+
+    const content = textParts.map(p => p.text!).join('\n')
+    const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
+
+    const toolCalls: ToolCall[] | undefined = toolParts.length > 0
+      ? toolParts.map(p => toToolCall(p.id || '', p.name || '', p.state, p.time))
+      : undefined
+
+    // Calculate duration from time.completed - time.created
+    const duration = msg.time.completed && msg.time.created
+      ? msg.time.completed - msg.time.created
+      : undefined
+
+    return {
+      id: msg.id,
+      role: 'assistant',
+      content,
+      timestamp: new Date(msg.time.created),
+      ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+      ...(reasoning ? { reasoning } : {}),
+      ...(duration ? { duration } : {}),
+    }
+  }
+
+  if (msg.type === 'user') {
+    const text = Array.isArray(msg.text) ? msg.text.join('\n') : (msg.text || '')
+    return {
+      id: msg.id,
+      role: 'user',
+      content: text,
+      timestamp: new Date(msg.time.created),
+    }
+  }
+
+  if (msg.type === 'system' && msg.text) {
+    const text = Array.isArray(msg.text) ? msg.text.join('\n') : String(msg.text)
+    return {
+      id: msg.id,
+      role: 'assistant',
+      content: text,
+      timestamp: new Date(msg.time.created),
+    }
+  }
+
+  // Skip non-displayable types: shell, synthetic, agent-switched, model-switched, compaction
+  return null
+}
+
+/**
+ * Map a raw backend session to the renderer's Conversation shape.
+ * No desktop-only metadata overlay - all data comes from backend.
+ */
+function toConversation(raw: Record<string, unknown>): Conversation {
   const time = (raw.time ?? {}) as { created?: number; updated?: number }
   return {
     id: String(raw.id),
-    // core 不存桌面端 rename: sessions.json 的 meta.title 优先; 未改过则 fallback 到 core 的 raw.title
-    title: String(meta?.title ?? raw.title ?? 'Untitled'),
+    title: String(raw.title ?? 'Untitled'),
     messages: [],
     createdAt: new Date(time.created ?? Date.now()),
     updatedAt: new Date(time.updated ?? time.created ?? Date.now()),
-    // 仅覆盖桌面端附加字段, 不动后端权威的 id/time
-    primaryWorkspaceId: meta?.primaryWorkspaceId,
-    workspaceIds: meta?.workspaceIds,
-    pinned: meta?.pinned,
-    options: meta?.options,
+    directory: String(raw.directory ?? ''),
   }
 }
 
@@ -46,34 +240,89 @@ export function registerSessionHandlers() {
     return await backend.session.get(sessionID, directory)
   })
 
-  ipcMain.handle(CHANNELS.SESSION_LIST, async (_event, input?: { directory?: string; workspaceID?: string }) => {
-    const raw = await backend.session.list(input?.directory, input?.workspaceID)
-    const meta = await readSessionMeta()
-    return raw.map((item) => toConversation(item as Record<string, unknown>, meta[String((item as { id: string }).id)]))
+  ipcMain.handle(CHANNELS.SESSION_LIST, async (_event, query?: SessionListQuery): Promise<SessionListResult> => {
+    // Use experimental API with cursor pagination support
+    const result = await backend.experimental.session.list(query ?? {})
+    return result
   })
 
   ipcMain.handle(CHANNELS.SESSION_MESSAGES, async (_event, sessionID: string, limit?: number, directory?: string) => {
-    return await backend.session.messages(sessionID, limit)
+    const raw = await backend.session.messages(sessionID, limit, directory)
+    // Convert backend messages (V1 or V2) to desktop Message[], filtering out non-displayable types
+    return raw
+      .map((msg) => toMessage(msg as BackendMessage))
+      .filter((m): m is Message => m !== null)
   })
 
-  ipcMain.handle(CHANNELS.SESSION_PROMPT, async (event, sessionID: string, prompt: PromptInput[], directory?: string) => {
-    const promptContent = prompt.map(p => {
+  ipcMain.handle(CHANNELS.SESSION_PROMPT, async (event, sessionID: string, prompt: PromptInput[], options?: PromptOptions, directory?: string) => {
+    // 将 PromptInput[] 转换为后端期望的 parts 格式
+    const parts = prompt.map(p => {
       if (p.type === 'text') {
         return { type: 'text', text: p.text! }
       }
       return { type: 'tool_result', toolResult: p.toolResult }
     })
 
-    await backend.session.prompt(sessionID, promptContent, directory)
+    // 构建 prompt payload，包含 model 和 agent
+    // 注意：后端期望的字段名是 modelID，不是 id
+    const payload: { parts: unknown[]; model?: { providerID: string; modelID: string; variant?: string }; agent?: string } = { parts }
+    if (options?.model) {
+      payload.model = {
+        providerID: options.model.providerID,
+        modelID: options.model.modelID,
+        variant: options.variant
+      }
+    }
+    if (options?.agent) {
+      payload.agent = options.agent
+    }
 
-    if (!sessionStreams.has(sessionID)) {
+    // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
+    // Always set up SSE stream (remove existing if present) to ensure fresh connection
+    if (sessionStreams.has(sessionID)) {
+      const oldUnsub = sessionStreams.get(sessionID)
+      if (oldUnsub) {
+        console.log('[PROMPT] removing old SSE stream for', sessionID)
+        oldUnsub()
+      }
+      sessionStreams.delete(sessionID)
+    }
+    
+    console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID)
+    let loggedFirstEvent = false
+    let eventCount = 0
+    try {
       const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
+        const e = evt as Record<string, unknown>
+        eventCount++
+        if (e?.type) {
+          console.log('[SSE MAIN #' + eventCount + '] type:', e.type, 'keys:', Object.keys(e).slice(0, 5))
+          // Log first event structure in detail
+          if (!loggedFirstEvent) {
+            console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
+            loggedFirstEvent = true
+          }
+          // Log session events with more detail
+          if (e.type.startsWith('session.next.')) {
+            console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
+          }
+        }
         event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
           sessionID,
           event: evt
         })
       }, directory)
       sessionStreams.set(sessionID, unsubscribe)
+      console.log('[PROMPT] SSE stream set up for', sessionID)
+      } catch (e) {
+        console.error('[PROMPT] SSE stream setup FAILED for', sessionID, ':', e)
+      }
+
+    try {
+      await backend.session.prompt(sessionID, payload, directory)
+      console.log('[PROMPT] session.prompt succeeded for', sessionID)
+    } catch (e) {
+      console.error('[PROMPT] session.prompt FAILED for', sessionID, ':', e)
     }
 
     return true
@@ -92,15 +341,12 @@ export function registerSessionHandlers() {
   ipcMain.handle(CHANNELS.SESSION_DELETE, async (_event, sessionID: string, directory?: string) => {
     const removed = await backend.session.remove(sessionID, directory)
     stopSessionStream(sessionID)
-    // 同步清理桌面端附加 metadata, 避免 sessions.json 残留
-    await removeSessionMeta(sessionID).catch(() => {})
     return removed
   })
 
-  // 桌面端 metadata 改写(rename/pin/options). core 无该路由, 全部落本地 sessions.json.
-  ipcMain.handle(CHANNELS.SESSION_UPDATE, async (_event, sessionID: string, patch: SessionUpdate) => {
-    await mergeSessionMeta(sessionID, patch)
-    return true
+  // SESSION_UPDATE: 更新 title (后端支持)
+  ipcMain.handle(CHANNELS.SESSION_UPDATE, async (_event, sessionID: string, patch: { title?: string }, directory?: string) => {
+    return await backend.session.update(sessionID, patch, directory)
   })
 }
 

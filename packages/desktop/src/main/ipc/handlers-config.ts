@@ -19,6 +19,10 @@ export function registerConfigHandlers() {
     return await backend.config.models(directory)
   })
 
+  ipcMain.handle(CHANNELS.CONSOLE_GET, async (_event, directory?: string) => {
+    return await backend.console.get(directory)
+  })
+
   ipcMain.handle(CHANNELS.PROVIDER_AUTH_METHODS, async (_event, directory?: string) => {
     return await backend.provider.authMethods(directory)
   })
