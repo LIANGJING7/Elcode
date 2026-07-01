@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import { Button } from '@/components/ui/button'
+import { Plus } from 'lucide-vue-next'
 import { useWorkspaceStore } from '../../stores/workspace'
 
 const store = useWorkspaceStore()
@@ -32,21 +34,23 @@ function select(id: string) {
         >
           <span
             class="w-6 h-6 rounded flex items-center justify-center shrink-0 text-2xs font-bold"
-            :class="currentWorkspace?.id === ws.id ? 'bg-accent text-white' : 'bg-bg-active text-text-muted'"
+            :class="currentWorkspace?.id === ws.id ? 'bg-accent text-bg' : 'bg-bg-active text-text-muted'"
           >{{ ws.name.charAt(0).toUpperCase() }}</span>
           <span class="truncate">{{ ws.name }}</span>
         </button>
       </li>
     </ul>
 
-    <button
+    <Button
+      variant="outline"
       data-testid="add-workspace"
-      class="add-workspace mt-1 w-full flex items-center gap-2 px-2.5 py-2 rounded-md border border-dashed border-border hover:border-border-light text-text-muted hover:text-text-secondary transition-all duration-fast"
+      size="sm"
+      class="mt-1 w-full gap-2"
       @click="add"
     >
-      <span class="text-sm leading-none">+</span>
-      <span class="text-xs">Add Workspace</span>
-    </button>
+      <Plus class="w-4 h-4" />
+      <span>Add Workspace</span>
+    </Button>
   </div>
 </template>
 

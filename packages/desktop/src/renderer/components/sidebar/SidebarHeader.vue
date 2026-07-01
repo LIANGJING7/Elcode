@@ -1,54 +1,49 @@
 <script setup lang="ts">
+import { Sparkles, Zap } from 'lucide-vue-next'
 import { useUiStore, type View } from '../../stores/ui'
 import { navigationRegistry } from '../../navigation/navigationRegistry'
 
 const ui = useUiStore()
 const emit = defineEmits<{
   'select-nav': [view: Exclude<View, 'welcome' | 'chat' | 'settings'>]
-  'enter-settings': []
+  'enter-settings': [section?: string]
 }>()
 
 const sorted = [...navigationRegistry].sort((a, b) => a.order - b.order)
 
-// icon registry 里目前是字符串 key, 这里转成可见的 glyph
-function iconGlyph(name: string): string {
+// icon mapping
+function iconComponent(name: string) {
   switch (name) {
-    case 'sparkles': return '✦'
-    case 'bolt': return '⚡'
-    default: return '•'
+    case 'sparkles': return Sparkles
+    case 'bolt': return Zap
+    default: return null
+  }
+}
+
+function handleClick(item: typeof navigationRegistry[0]) {
+  if (item.enterSettings) {
+    emit('enter-settings', item.settingsSection)
+  } else {
+    emit('select-nav', item.view)
   }
 }
 </script>
 
 <template>
-  <div class="sidebar-header p-3">
-    <div class="brand w-8 h-8 rounded-lg bg-accent flex items-center justify-center mb-3">
-      <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-      </svg>
-    </div>
-
+  <div class="sidebar-header px-3 pb-3 pt-0">
     <nav class="nav-list flex flex-col gap-0.5">
-      <button
+      <Button
         v-for="item in sorted"
         :key="item.id"
         :data-nav-id="item.id"
-        class="nav-button px-2 py-1.5 rounded text-sm text-text-secondary hover:bg-bg-tertiary transition-colors duration-fast text-left flex items-center gap-2"
-        :class="{ 'is-active bg-bg-tertiary text-text': ui.view === item.view }"
-        @click="emit('select-nav', item.view)"
+        variant="ghost"
+        class="flex items-center justify-start w-full gap-2 px-2 py-1.5 text-sm text-left"
+        :class="{ 'bg-accent/10 text-accent': item.enterSettings ? (ui.view === 'settings' && ui.settingsSection === item.settingsSection) : (ui.view === item.view) }"
+        @click="handleClick(item)"
       >
-        <span class="nav-icon">{{ iconGlyph(item.icon) }}</span>
-        <span>{{ item.label }}</span>
-      </button>
+        <component :is="iconComponent(item.icon)" v-if="iconComponent(item.icon)" class="w-4 h-4 shrink-0" />
+        <span class="truncate">{{ item.label }}</span>
+      </Button>
     </nav>
-
-    <button
-      data-sidebar-action="settings"
-      class="settings-button mt-3 w-full px-2 py-1.5 rounded text-sm text-text-muted hover:bg-bg-tertiary flex items-center gap-2"
-      @click="emit('enter-settings')"
-    >
-      <span>⚙</span>
-      <span>Settings</span>
-    </button>
   </div>
 </template>
