@@ -151,12 +151,11 @@ export function createNormalizer(ctx: NormalizerContext) {
     }
     
     // Handle session.idle - V1 idle event
+    // Note: session.status idle already triggers STREAM_DONE, so we skip this
+    // to avoid duplicate STREAM_DONE events that would clear the content
     if (type === 'session.idle') {
-      console.log('[Normalizer] session.idle - marking as done')
-      return {
-        type: 'STREAM_DONE',
-        version
-      }
+      console.log('[Normalizer] session.idle - skipping (session.status idle already handled)')
+      return null
     }
     
     if (type === 'message.updated') {
