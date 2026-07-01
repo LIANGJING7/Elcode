@@ -1,12 +1,11 @@
 <template>
-  <div class="composer-input relative">
+  <div class="composer-input relative flex-1 min-h-0 flex flex-col">
     <textarea
       ref="textareaRef"
       :value="internalValue"
       :disabled="disabled"
-      :placeholder="placeholder"
-      rows="1"
-      class="w-full bg-transparent text-text text-sm leading-relaxed resize-none outline-none placeholder:text-text-muted disabled:opacity-50"
+      :placeholder="effectivePlaceholder"
+      class="flex-1 min-h-0 w-full bg-transparent text-text text-sm leading-relaxed resize-none outline-none placeholder:text-text-muted disabled:opacity-50"
       @input="handleInput"
       @focus="emit('focus')"
       @blur="emit('blur')"
@@ -41,11 +40,13 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   disabled?: boolean
   history?: string[]
+  queueCount?: number
 }>(), {
   value: '',
   placeholder: 'Ask anything... (Shift+Enter for new line)',
   disabled: false,
-  history: () => []
+  history: () => [],
+  queueCount: 0
 })
 
 const emit = defineEmits<{
@@ -60,6 +61,14 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1) // -1 = current input, 0+ = history position
+
+// Dynamic placeholder: show queue hint when messages are queued
+const effectivePlaceholder = computed(() => {
+  if (props.queueCount > 0) {
+    return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
+  }
+  return props.placeholder
+})
 
 // Sync internal value with prop
 watch(() => props.value, (val) => {
@@ -81,7 +90,6 @@ function handleInput(e: Event) {
   const newValue = target.value
   internalValue.value = newValue
   emit('update:value', newValue)
-  adjustHeight()
   // Reset history navigation when user types
   historyIndex.value = -1
   // Show slash menu if input is '/'
@@ -186,14 +194,6 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
   internalValue.value = ''
   emit('update:value', '')
   showSlashMenu.value = false
-}
-
-function adjustHeight() {
-  if (!textareaRef.value) return
-  textareaRef.value.style.height = 'auto'
-  const scrollHeight = textareaRef.value.scrollHeight
-  const maxHeight = 200
-  textareaRef.value.style.height = Math.min(scrollHeight, maxHeight) + 'px'
 }
 
 // Expose for parent to focus

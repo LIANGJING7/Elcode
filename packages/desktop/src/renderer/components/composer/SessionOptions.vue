@@ -9,9 +9,9 @@
       <SelectTrigger class="h-7 px-2.5 text-xs rounded-lg bg-bg-elevated hover:bg-bg-hover">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="build">Build</SelectItem>
-        <SelectItem value="plan">Plan</SelectItem>
+      <SelectContent class="border-border/20 shadow-sm">
+        <SelectItem class="text-xs text-text focus:bg-accent/10 focus:text-text data-[state=checked]:bg-accent/10" value="build">Build</SelectItem>
+        <SelectItem class="text-xs text-text focus:bg-accent/10 focus:text-text data-[state=checked]:bg-accent/10" value="plan">Plan</SelectItem>
       </SelectContent>
     </Select>
 

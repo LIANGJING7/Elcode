@@ -12,30 +12,22 @@
     </DropdownMenuTrigger>
 
     <DropdownMenuContent
-      ref="contentRef"
-      class="max-h-64"
+      class="max-h-64 overflow-y-auto border-border/20 shadow-sm"
       align="end"
       side="top"
       :side-offset="4"
     >
-      <!-- Provider groups -->
+      <!-- Provider groups with submenu -->
       <DropdownMenuSub
         v-for="group in groupedModels"
         :key="group.provider"
-        :open="openProvider === group.provider"
       >
-        <DropdownMenuSubTrigger
-          class="px-3 py-1.5 text-xs text-text"
-          @pointerenter="onProviderEnter(group.provider)"
-          @pointerleave="onProviderLeave"
-        >
+        <DropdownMenuSubTrigger class="px-3 py-1.5 text-xs text-text">
           <span>{{ group.provider }}</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent
-          class="max-h-48 overflow-y-auto"
+          class="max-h-48 overflow-y-auto border-border/20 shadow-sm"
           :side-offset="2"
-          @pointerenter="isInsideSub = true"
-          @pointerleave="isInsideSub = false"
         >
           <DropdownMenuItem
             v-for="model in group.models"
@@ -58,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -81,39 +73,6 @@ const emit = defineEmits<{
 
 const modelsStore = useModelsStore()
 
-const contentRef = ref<InstanceType<typeof DropdownMenuContent> | null>(null)
-
-// Track which provider submenu is open
-const openProvider = ref<string | null>(null)
-const isInsideSub = ref(false)
-
-// Debounce close so hovering submenu content doesn't flicker
-let closeTimer: ReturnType<typeof setTimeout> | null = null
-
-function onProviderEnter(provider: string) {
-  if (closeTimer) clearTimeout(closeTimer)
-  openProvider.value = provider
-}
-
-function onProviderLeave() {
-  // Small delay so entering the submenu content works
-  closeTimer = setTimeout(() => {
-    if (!isInsideSub.value) {
-      openProvider.value = null
-    }
-  }, 100)
-}
-
-// Listen for wheel on provider list — close submenu on scroll
-watch(contentRef, (el) => {
-  if (!el) return
-  const root = (el as any).$el as HTMLElement | undefined
-  if (!root) return
-  root.addEventListener('wheel', () => {
-    openProvider.value = null
-  }, { passive: true })
-}, { immediate: true })
-
 const selectedModel = computed({
   get: () => props.modelValue || '',
   set: (val) => emit('update:modelValue', val)
@@ -124,7 +83,10 @@ const groupedModels = computed(() => {
   const groups: { provider: string; models: { value: string; name: string }[] }[] = []
   const providerMap = new Map<string, { value: string; name: string }[]>()
 
-  for (const opt of modelsStore.modelOptions) {
+  const opts = modelsStore.modelOptions || []
+  console.log('[ModelSelector] modelOptions count:', opts.length, 'first 3:', opts.slice(0, 3))
+  
+  for (const opt of opts) {
     const parts = opt.label.split(' / ')
     if (parts.length === 2) {
       const provider = parts[0]
@@ -153,6 +115,7 @@ const groupedModels = computed(() => {
     groups.push({ provider, models })
   }
 
+  console.log('[ModelSelector] groupedModels:', groups.length, 'groups')
   return groups
 })
 
@@ -160,8 +123,13 @@ const displayText = computed(() => {
   if (!selectedModel.value) {
     return 'Select model'
   }
-  const opt = modelsStore.modelOptions.find(o => o.value === selectedModel.value)
-  return opt?.label || selectedModel.value
+  const opts = modelsStore.modelOptions || []
+  const opt = opts.find(o => o.value === selectedModel.value)
+  if (!opt) return selectedModel.value
+  
+  // 只显示模型名称，去掉 Provider 部分
+  const parts = opt.label.split(' / ')
+  return parts.length === 2 ? parts[1] : opt.label
 })
 
 async function selectModel(value: string) {
