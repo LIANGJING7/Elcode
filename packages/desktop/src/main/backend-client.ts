@@ -306,7 +306,9 @@ export const backend = {
   config: {
     get: async (key: string, directory?: string): Promise<unknown> => {
       const params = directory ? new URLSearchParams({ directory }).toString() : ""
-      return request("GET", `/config/${key}?${params}`)
+      // GET /config returns full config object, extract the specific key
+      const fullConfig = await request("GET", `/config?${params}`) as Record<string, unknown>
+      return fullConfig?.[key]
     },
 
     set: async (key: string, value: unknown, directory?: string): Promise<void> => {

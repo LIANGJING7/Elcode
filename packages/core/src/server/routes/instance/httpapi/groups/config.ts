@@ -1,7 +1,6 @@
 import { Config } from "@/config/config"
 import { ConfigV1 } from "@/core/v1/config/config"
 import { Provider } from "@/provider/provider"
-import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
@@ -9,22 +8,6 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/config"
-
-// Path schema for config key
-const ConfigKeyPath = Schema.Struct({
-  key: Schema.String,
-}).annotate({ description: "Path parameters for config key lookup" })
-
-// Response schema for single config value (can be any JSON value or undefined)
-const ConfigValueResponse = Schema.Union(
-  Schema.String,
-  Schema.Number,
-  Schema.Boolean,
-  Schema.Null,
-  Schema.Undefined,
-  Schema.Array(Schema.Unknown),
-  Schema.Record(Schema.String, Schema.Unknown),
-).annotate({ identifier: "ConfigValue", description: "A single configuration value" })
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -38,17 +21,6 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.get",
             summary: "Get configuration",
             description: "Retrieve the current OpenCode configuration settings and preferences.",
-          }),
-        ),
-        HttpApiEndpoint.get("getByKey", `${root}/:key`, {
-          path: ConfigKeyPath,
-          query: WorkspaceRoutingQuery,
-          success: described(ConfigValueResponse, "Get a single configuration value"),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "config.getByKey",
-            summary: "Get config value by key",
-            description: "Retrieve a single configuration value by its key name.",
           }),
         ),
         HttpApiEndpoint.patch("update", root, {
