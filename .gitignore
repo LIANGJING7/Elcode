@@ -20,6 +20,7 @@ packages/core/docs/
 
 # Project files
 AGENTS.md
+docs/
 
 # Dependencies
 node_modules/
