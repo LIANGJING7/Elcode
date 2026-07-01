@@ -133,12 +133,25 @@ export function useStreamingStore(): StreamingStore {
     console.log('[handleEvent] Processing event type:', event?.type, 'for session:', sessionId)
     
     if (event?.type === 'message.part.updated') {
-      const part = props.part as { id?: string; type?: string } | undefined
+      const part = props.part as { id?: string; type?: string; text?: string; time?: { end?: number } } | undefined
       console.log('[handleEvent] message.part.updated - part:', part)
       if (part?.id && part?.type) {
         const partType = part.type === 'reasoning' ? 'reasoning' : 'text'
         partTypeMap.set(part.id, partType)
         console.log('[handleEvent] partTypeMap updated:', part.id, '→', partType)
+        
+        // For reasoning part, set reasoning status to done
+        // This is needed because V1 format doesn't have REASONING_ENDED event
+        // The message.part.updated with reasoning part marks the end of reasoning
+        if (partType === 'reasoning') {
+          state.reasoning.status = 'done'
+          state.reasoning.id = part.id
+          state.reasoning.endedAt = part.time?.end ? new Date(part.time.end).getTime() : Date.now()
+          if (!state.reasoning.startedAt) {
+            state.reasoning.startedAt = Date.now()
+          }
+          console.log('[handleEvent] Reasoning status set to done for partId:', part.id)
+        }
         
         // Flush pending deltas for this partId
         console.log('[handleEvent] Calling flushPendingDeltas for partId:', part.id, 'type:', partType)
