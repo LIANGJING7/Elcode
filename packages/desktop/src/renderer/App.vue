@@ -170,11 +170,16 @@ function doExport() {
   // 导出 Markdown — 占位
 }
 
-// view 由两件事驱动: ui.view 与 workspace 是否存在。
+// view 由业务状态决定默认页面，临时 UI 状态只表示用户操作。
 const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'>(() => {
+  // 业务状态决定默认页面
   if (!hasCurrentWorkspace.value) return 'welcome'
+  if (!currentSessionId.value) return 'newSession'
+  
+  // 临时 UI 状态：用户正在创建新会话
   if (sessionStore.isPendingNewSession) return 'newSession'
-  if (ui.view === 'welcome') return 'chat'
+  
+  // 用户选择的视图
   return ui.view
 })
 
