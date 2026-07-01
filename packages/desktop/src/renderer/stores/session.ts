@@ -29,6 +29,7 @@ export interface PendingMessage {
   id: string
   content: string
   createdAt: number
+  agent?: string  // 'plan' or 'build'
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -73,6 +74,11 @@ export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref<string | null>(null)
   const isPendingNewSession = ref(false)
   const messageIdToRole = new Map<string, 'user' | 'assistant'>()
+
+  // Workspace session memory: remember last selected session per workspace
+  const lastSessionByWorkspace = new Map<string, string>()
+  // Pending session to restore after reload completes (for workspace switching)
+  let pendingRestoreSession: string | null = null
 
   // Client-side message queues, keyed by sessionId
   const pendingQueues = reactive<Record<string, PendingMessage[]>>({})
@@ -184,6 +190,25 @@ export const useSessionStore = defineStore('session', () => {
     } finally {
       if (currentGen === generation) {
         state.isLoading = false
+
+        // Restore remembered session after reload (for workspace switching)
+        if (pendingRestoreSession) {
+          const sessionId = pendingRestoreSession
+          pendingRestoreSession = null
+          const exists = state.conversations.find(c => c.id === sessionId)
+          if (exists) {
+            console.log('[DEBUG reload] Restoring session', sessionId)
+            // Use nextTick to ensure Vue reactivity has processed the new conversations
+            nextTick(() => {
+              currentSessionId.value = sessionId
+              isPendingNewSession.value = false
+              streamingStore.setCurrentSession(sessionId)
+              loadMessages(sessionId)
+            })
+          } else {
+            console.log('[DEBUG reload] Remembered session', sessionId, 'no longer exists')
+          }
+        }
       }
     }
   }
@@ -413,10 +438,17 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId.value = sessionId
     isPendingNewSession.value = false
     streamingStore.setCurrentSession(sessionId)
+
+    // Remember this session for current workspace
+    if (workspaceStore.currentWorkspace) {
+      lastSessionByWorkspace.set(workspaceStore.currentWorkspace.id, sessionId)
+      console.log('[DEBUG selectSession] Remembered session', sessionId, 'for workspace', workspaceStore.currentWorkspace.id)
+    }
+
     // Note: pendingQueue is preserved per-session, not cleared on switch
     ui.resetForSession()
     loadMessages(sessionId)
-    
+
     // Check if this session has queued messages and is not streaming
     // If so, trigger processQueue to send them
     const queue = getQueue(sessionId)
@@ -451,38 +483,44 @@ export const useSessionStore = defineStore('session', () => {
   // Actions - 消息发送
   // ========================================
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, options?: PromptOptions) {
     console.log('[DEBUG sendMessage] === START ===')
     console.log('[DEBUG sendMessage] content:', content.slice(0, 50))
+    console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
     console.log('[DEBUG sendMessage] isPendingNewSession:', isPendingNewSession.value)
-    
+
     if (!content.trim()) return
     state.error = null
 
     // 如果正在流式，将消息加入队列（不调用 backend）
     if (streamingStore.isCurrentStreaming.value && currentSessionId.value) {
       console.log('[DEBUG] === Streaming active - enqueueing message ===')
-      
+
       const queueId = `queue-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      
+
       const pending: PendingMessage = {
         id: queueId,
         content,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        agent: options?.agent
       }
-      
+
       // Push to current session's queue
       const queue = getQueue(currentSessionId.value)
       queue.push(pending)
       console.log('[DEBUG] Enqueued message, queueId:', queueId, 'queue length:', queue.length)
-      
+
       return  // 不调用 backend，等待流式完成后 processQueue 处理
     }
 
     const modelsStore = useModelsStore()
     const modelRef = parseModelId(modelsStore.selectedModel)
-    const promptOptions: PromptOptions = modelRef ? { model: modelRef } : {}
+    // Merge model from store with options passed in
+    const promptOptions: PromptOptions = {
+      model: modelRef,
+      agent: options?.agent
+    }
 
     if (isPendingNewSession.value && workspaceStore.currentWorkspace) {
       console.log('[DEBUG sendMessage] Creating new session...')
@@ -507,7 +545,7 @@ export const useSessionStore = defineStore('session', () => {
     // and displays the "Thinking..." animation immediately
     streamingStore.resetStream(currentSessionId.value)
     streamingStore.startStreaming(currentSessionId.value)
-    
+
     console.log('[DEBUG sendMessage] Streaming started - currentStream.status:', streamingStore.currentStream.value?.status)
     console.log('[DEBUG sendMessage] isCurrentStreaming:', streamingStore.isCurrentStreaming.value)
 
@@ -530,7 +568,7 @@ export const useSessionStore = defineStore('session', () => {
         updatedAt: new Date(),
         directory: workspaceStore.currentWorkspace?.path || ''
       }
-      state.conversations.push(tempConv)
+      state.conversations.unshift(tempConv)
       console.log('[DEBUG sendMessage] state.conversations.length:', state.conversations.length)
     } else {
       console.log('[DEBUG sendMessage] Pushing to existing conversation.messages')
@@ -546,7 +584,7 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       const prompt: PromptInput[] = [{ type: 'text', text: content }]
-      console.log('[DEBUG sendMessage] Calling backend prompt...')
+      console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions)
       await window.desktop.session.prompt(
         currentSessionId.value,
         prompt,
@@ -558,7 +596,7 @@ export const useSessionStore = defineStore('session', () => {
       state.error = e instanceof Error ? e.message : 'Failed to send message'
       console.log('[DEBUG sendMessage] ERROR:', state.error)
     }
-    
+
     console.log('[DEBUG sendMessage] === END ===')
   }
 
@@ -603,21 +641,25 @@ export const useSessionStore = defineStore('session', () => {
       state.error = 'No active session'
       return
     }
-    
+
     // 获取选择的模型
     const modelsStore = useModelsStore()
     const modelRef = parseModelId(modelsStore.selectedModel)
-    const promptOptions: PromptOptions = modelRef ? { model: modelRef } : {}
-    
+    // Merge model with agent from pending message
+    const promptOptions: PromptOptions = {
+      model: modelRef,
+      agent: pending.agent
+    }
+
     // Set streaming store to current session
     streamingStore.setCurrentSession(currentSessionId.value)
-    
+
     // IMPORTANT: Start streaming BEFORE adding user message
     // This ensures Vue's reactive update sees streaming status as 'streaming'
     // and displays the "Thinking..." animation immediately
     streamingStore.resetStream(currentSessionId.value)
     streamingStore.startStreaming(currentSessionId.value)
-    
+
     // Create user message AFTER streaming started
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
@@ -625,7 +667,7 @@ export const useSessionStore = defineStore('session', () => {
       content: pending.content,
       timestamp: new Date()
     }
-    
+
     if (!currentConversation.value) {
       const tempConv: Conversation = {
         id: currentSessionId.value,
@@ -635,16 +677,16 @@ export const useSessionStore = defineStore('session', () => {
         updatedAt: new Date(),
         directory: workspaceStore.currentWorkspace?.path || ''
       }
-      state.conversations.push(tempConv)
+      state.conversations.unshift(tempConv)
     } else {
       if (!currentConversation.value.messages) {
         currentConversation.value.messages = []
       }
       currentConversation.value.messages.push(userMessage)
     }
-    
+
     try {
-      console.log('[DEBUG sendPending] Sending queued message:', pending.id)
+      console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
       const prompt: PromptInput[] = [{ type: 'text', text: pending.content }]
       await window.desktop.session.prompt(
         currentSessionId.value,
@@ -765,6 +807,10 @@ export const useSessionStore = defineStore('session', () => {
             role: 'assistant',
             content: streamingStore.displayedContent.value,
             timestamp: new Date(),
+            duration: stream.startedAt ? Date.now() - stream.startedAt : undefined,
+            reasoningDuration: stream.reasoning.startedAt && stream.reasoning.endedAt
+              ? stream.reasoning.endedAt - stream.reasoning.startedAt
+              : undefined,
             toolCalls: streamingStore.orderedTools.value.length > 0
               ? streamingStore.orderedTools.value.map(t => ({
                   id: t.id,
@@ -810,12 +856,37 @@ export const useSessionStore = defineStore('session', () => {
   // Watchers
   // ========================================
 
+  // Track previous workspace to detect switches
+  let previousWorkspaceId: string | null = null
+
   watch(
     () => workspaceStore.currentWorkspace,
-    (newWorkspace) => {
+    (newWorkspace, oldWorkspace) => {
+      // Save current session to old workspace before switching
+      if (oldWorkspace && currentSessionId.value) {
+        lastSessionByWorkspace.set(oldWorkspace.id, currentSessionId.value)
+        console.log('[DEBUG workspace switch] Saved session', currentSessionId.value, 'to workspace', oldWorkspace.id)
+      }
+
       if (newWorkspace) {
+        // Load conversations for new workspace
         setWorkspace(newWorkspace.id, newWorkspace.path)
+
+        // Set pending restore session (will be restored after reload completes)
+        const rememberedSession = lastSessionByWorkspace.get(newWorkspace.id)
+        if (rememberedSession) {
+          console.log('[DEBUG workspace switch] Will restore session', rememberedSession, 'for workspace', newWorkspace.id)
+          pendingRestoreSession = rememberedSession
+        } else {
+          console.log('[DEBUG workspace switch] No remembered session for workspace', newWorkspace.id)
+          currentSessionId.value = null
+          isPendingNewSession.value = false
+          streamingStore.setCurrentSession(null)
+        }
+
+        previousWorkspaceId = newWorkspace.id
       } else {
+        // No workspace: clear everything
         state.conversations = []
         pagination.nextCursor = null
         state.isLoading = false
@@ -824,6 +895,7 @@ export const useSessionStore = defineStore('session', () => {
         currentSessionId.value = null
         isPendingNewSession.value = false
         streamingStore.setCurrentSession(null)
+        previousWorkspaceId = null
       }
     },
     { immediate: true }

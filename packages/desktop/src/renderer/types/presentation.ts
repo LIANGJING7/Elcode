@@ -1,5 +1,11 @@
 // packages/desktop/src/renderer/types/presentation.ts
 
+import type { Component } from 'vue'
+import type { GrepViewModel } from '../tool/rules/grep'
+import type { GlobViewModel } from '../tool/rules/glob'
+import type { WebFetchViewModel } from '../tool/rules/webfetch'
+import type { WebSearchViewModel } from '../tool/rules/websearch'
+
 // ===== Base Line Types =====
 interface BaseLine {
   id: string
@@ -79,19 +85,34 @@ export interface ImageModel {
   }
 }
 
-export type FileModel = ReadFileModel | DiffModel | ImageModel
+// 扩展 FileModel：直接引用现有 ViewModel 类型
+export type FileModel =
+  | ReadFileModel
+  | DiffModel
+  | ImageModel
+  | GrepViewModel
+  | GlobViewModel
+  | WebFetchViewModel
+  | WebSearchViewModel
+
+// ===== UnknownToolModel (兜底) =====
+export interface UnknownToolModel {
+  _kind: 'unknown'
+  toolName: string
+  args: Record<string, unknown>
+  result?: unknown
+}
 
 // ===== FileTab (UI State) =====
-export type FileViewerType = 'text' | 'diff' | 'image'
 export type FileTabStatus = 'loading' | 'ready' | 'error'
 
 export interface FileTab {
   id: string
   title: string
   subtitle?: string
-  filePath: string
-  viewer: FileViewerType
-  model: FileModel
+  filePath?: string  // 仅文件类工具需要
+  component: Component  // 直接存储 Vue 组件
+  model: FileModel | UnknownToolModel
   status: FileTabStatus
   dirty?: boolean
   viewerState?: {

@@ -13,10 +13,6 @@ export const useUiStore = defineStore('ui', () => {
 
   // 面板与导航 UI 态(均不污染 view 语义)
   const sidebarOpen = ref(true)
-  const artifactPanelOpen = ref(false)
-  const hasUserClosedArtifactPanel = ref(false)
-  const inspectorOpen = ref(true)
-  const activeToolCallId = ref<string | null>(null)
 
   // ===== FileTabs 状态 (VS Code 风格持久标签页) =====
   const fileTabs = ref<FileTab[]>([])
@@ -42,30 +38,6 @@ export const useUiStore = defineStore('ui', () => {
 
   function toggleSidebar() {
     sidebarOpen.value = !sidebarOpen.value
-  }
-
-  // 产物面板自动展开规则: 由 artifact store 调用"在 artifacts.length 0→>0 边界"
-  // 只在 !hasUserClosedArtifactPanel 时真正开,否则无效
-  function openArtifactPanelAutomatically() {
-    if (hasUserClosedArtifactPanel.value) return
-    artifactPanelOpen.value = true
-  }
-
-  // 用户主动收起 → 置 hasUserClosedArtifactPanel,压制未来自动展开
-  function closeArtifactPanel() {
-    artifactPanelOpen.value = false
-    hasUserClosedArtifactPanel.value = true
-  }
-
-  // 用户主动唤回 → 清回 false
-  function openArtifactPanel() {
-    artifactPanelOpen.value = true
-    hasUserClosedArtifactPanel.value = false
-  }
-
-  // 用户单独收起 Inspector(上层 Artifact 区不动)
-  function toggleInspector() {
-    inspectorOpen.value = !inspectorOpen.value
   }
 
   // ===== FileTabs 方法 =====
@@ -108,21 +80,17 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  // 切会话时调用: 重置面板态(回到默认自动展开 + 无选中)
+  // 切会话时调用: 重置面板态
   // fileTabs 保持不变 — VS Code 风格持久标签页
   function resetForSession() {
-    hasUserClosedArtifactPanel.value = false
-    artifactPanelOpen.value = false
-    activeToolCallId.value = null
-    inspectorOpen.value = true
+    // 可根据需要重置 fileTabs 或保持持久
   }
 
   return {
     view, previousView, settingsSection,
-    sidebarOpen, artifactPanelOpen, hasUserClosedArtifactPanel, inspectorOpen, activeToolCallId,
+    sidebarOpen,
     fileTabs, activeFileTabId,
     setView, enterSettings, exitSettings, toggleSidebar,
-    openArtifactPanelAutomatically, closeArtifactPanel, openArtifactPanel, toggleInspector,
     openFileTab, selectFileTab, closeFileTab, closeAllFileTabs, updateFileTabViewerState,
     resetForSession,
   }

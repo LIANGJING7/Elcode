@@ -29,19 +29,31 @@ const canSend = computed(() => inputValue.value.trim().length > 0)
 async function handleSend(content: string) {
     console.log('[DEBUG NewSessionView] === handleSend CALLED ===')
     console.log('[DEBUG NewSessionView] Content:', content.slice(0, 50))
-    
-    const mode = sessionOptions.value.mode as string
-    const finalContent = mode === 'plan' && !content.startsWith('[mode=plan]')
-      ? `[mode=plan]\n${content}`
-      : content
+    console.log('[DEBUG NewSessionView] sessionOptions:', JSON.stringify(sessionOptions.value))
+    console.log('[DEBUG NewSessionView] currentSessionId:', sessionStore.currentSessionId)
+    console.log('[DEBUG NewSessionView] isPendingNewSession:', sessionStore.isPendingNewSession)
 
-    console.log('[DEBUG NewSessionView] Final content:', finalContent.slice(0, 50))
-    console.log('[DEBUG NewSessionView] Calling sessionStore.sendMessage')
-    
-    await sessionStore.sendMessage(finalContent)
-    
+    // 确保处于 pending 新会话状态，这样 sendMessage 才能创建会话
+    if (!sessionStore.currentSessionId && !sessionStore.isPendingNewSession) {
+      console.log('[DEBUG NewSessionView] Calling startNewSession()')
+      sessionStore.startNewSession()
+      console.log('[DEBUG NewSessionView] After startNewSession, isPendingNewSession:', sessionStore.isPendingNewSession)
+    }
+
+    console.log('[DEBUG NewSessionView] Calling sessionStore.sendMessage...')
+
+    // Note: ui.setView('chat') is NOT needed here because effectiveView
+    // automatically returns 'chat' when currentSessionId is set.
+    // Calling it after sendMessage completes causes a timing issue.
+    // Convert sessionOptions.mode to agent field (plan/build)
+    const mode = sessionOptions.value.mode as string
+    const agent = mode === 'plan' ? 'plan' : 'build'
+    await sessionStore.sendMessage(content, { agent })
+
     console.log('[DEBUG NewSessionView] ✓ sendMessage completed')
-    ui.setView('chat')
+    console.log('[DEBUG NewSessionView] currentSessionId after:', sessionStore.currentSessionId)
+    console.log('[DEBUG NewSessionView] isPendingNewSession after:', sessionStore.isPendingNewSession)
+    // Removed: ui.setView('chat') - effectiveView handles this automatically
   }
 
 function handleManualSend() {

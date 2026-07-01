@@ -10,10 +10,6 @@ describe('uiStore', () => {
     expect(ui.view).toBe('welcome')
     expect(ui.previousView).toBe('welcome')
     expect(ui.settingsSection).toBe('appearance')
-    expect(ui.artifactPanelOpen).toBe(false)
-    expect(ui.hasUserClosedArtifactPanel).toBe(false)
-    expect(ui.inspectorOpen).toBe(true)
-    expect(ui.activeToolCallId).toBeNull()
     expect(ui.sidebarOpen).toBe(true)
   })
 
@@ -52,47 +48,33 @@ describe('uiStore', () => {
     // sidebar 是独立 UI 态,不动 view/previousView
     expect(ui.view).toBe('chat')
   })
-
-  it('closeArtifactPanel 提示用户主动关后,压制未来自动展开', () => {
-    const ui = useUiStore()
-    ui.openArtifactPanelAutomatically()   // 首次 0→>0 触发
-    expect(ui.artifactPanelOpen).toBe(true)
-    ui.closeArtifactPanel()                // 用户主动收起
-    expect(ui.artifactPanelOpen).toBe(false)
-    expect(ui.hasUserClosedArtifactPanel).toBe(true)
-    ui.openArtifactPanelAutomatically()   // 再次触发但被压制
-    expect(ui.artifactPanelOpen).toBe(false)
-    ui.openArtifactPanel()                 // 用户主动唤回
-    expect(ui.artifactPanelOpen).toBe(true)
-    expect(ui.hasUserClosedArtifactPanel).toBe(false)
-  })
-
-  it('resetForSession 切会话清锁,恢复自动展开默认', () => {
-    const ui = useUiStore()
-    ui.closeArtifactPanel()
-    ui.resetForSession()
-    expect(ui.hasUserClosedArtifactPanel).toBe(false)
-    expect(ui.activeToolCallId).toBeNull()
-    expect(ui.artifactPanelOpen).toBe(false)
-    expect(ui.inspectorOpen).toBe(true)
-  })
 })
 
+import type { Component } from 'vue'
+import { markRaw } from 'vue'
 import type { FileTab, ReadFileModel } from '../../types/presentation'
+import TextViewer from '../../components/file-tabs/TextViewer.vue'
+
+const TextViewerRaw = markRaw(TextViewer)
 
 function makeFakeTab(id: string, filePath: string = 'src/app.ts'): FileTab {
+  const parts = filePath.split('/')
+  const fileName = parts.pop() ?? filePath
+  const directory = parts.length > 0 ? parts.join('/') + '/' : undefined
   const model: ReadFileModel = {
     _kind: 'read',
     filePath,
-    fileName: filePath.split('/').pop() ?? filePath,
+    fileName,
+    directory,
     lines: [],
     options: { wrap: false, showLineNumbers: true },
   }
   return {
     id,
-    title: model.fileName,
+    title: fileName,
+    subtitle: directory,
     filePath,
-    viewer: 'text',
+    component: TextViewerRaw,
     model,
     status: 'ready',
   }

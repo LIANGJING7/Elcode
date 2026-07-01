@@ -3,13 +3,6 @@
     <!-- View mode actions -->
     <template v-if="mode === 'view'">
       <button
-        class="action-btn px-3 py-1.5 rounded bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-        @click="emit('edit')"
-      >
-        Edit
-      </button>
-      
-      <button
         class="action-btn px-3 py-1.5 rounded bg-bg-hover hover:bg-bg-elevated border border-border text-text text-sm font-medium transition-colors"
         @click="emit('copy')"
       >
@@ -45,7 +38,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'edit': []
   'copy': []
   'cancel': []
   'save': []

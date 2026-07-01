@@ -5,11 +5,14 @@
       class="skill-list flex flex-col flex-1 min-w-0 bg-bg transition-all duration-300"
       :class="{ 'panel-open': panelOpen }"
     >
-      <header class="px-6 py-4 border-b border-border">
-        <h1 class="text-xl font-semibold text-text">Skills</h1>
-        <p class="text-2xs text-text-muted mt-1">
-          Registered skills from ~/.opencode/skills/
-        </p>
+      <header class="px-6 py-4 border-b border-border flex items-center justify-between">
+        <h1 class="text-xl font-semibold text-text">技能</h1>
+        <button
+          class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
+          @click="handleCreateSkill"
+        >
+          Create New Skill
+        </button>
       </header>
       
       <!-- Loading state -->
@@ -39,29 +42,19 @@
         </button>
       </div>
       
-      <!-- Skill list -->
-      <div v-else class="flex-1 overflow-y-auto px-4 py-4">
-        <div class="space-y-2">
-          <SkillCard
-            v-for="skill in skills"
-            :key="skill.name"
-            :skill="skill"
-            :selected="selectedSkill?.name === skill.name"
-            @click="handleSelectSkill(skill)"
-          />
+<!-- Skill list -->
+        <div v-else class="flex-1 overflow-y-auto px-4 py-3">
+          <div class="space-y-2">
+            <SkillCard
+              v-for="skill in skills"
+              :key="skill.location"
+              :skill="skill"
+              :selected="selectedSkill?.location === skill.location"
+              @click="handleSelectSkill(skill)"
+            />
+          </div>
         </div>
       </div>
-      
-      <!-- Create button (shown when skills exist) -->
-      <div v-if="skills.length > 0" class="px-4 pb-4 border-t border-border pt-4">
-        <button
-          class="w-full px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-          @click="handleCreateSkill"
-        >
-          Create New Skill
-        </button>
-      </div>
-    </div>
     
     <!-- Right panel: Detail panel (conditional) -->
     <SkillDetailPanel
@@ -131,14 +124,22 @@ function handleClosePanel() {
 }
 
 async function handleSaveSkill(skill: SkillInfo, content: string) {
-  if (!skill.location || !currentWorkspace.value?.path) {
-    console.error('Cannot save: missing location or workspace')
+  console.log('Saving skill:', skill.name, 'location:', skill.location)
+  
+  if (!skill.location) {
+    console.error('Cannot save: missing location')
+    return
+  }
+  
+  // Check for built-in skills (only reject special markers, not actual file paths)
+  if (skill.location === '<built-in>' || skill.location.includes('<built-in>')) {
+    console.error('Cannot save built-in skills')
     return
   }
   
   try {
-    // Write to file via IPC
-    await window.desktop.file.write(skill.location, content, currentWorkspace.value.path)
+    // Write to skill file via dedicated skill IPC
+    await window.desktop.skill.write(skill.location, content)
     console.log('Skill saved successfully')
     
     // Reload skills to get updated content

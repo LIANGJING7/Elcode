@@ -6,7 +6,6 @@ import { setMessageRepository } from './stores/message'
 import { setStreamDependencies } from './stores/stream'
 import { useMessageStore } from './stores/message'
 import './styles/global.css'
-import './artifacts/renderers'
 
 const pinia = createPinia()
 const app = createApp(App)

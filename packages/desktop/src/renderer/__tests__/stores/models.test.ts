@@ -76,9 +76,17 @@ describe('modelsStore', () => {
           models: {
             'claude-3': { name: 'Claude 3' }
           }
+        },
+        {
+          id: 'unconnected',
+          name: 'Unconnected Provider',
+          source: 'catalog',
+          models: {
+            'some-model': { name: 'Some Model' }
+          }
         }
       ],
-      connected: [],
+      connected: ['openai', 'anthropic'], // Only these are connected
       default: {}
     }
 
@@ -87,11 +95,45 @@ describe('modelsStore', () => {
     await store.loadModels()
 
     const options = store.modelOptions
+    // Only connected providers are shown (3 models from 2 providers)
     expect(options).toHaveLength(3)
     expect(options[0].label).toBe('Anthropic / Claude 3') // sorted
     expect(options[0].value).toBe('claude-3')
     expect(options[1].label).toBe('OpenAI / GPT-3.5 Turbo')
     expect(options[2].label).toBe('OpenAI / GPT-4')
+    // Unconnected provider should not appear
+    expect(options.find(o => o.value === 'some-model')).toBeUndefined()
+  })
+
+  it('loadModels filters out unconnected providers', async () => {
+    const store = useModelsStore()
+    const mockResult = {
+      all: [
+        {
+          id: 'connected',
+          name: 'Connected Provider',
+          source: 'env',
+          models: { 'model-a': { name: 'Model A' } }
+        },
+        {
+          id: 'unconnected',
+          name: 'Unconnected Provider',
+          source: 'catalog',
+          models: { 'model-b': { name: 'Model B' } }
+        }
+      ],
+      connected: ['connected'], // Only 'connected' is in the list
+      default: {}
+    }
+
+    mockConfig.models.mockResolvedValue(mockResult)
+
+    await store.loadModels()
+
+    expect(store.providers).toHaveLength(1)
+    expect(store.providers[0].id).toBe('connected')
+    expect(store.modelOptions).toHaveLength(1)
+    expect(store.modelOptions[0].value).toBe('model-a')
   })
 
   it('loadModels updates sessionOptionsRegistry', async () => {
@@ -105,7 +147,7 @@ describe('modelsStore', () => {
           models: { 'model-1': { name: 'Model 1' } }
         }
       ],
-      connected: [],
+      connected: ['test'], // Provider is connected
       default: {}
     }
 

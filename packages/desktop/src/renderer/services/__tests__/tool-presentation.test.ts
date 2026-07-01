@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest'
+import { markRaw } from 'vue'
 import { toolToPresentationModel } from '../tool-presentation'
 import type { ToolCall } from '../../../types/ipc'
-import type { FileTab } from '../../types/presentation'
+import type { FileTab, FileModel } from '../../types/presentation'
+import TextViewer from '../../components/file-tabs/TextViewer.vue'
+import DiffViewer from '../../components/file-tabs/DiffViewer.vue'
+import ImageViewer from '../../components/file-tabs/ImageViewer.vue'
+import GrepView from '../../components/tool/views/GrepView.vue'
+import GlobView from '../../components/tool/views/GlobView.vue'
+
+// 用 markRaw 包装组件以匹配 tool-presentation.ts 中的实现
+const TextViewerRaw = markRaw(TextViewer)
+const DiffViewerRaw = markRaw(DiffViewer)
+const ImageViewerRaw = markRaw(ImageViewer)
+const GrepViewRaw = markRaw(GrepView)
+const GlobViewRaw = markRaw(GlobView)
 
 describe('toolToPresentationModel — read', () => {
   it('将 read tool (V2 TextPage) 转换为 text FileTab', () => {
@@ -17,12 +30,12 @@ describe('toolToPresentationModel — read', () => {
     const tab = toolToPresentationModel(tool)
     expect(tab).not.toBeNull()
     expect(tab!.id).toBe('t1')
-    expect(tab!.viewer).toBe('text')
+    expect(tab!.component).toBe(TextViewerRaw)
     expect(tab!.title).toBe('main.ts')
     expect(tab!.subtitle).toBe('src/app/')
     expect(tab!.status).toBe('ready')
     expect(tab!.model._kind).toBe('read')
-    const model = tab!.model as Extract<FileTab['model'], { _kind: 'read' }>
+    const model = tab!.model as Extract<FileModel, { _kind: 'read' }>
     expect(model.lines).toHaveLength(3)
     expect(model.lines[0].lineNumber).toBe(5)
     expect(model.lines[0].text).toBe('line1')
@@ -50,7 +63,7 @@ describe('toolToPresentationModel — read', () => {
       output: { structured: { type: 'binary', content: 'iVBOR', mime: 'image/png' } },
     }
     const tab = toolToPresentationModel(tool)
-    expect(tab!.viewer).toBe('image')
+    expect(tab!.component).toBe(ImageViewerRaw)
     expect(tab!.model._kind).toBe('image')
   })
 })
@@ -74,11 +87,11 @@ describe('toolToPresentationModel — edit/write', () => {
     const tab = toolToPresentationModel(tool)
     expect(tab).not.toBeNull()
     expect(tab!.id).toBe('e1')
-    expect(tab!.viewer).toBe('diff')
+    expect(tab!.component).toBe(DiffViewerRaw)
     expect(tab!.title).toBe('helpers.ts')
     expect(tab!.subtitle).toBe('src/utils/')
     expect(tab!.model._kind).toBe('diff')
-    const model = tab!.model as Extract<FileTab['model'], { _kind: 'diff' }>
+    const model = tab!.model as Extract<FileModel, { _kind: 'diff' }>
     expect(model.statistics.additions).toBe(1)
     expect(model.statistics.deletions).toBe(1)
     expect(model.lines.length).toBe(4) // hunk + remove + add + context
@@ -101,18 +114,68 @@ describe('toolToPresentationModel — edit/write', () => {
     }
     const tab = toolToPresentationModel(tool)
     expect(tab).not.toBeNull()
-    expect(tab!.viewer).toBe('diff')
+    expect(tab!.component).toBe(DiffViewerRaw)
   })
+})
 
-  it('glob/grep tool 返回 null (不打开 FileTab)', () => {
+describe('toolToPresentationModel — grep/glob', () => {
+  it('grep tool 返回 GrepView FileTab', () => {
     const tool: ToolCall = {
       id: 'g1',
       name: 'grep',
       status: 'completed',
-      args: { pattern: 'foo' },
-      output: { structured: { type: 'unknown' } },
+      args: { pattern: 'foo', path: 'src' },
+      output: {
+        structured: {
+          items: [
+            { resource: 'src/a.ts', line: 10, lines: 'foo bar' },
+            { resource: 'src/b.ts', line: 20, lines: 'foo baz' },
+          ],
+        },
+      },
     }
     const tab = toolToPresentationModel(tool)
-    expect(tab).toBeNull()
+    expect(tab).not.toBeNull()
+    expect(tab!.component).toBe(GrepViewRaw)
+    expect(tab!.title).toContain('grep')
+    expect(tab!.model._kind).toBe('grep')
+  })
+
+  it('glob tool 返回 GlobView FileTab', () => {
+    const tool: ToolCall = {
+      id: 'g2',
+      name: 'glob',
+      status: 'completed',
+      args: { pattern: '*.ts', path: 'src' },
+      output: {
+        structured: {
+          items: [
+            { resource: 'src/a.ts' },
+            { resource: 'src/b.ts' },
+          ],
+        },
+      },
+    }
+    const tab = toolToPresentationModel(tool)
+    expect(tab).not.toBeNull()
+    expect(tab!.component).toBe(GlobViewRaw)
+    expect(tab!.title).toContain('glob')
+    expect(tab!.model._kind).toBe('glob')
+  })
+})
+
+describe('toolToPresentationModel — unknown tool', () => {
+  it('未注册工具返回 UnknownViewer FileTab', () => {
+    const tool: ToolCall = {
+      id: 'u1',
+      name: 'unknown_tool',
+      status: 'completed',
+      args: { foo: 'bar' },
+      output: { result: 'some result' },
+    }
+    const tab = toolToPresentationModel(tool)
+    expect(tab).not.toBeNull()
+    expect(tab!.title).toBe('unknown_tool')
+    expect(tab!.model._kind).toBe('unknown')
   })
 })

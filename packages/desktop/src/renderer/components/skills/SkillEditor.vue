@@ -4,7 +4,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import loader from '@monaco-editor/loader'
+import * as monaco from 'monaco-editor'
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+
+// Configure Monaco environment for Electron/Vite
+// Markdown doesn't need a dedicated worker - it uses the base editor worker
+self.MonacoEnvironment = {
+  getWorker(_workerId: string, label: string) {
+    return new editorWorker()
+  }
+}
 
 const props = defineProps<{
   content: string
@@ -16,14 +25,12 @@ const emit = defineEmits<{
 }>()
 
 const editorContainer = ref<HTMLDivElement | null>(null)
-let editorInstance: any = null
+let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null
 
-onMounted(async () => {
+onMounted(() => {
   if (!editorContainer.value) return
 
-  // Initialize Monaco Editor
-  const monaco = await loader.init()
-  
+  // Create editor directly using monaco-editor package
   editorInstance = monaco.editor.create(editorContainer.value, {
     value: props.content,
     language: 'markdown',
@@ -46,7 +53,17 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (editorInstance) {
-    editorInstance.dispose()
+    // Monaco editor dispose can throw "Canceled" error from internal Delayer
+    // This is a known issue - wrap in try-catch to prevent console errors
+    try {
+      editorInstance.dispose()
+    } catch (e) {
+      // Ignore "Canceled" errors from Monaco's internal operations
+      if (e instanceof Error && e.message !== 'Canceled') {
+        console.error('Monaco editor dispose error:', e)
+      }
+    }
+    editorInstance = null
   }
 })
 

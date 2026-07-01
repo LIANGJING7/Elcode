@@ -73,7 +73,7 @@
       <div class="drag flex-shrink-0" style="width: 138px"></div>
     </div>
 
-    <!-- 主体: 侧边栏 + 内容区 + Inspector -->
+    <!-- 主体: 侧边栏 + 内容区 + FileTabsPanel -->
     <div class="flex flex-1 min-h-0">
       <Sidebar v-show="ui.sidebarOpen" />
 
@@ -86,7 +86,6 @@
           :session-id="currentSessionId ?? ''"
           :messages="currentMessages"
           :streaming-message="sessionStore.streamingMessage"
-          @inspect="handleInspect"
           @open-file="handleOpenFile"
         />
         <SkillView v-else-if="effectiveView === 'skills'" key="skills" />
@@ -99,9 +98,6 @@
 
       <!-- Right Panel: FileTabsPanel (文件标签页) -->
       <FileTabsPanel />
-
-      <!-- Inspector (Glob/Grep 等 inspect 工具，当 FileTabsPanel 无标签时显示) -->
-      <Inspector v-if="showInspector" :messages="currentMessages" />
     </div>
   </div>
 </template>
@@ -115,7 +111,6 @@ import NewSessionView from './components/NewSessionView.vue'
 import SkillView from './components/skills/SkillView.vue'
 import McpView from './components/mcp/McpView.vue'
 import SettingsView from './components/settings/SettingsView.vue'
-import Inspector from './components/artifacts/Inspector.vue'
 import FileTabsPanel from './components/file-tabs/FileTabsPanel.vue'
 import { toolToPresentationModel } from './services/tool-presentation'
 import type { ToolCall } from './types/ipc'
@@ -172,15 +167,30 @@ function doExport() {
 
 // view 由业务状态决定默认页面，临时 UI 状态只表示用户操作。
 const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'>(() => {
+  // 用户显式选择的视图优先（settings/skills/mcp 可无会话访问）
+  if (ui.view === 'settings' || ui.view === 'skills' || ui.view === 'mcp') {
+    console.log('[DEBUG effectiveView] User selected view:', ui.view)
+    return ui.view
+  }
+
   // 业务状态决定默认页面
-  if (!hasCurrentWorkspace.value) return 'welcome'
-  if (!currentSessionId.value) return 'newSession'
-  
+  if (!hasCurrentWorkspace.value) {
+    console.log('[DEBUG effectiveView] No workspace → welcome')
+    return 'welcome'
+  }
+  if (!currentSessionId.value) {
+    console.log('[DEBUG effectiveView] No sessionId → newSession')
+    return 'newSession'
+  }
+
   // 临时 UI 状态：用户正在创建新会话
-  if (sessionStore.isPendingNewSession) return 'newSession'
-  
-  // 用户选择的视图
-  return ui.view
+  if (sessionStore.isPendingNewSession) {
+    console.log('[DEBUG effectiveView] isPendingNewSession → newSession')
+    return 'newSession'
+  }
+
+  console.log('[DEBUG effectiveView] Has session, default → chat')
+  return 'chat'
 })
 
 watch(
@@ -213,7 +223,7 @@ onMounted(async () => {
   }
 
   if (workspaceStore.currentWorkspace) {
-    await sessionStore.loadConversations(workspaceStore.currentWorkspace.path)
+    await sessionStore.reload()
     await modelsStore.loadModels(workspaceStore.currentWorkspace.path)
   }
 })
@@ -238,27 +248,12 @@ async function handleDeleteSession() {
   }
 }
 
-function handleInspect(toolCallId: string) {
-  ui.activeToolCallId = toolCallId
-  ui.inspectorOpen = true
-}
-
-// 处理工具调用点击文件名 → 打开 FileTabsPanel
+// 处理工具调用点击 → 打开 FileTabsPanel
 function handleOpenFile(tool: ToolCall) {
   const tab = toolToPresentationModel(tool)
-  if (tab) {
-    // Read/Edit/Write → 打开 FileTabsPanel
-    ui.openFileTab(tab)
-  } else {
-    // Glob/Grep 等 → 保持 inspect 行为
-    handleInspect(tool.id)
-  }
+  if (!tab) return
+  ui.openFileTab(tab)
 }
-
-// Inspector 仅在 FileTabsPanel 无标签且 inspect 激活时显示
-const showInspector = computed(() =>
-  ui.inspectorOpen && Boolean(ui.activeToolCallId) && ui.fileTabs.length === 0,
-)
 </script>
 
 <style scoped>

@@ -25,7 +25,6 @@
     <PanelActions
       :mode="mode"
       :saving="saving"
-      @edit="handleEdit"
       @copy="handleCopy"
       @cancel="handleCancel"
       @save="handleSave"
@@ -34,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { SkillInfo } from '../../../types/ipc'
 import PanelHeader from '../skill-detail/PanelHeader.vue'
 import PanelActions from '../skill-detail/PanelActions.vue'
@@ -78,11 +77,6 @@ function handleSwitchMode(newMode: 'view' | 'edit') {
     mode.value = 'view'
     hasUnsavedChanges.value = false
   }
-}
-
-function handleEdit() {
-  mode.value = 'edit'
-  editContent.value = props.skill?.content || ''
 }
 
 async function handleCopy() {

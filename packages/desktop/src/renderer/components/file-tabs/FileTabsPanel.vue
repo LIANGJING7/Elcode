@@ -1,25 +1,12 @@
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
+import { computed } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import FileTabsHeader from './FileTabsHeader.vue'
-import TextViewer from './TextViewer.vue'
-import DiffViewer from './DiffViewer.vue'
-import ImageViewer from './ImageViewer.vue'
 
 const ui = useUiStore()
 
-const VIEWER_MAP: Record<string, Component> = {
-  text: TextViewer,
-  diff: DiffViewer,
-  image: ImageViewer,
-}
-
 const activeTab = computed(() =>
   ui.fileTabs.find((t) => t.id === ui.activeFileTabId),
-)
-
-const viewerComponent = computed(() =>
-  VIEWER_MAP[activeTab.value?.viewer ?? 'text'],
 )
 
 function handleViewerScroll(scrollTop: number) {
@@ -42,9 +29,10 @@ function handleViewerScroll(scrollTop: number) {
       @close-all="ui.closeAllFileTabs"
     />
 
+    <!-- 直接渲染 tab.component，无需 VIEWER_MAP -->
     <component
       v-if="activeTab"
-      :is="viewerComponent"
+      :is="activeTab.component"
       :model="activeTab.model"
       :status="activeTab.status"
       @scroll="handleViewerScroll"

@@ -28,18 +28,12 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Esc — 中断流式生成 或 收起产物面板
+    // Esc — 中断流式生成
     if (e.key === 'Escape') {
       // 有活跃流 → 中断
       if (stream?.activeRun?.value) {
         e.preventDefault()
         stream.interrupt()
-        return
-      }
-      // 空闲态 → 收起产物面板(若开)
-      if (ui.artifactPanelOpen) {
-        e.preventDefault()
-        ui.closeArtifactPanel()
         return
       }
     }

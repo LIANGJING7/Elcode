@@ -133,12 +133,19 @@ export function useStreamingStore(): StreamingStore {
     console.log('[handleEvent] Processing event type:', event?.type, 'for session:', sessionId)
     
     if (event?.type === 'message.part.updated') {
-      const part = props.part as { id?: string; type?: string; text?: string; time?: { end?: number } } | undefined
+      const part = props.part as { id?: string; type?: string; text?: string; time?: { end?: number }; messageID?: string } | undefined
       console.log('[handleEvent] message.part.updated - part:', part)
       if (part?.id && part?.type) {
         const partType = part.type === 'reasoning' ? 'reasoning' : 'text'
         partTypeMap.set(part.id, partType)
         console.log('[handleEvent] partTypeMap updated:', part.id, '→', partType)
+        
+        // Capture messageID from text parts to set stream.message.id
+        // This is needed because V1 format doesn't have TEXT_STARTED event with messageID
+        if (partType === 'text' && part.messageID) {
+          state.message.id = part.messageID
+          console.log('[handleEvent] Set message.id to:', part.messageID)
+        }
         
         // For reasoning part, set reasoning status to done
         // This is needed because V1 format doesn't have REASONING_ENDED event
