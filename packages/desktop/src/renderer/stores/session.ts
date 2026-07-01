@@ -743,9 +743,22 @@ export const useSessionStore = defineStore('session', () => {
     watch(
       () => streamingStore.currentStream.value?.status,
       (status) => {
+        console.log('[WATCH] Streaming status changed to:', status)
+        
         if (status === 'done' && currentConversation.value) {
           const stream = streamingStore.currentStream.value
-          if (!stream) return
+          if (!stream) {
+            console.log('[WATCH] No stream - skipping')
+            return
+          }
+
+          console.log('[WATCH] Building final message:')
+          console.log('[WATCH]   stream.message.id:', stream.message.id)
+          console.log('[WATCH]   stream.message.content length:', stream.message.content.length)
+          console.log('[WATCH]   stream.reasoning.status:', stream.reasoning.status)
+          console.log('[WATCH]   stream.reasoning.content length:', stream.reasoning.content.length)
+          console.log('[WATCH]   displayedContent:', streamingStore.displayedContent.value?.slice(0, 100))
+          console.log('[WATCH]   displayedReasoning:', streamingStore.displayedReasoning.value?.slice(0, 100))
 
           const finalMsg: Message = {
             id: stream.message.id || 'streaming',
@@ -767,14 +780,22 @@ export const useSessionStore = defineStore('session', () => {
               : undefined
           }
 
+          console.log('[WATCH] Final message reasoning:', finalMsg.reasoning?.slice(0, 100) || 'undefined')
+          console.log('[WATCH] Final message content:', finalMsg.content?.slice(0, 100) || 'empty')
+
           const exists = currentConversation.value.messages.some(m => m.id === finalMsg.id)
+          console.log('[WATCH] Message exists:', exists)
 
           if (!exists && finalMsg.content) {
             currentConversation.value.messages.push(finalMsg)
+            console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no')
+          } else {
+            console.log('[WATCH] Skipped - exists or no content')
           }
 
           nextTick(() => {
             if (currentSessionId.value) {
+              console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
               streamingStore.resetStream(currentSessionId.value)
             }
           })

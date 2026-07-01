@@ -130,49 +130,66 @@ export function useStreamingStore(): StreamingStore {
     const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
     const props = event?.data ?? event?.properties ?? {}
     
+    console.log('[handleEvent] Processing event type:', event?.type, 'for session:', sessionId)
+    
     if (event?.type === 'message.part.updated') {
       const part = props.part as { id?: string; type?: string } | undefined
+      console.log('[handleEvent] message.part.updated - part:', part)
       if (part?.id && part?.type) {
         const partType = part.type === 'reasoning' ? 'reasoning' : 'text'
         partTypeMap.set(part.id, partType)
-        console.log('[Store] partTypeMap updated:', part.id, '→', partType)
+        console.log('[handleEvent] partTypeMap updated:', part.id, '→', partType)
         
         // Flush pending deltas for this partId
+        console.log('[handleEvent] Calling flushPendingDeltas for partId:', part.id, 'type:', partType)
         flushPendingDeltas(sessionId, part.id, partType)
+      } else {
+        console.log('[handleEvent] message.part.updated - missing part.id or part.type')
       }
     }
     
     const action = normalizeEvent(rawEvent, state.version, partTypeMap)
-    if (!action) return
+    if (!action) {
+      console.log('[handleEvent] No action returned from normalizer for type:', event?.type)
+      return
+    }
 
     // Version check (per session)
     if ('version' in action && action.version < state.version) {
-      console.log('[Store] Discarding stale event for session:', sessionId, 'v:', action.version, 'current:', state.version)
+      console.log('[handleEvent] Discarding stale event for session:', sessionId, 'v:', action.version, 'current:', state.version)
       return
     }
 
     // Auto-transition to streaming if idle and receiving streaming event
     if (state.status === 'idle' && isStreamingEvent(action)) {
-      console.log('[Store] Auto-transitioning to streaming for session:', sessionId)
+      console.log('[handleEvent] Auto-transitioning to streaming for session:', sessionId)
       state.status = 'streaming'
       state.startedAt = Date.now()
     }
 
     // Dispatch action to this session's reducer
-    console.log('[Store] Dispatching to session:', sessionId, 'action:', action.type)
+    console.log('[handleEvent] Dispatching action:', action.type, 'to session:', sessionId)
     streamingReducer(state, action)
-    console.log('[Store] After dispatch - session:', sessionId, 'status:', state.status, 'content:', state.message.content.length)
+    console.log('[handleEvent] After dispatch - status:', state.status, 'message.content:', state.message.content.length, 'reasoning.content:', state.reasoning.content.length)
   }
   
   // Flush pending deltas for a partId after receiving message.part.updated
   function flushPendingDeltas(sessionId: string, partId: string, partType: 'reasoning' | 'text') {
     const state = streams[sessionId]
-    if (!state) return
+    if (!state) {
+      console.log('[flushPendingDeltas] No state for session:', sessionId)
+      return
+    }
     
     const pending = state.pendingDeltas.get(partId)
-    if (!pending || pending.length === 0) return
+    if (!pending || pending.length === 0) {
+      console.log('[flushPendingDeltas] No pending deltas for partId:', partId)
+      return
+    }
     
-    console.log('[Store] Flushing pending deltas for partId:', partId, 'type:', partType, 'count:', pending.length)
+    console.log('[flushPendingDeltas] Flushing pending deltas for partId:', partId, 'type:', partType, 'count:', pending.length)
+    console.log('[flushPendingDeltas] Before flush - reasoning.status:', state.reasoning.status, 'reasoning.content length:', state.reasoning.content.length)
+    console.log('[flushPendingDeltas] Before flush - message.content length:', state.message.content.length)
     
     // For reasoning type, set reasoning status before dispatching deltas
     if (partType === 'reasoning') {
@@ -182,7 +199,7 @@ export function useStreamingStore(): StreamingStore {
       if (!state.reasoning.startedAt) {
         state.reasoning.startedAt = Date.now()
       }
-      console.log('[Store] Reasoning status set to thinking for partId:', partId)
+      console.log('[flushPendingDeltas] Reasoning status set to thinking for partId:', partId)
     }
     
     // Dispatch each pending delta as the correct type
@@ -210,9 +227,12 @@ export function useStreamingStore(): StreamingStore {
       state.reasoning.endedAt = Date.now()
     }
     
+    console.log('[flushPendingDeltas] After flush - reasoning.status:', state.reasoning.status, 'reasoning.content length:', state.reasoning.content.length)
+    console.log('[flushPendingDeltas] After flush - message.content length:', state.message.content.length)
+    
     // Clear pending deltas for this partId
     state.pendingDeltas.delete(partId)
-    console.log('[Store] Pending deltas flushed and cleared for partId:', partId)
+    console.log('[flushPendingDeltas] Pending deltas cleared for partId:', partId)
   }
 
   // Clean up completed session's streaming state
