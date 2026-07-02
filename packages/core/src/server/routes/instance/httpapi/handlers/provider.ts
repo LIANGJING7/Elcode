@@ -309,6 +309,39 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       )
     })
 
+    // Delete a model from provider config
+    const deleteModel = Effect.fn("ProviderHttpApi.deleteModel")(function* (ctx: {
+      params: { providerID: ProviderV2.ID, modelID: string }
+    }) {
+      return yield* withCatalog(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            const transform = yield* catalog.transform()
+            
+            // Try to remove the model from config
+            yield* transform((editor) => {
+              editor.provider.update(ctx.params.providerID, (provider) => {
+                // Check if model exists in config's models
+                if (provider.models && provider.models[ctx.params.modelID]) {
+                  delete provider.models[ctx.params.modelID]
+                }
+              })
+            })
+            
+            return { success: true }
+          }),
+        ),
+      ).pipe(
+        Effect.catch(() =>
+          Effect.succeed({
+            success: false,
+            error: "Failed to delete model from config",
+          }),
+        ),
+      )
+    })
+
     return handlers
       .handle("list", list)
       .handle("auth", auth)
@@ -319,5 +352,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       .handle("delete", deleteProvider)
       .handle("test", test)
       .handle("refreshModels", refreshModels)
+      .handle("deleteModel", deleteModel)
   }),
 )

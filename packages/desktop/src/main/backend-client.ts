@@ -465,6 +465,11 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/provider/${providerId}/refresh-models?${params}`) as Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }>
     },
+
+    deleteModel: async (providerId: string, modelId: string, directory?: string): Promise<{ success: boolean; error?: string }> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("DELETE", `/provider/${providerId}/models/${modelId}?${params}`) as Promise<{ success: boolean; error?: string }>
+    },
   },
   
   // Phase 5: Skills & MCP

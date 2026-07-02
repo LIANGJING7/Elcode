@@ -175,6 +175,17 @@ export const ProviderApi = HttpApi.make("provider")
             description: "Refresh the list of models available for a provider.",
           }),
         ),
+        HttpApiEndpoint.delete("deleteModel", `${root}/:providerID/models/:modelID`, {
+          params: { providerID: ProviderV2.ID, modelID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(ProviderMutationResult, "Delete model result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.deleteModel",
+            summary: "Delete a model from provider",
+            description: "Delete a specific model from a provider's configuration.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({
