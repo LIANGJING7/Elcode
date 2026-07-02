@@ -14,7 +14,12 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "electron-builder"
+    "package": "electron-builder",
+    "build:core": "cd ../core && bun run build --single",
+    "build:win": "npm run build:core && npm run build && electron-builder --win",
+    "build:mac": "npm run build:core && npm run build && electron-builder --mac",
+    "build:linux": "npm run build:core && npm run build && electron-builder --linux",
+    "build:all": "npm run build:core && npm run build && electron-builder"
   },
   "dependencies": {
     "@radix-icons/vue": "^1.0.0",

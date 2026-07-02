@@ -2,10 +2,14 @@ appId: com.opencode.desktop
 productName: OpenCode Desktop
 directories:
   buildResources: build
-  output: release
+  output: release_new
 files:
   - dist/**/*
   - build/**/*
+# Include compiled core backend executable (path is relative to packages/desktop)
+extraResources:
+  - from: "../../dist/opencode-windows-x64/bin/opencode.exe"
+    to: "backend/opencode.exe"
 mac:
   icon: build/icon.png
   category: public.app-category.developer-tools
