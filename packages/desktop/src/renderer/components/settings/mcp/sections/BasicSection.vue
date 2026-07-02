@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
-import type { McpConfig } from '../../../../types/ipc'
+import type { McpConfig } from '../../../../../types/ipc'
 
 const props = defineProps<{
   config: McpConfig

@@ -100,7 +100,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AuthenticationState } from '../../../../types/ipc'
+import type { AuthenticationState } from '../../../../../types/ipc'
 
 const props = defineProps<{
   authState: AuthenticationState
@@ -112,7 +112,7 @@ defineEmits<{
   reconnect: []
   logout: []
   cancel: []
-  copy-url: []
+  'copy-url': []
 }>()
 
 const statusText = computed(() => {

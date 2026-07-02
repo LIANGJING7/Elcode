@@ -54,7 +54,7 @@ const props = defineProps<{
 defineEmits<{
   select: [name: string]
   add: []
-  open-config: []
+  'open-config': []
 }>()
 
 const serverNames = computed(() => Object.keys(props.servers).sort())

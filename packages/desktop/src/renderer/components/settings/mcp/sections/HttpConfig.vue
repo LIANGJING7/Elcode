@@ -100,9 +100,9 @@
               预注册客户端
             </button>
             <div v-if="oauthMode === 'pre-registered'" class="space-y-2 pl-3">
-              <input v-model="localConfig.oauth!.clientId" placeholder="Client ID" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
-              <input v-model="localConfig.oauth!.clientSecret" placeholder="Client Secret" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
-              <input v-model="localConfig.oauth!.scope" placeholder="Scope" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
+              <input v-model="oauthFields.clientId" placeholder="Client ID" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
+              <input v-model="oauthFields.clientSecret" placeholder="Client Secret" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
+              <input v-model="oauthFields.scope" placeholder="Scope" class="w-full px-2 py-1.5 text-xs bg-bg-surface border border-border rounded" />
             </div>
             <button
               class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-left transition-colors cursor-pointer border border-border"
@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { reactive, computed, watch, ref } from 'vue'
-import type { McpConfig } from '../../../../types/ipc'
+import type { McpConfig } from '../../../../../types/ipc'
 
 const props = defineProps<{
   config: McpConfig
@@ -130,11 +130,21 @@ const emit = defineEmits<{
   update: [config: McpConfig]
 }>()
 
-const localConfig = reactive<McpConfig>({
+const localConfig = reactive({
   url: props.config.url || '',
-  headers: props.config.headers ? { ...props.config.headers } : {},
+  headers: (props.config.headers ? { ...props.config.headers } : {}) as Record<string, string>,
   timeout: props.config.timeout,
-  oauth: props.config.oauth ? { ...props.config.oauth as { clientId?: string; clientSecret?: string; scope?: string } } : undefined
+  oauth: (props.config.oauth !== false && props.config.oauth
+    ? { ...props.config.oauth } 
+    : undefined) as { clientId?: string; clientSecret?: string; scope?: string } | false | undefined
+})
+
+// Separate reactive for OAuth fields to avoid type issues with false | undefined
+const initialOAuth = props.config.oauth !== false && props.config.oauth ? props.config.oauth : {}
+const oauthFields = reactive({
+  clientId: initialOAuth.clientId || '',
+  clientSecret: initialOAuth.clientSecret || '',
+  scope: initialOAuth.scope || ''
 })
 
 const showHeaderValues = reactive<Record<string, boolean>>({})
@@ -145,15 +155,15 @@ const oauthMode = ref<'auto' | 'pre-registered' | 'disabled'>(
 
 const headerEntries = computed(() => Object.entries(localConfig.headers || {}))
 
-watch([localConfig, oauthMode], () => {
+watch([localConfig, oauthMode, oauthFields], () => {
   if (oauthMode.value === 'disabled') {
     localConfig.oauth = false
   } else if (oauthMode.value === 'auto') {
     localConfig.oauth = undefined
-  } else if (oauthMode.value === 'pre-registered' && !localConfig.oauth) {
-    localConfig.oauth = { clientId: '', clientSecret: '', scope: '' }
+  } else if (oauthMode.value === 'pre-registered') {
+    localConfig.oauth = { clientId: oauthFields.clientId, clientSecret: oauthFields.clientSecret, scope: oauthFields.scope }
   }
-  emit('update', { ...props.config, ...localConfig })
+  emit('update', { ...props.config, ...localConfig } as McpConfig)
 }, { deep: true })
 
 function addHeader() {

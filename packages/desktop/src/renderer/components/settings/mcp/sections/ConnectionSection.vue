@@ -39,7 +39,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { McpServerStatus, McpRuntimeState } from '../../../../types/ipc'
+import type { McpServerStatus, McpRuntimeState } from '../../../../../types/ipc'
 
 const props = defineProps<{
   status: McpServerStatus

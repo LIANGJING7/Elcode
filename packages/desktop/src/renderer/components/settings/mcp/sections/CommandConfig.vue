@@ -110,7 +110,7 @@
 
 <script setup lang="ts">
 import { reactive, computed, watch } from 'vue'
-import type { McpConfig } from '../../../../types/ipc'
+import type { McpConfig } from '../../../../../types/ipc'
 
 const props = defineProps<{
   config: McpConfig
@@ -120,11 +120,11 @@ const emit = defineEmits<{
   update: [config: McpConfig]
 }>()
 
-const localConfig = reactive<McpConfig>({
+const localConfig = reactive({
   command: props.config.command || '',
-  args: props.config.args ? [...props.config.args] : [],
+  args: (props.config.args ? [...props.config.args] : []) as string[],
   cwd: props.config.cwd || '',
-  environment: props.config.environment ? { ...props.config.environment } : {}
+  environment: (props.config.environment ? { ...props.config.environment } : {}) as Record<string, string>
 })
 
 const showEnvValues = reactive<Record<string, boolean>>({})
@@ -132,7 +132,7 @@ const showEnvValues = reactive<Record<string, boolean>>({})
 const envEntries = computed(() => Object.entries(localConfig.environment || {}))
 
 watch(localConfig, (value) => {
-  emit('update', { ...props.config, ...value })
+  emit('update', { ...props.config, ...value } as McpConfig)
 }, { deep: true })
 
 function addArg() {
