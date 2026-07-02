@@ -324,21 +324,19 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
             const transform = yield* catalog.transform()
             console.log('[DeleteModel] transform acquired')
             
-            // Try to remove the model from config
+            // Remove the model using editor.model.remove
             yield* transform((editor) => {
               console.log('[DeleteModel] executing transform')
-              editor.provider.update(ctx.params.providerID, (provider) => {
-                console.log('[DeleteModel] provider keys before:', Object.keys(provider))
-                console.log('[DeleteModel] provider.models:', provider.models ? Object.keys(provider.models) : 'no models')
-                // Check if model exists in config's models
-                if (provider.models && provider.models[ctx.params.modelID]) {
-                  console.log('[DeleteModel] model found, deleting:', ctx.params.modelID)
-                  delete provider.models[ctx.params.modelID]
-                  console.log('[DeleteModel] model deleted, remaining models:', Object.keys(provider.models || {}))
-                } else {
-                  console.log('[DeleteModel] model NOT in config, skipping')
-                }
-              })
+              const existingModel = editor.model.get(ctx.params.providerID, ctx.params.modelID)
+              console.log('[DeleteModel] existing model:', existingModel ? 'found' : 'not found')
+              
+              if (existingModel) {
+                console.log('[DeleteModel] removing model:', ctx.params.modelID)
+                editor.model.remove(ctx.params.providerID, ctx.params.modelID)
+                console.log('[DeleteModel] model removed')
+              } else {
+                console.log('[DeleteModel] model not in catalog, skipping')
+              }
             })
             
             console.log('[DeleteModel] transform completed')
