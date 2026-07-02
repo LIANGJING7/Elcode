@@ -14,7 +14,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  inspect: [toolCallId: string]
   openFile: [tool: ToolCall]
 }>()
 
@@ -55,7 +54,6 @@ function handleRemoveQueued(pendingId: string) {
     <ChatTimeline
       :messages="messages"
       :streaming-message="streamingMessage"
-      @inspect="emit('inspect', $event)"
       @open-file="emit('openFile', $event)"
     />
 

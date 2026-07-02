@@ -10,7 +10,7 @@ const props = defineProps<{
   streamingMessage: Message | null
 }>()
 
-const emit = defineEmits<{ inspect: [id: string]; openFile: [tool: ToolCall] }>()
+const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
 
 // Debug logging
 watch(() => props.messages, (msgs) => {
@@ -89,7 +89,7 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
     <!-- 消息列表（连续 assistant 已按 user turn 聚合） -->
     <div v-for="item in aggregatedItems" :key="item.key">
       <MessageUser v-if="item.role === 'user'" :message="item.message" />
-      <MessageAssistant v-else :message="item.message" @inspect="emit('inspect', $event)" @open-file="emit('openFile', $event)" />
+      <MessageAssistant v-else :message="item.message" @open-file="emit('openFile', $event)" />
     </div>
 
     <!-- 流式消息 - DEBUG: always render when streamingMessage exists -->

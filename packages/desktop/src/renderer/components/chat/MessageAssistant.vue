@@ -6,7 +6,7 @@ import ReasoningBlock from './ReasoningBlock.vue'
 import CodeBlock from './CodeBlock.vue'
 
 const props = defineProps<{ message: Message }>()
-const emit = defineEmits<{ inspect: [id: string]; openFile: [tool: ToolCall] }>()
+const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
 
 // Format duration (ms) to human readable
 const formattedDuration = computed(() => {
@@ -47,10 +47,6 @@ const showReasoning = computed(() => {
   // For history messages without reasoningDuration, default to show
   return true
 })
-
-function handleInspect(id: string) {
-  emit('inspect', id)
-}
 </script>
 
 <template>
@@ -81,7 +77,6 @@ function handleInspect(id: string) {
           v-for="tc in message.toolCalls"
           :key="tc.id"
           :tool="tc"
-          @inspect="handleInspect"
           @open-file="(tool) => emit('openFile', tool)"
         />
       </div>
