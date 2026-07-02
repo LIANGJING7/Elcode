@@ -144,7 +144,7 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.get("tools", McpPaths.tools, {
           query: WorkspaceRoutingQuery,
           success: described(
-            Schema.Record(Schema.String, Schema.Array(MCP.ToolSchema)),
+            Schema.Record(Schema.String, Schema.Array(Schema.Unknown)),
             "MCP tools list grouped by server"
           ),
         }).annotateMerge(
@@ -172,7 +172,7 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.get("resources", McpPaths.resources, {
           query: WorkspaceRoutingQuery,
           success: described(
-            Schema.Record(Schema.String, Schema.Array(MCP.Resource)),
+            Schema.Record(Schema.String, Schema.Array(Schema.Unknown)),
             "MCP resources list grouped by server"
           ),
         }).annotateMerge(
@@ -187,7 +187,7 @@ export const McpApi = HttpApi.make("mcp")
           params: { name: Schema.String },
           query: WorkspaceRoutingQuery,
           success: described(
-            Schema.Array(MCP.ToolSchema),
+            Schema.Array(Schema.Unknown),
             "Tools for specific MCP server"
           ),
           error: McpServerNotFoundError,
