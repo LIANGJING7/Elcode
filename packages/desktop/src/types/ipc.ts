@@ -245,6 +245,10 @@ export const IPC_CHANNELS = {
   CONFIG_SET: 'config:set',
   CONFIG_MODELS: 'config:models',
 
+  // Config file operations (lcode.jsonc, etc.) - handled directly in main process
+  CONFIG_FILE_READ: 'config-file:read',
+  CONFIG_FILE_WRITE: 'config-file:write',
+
   PROVIDER_AUTH_METHODS: 'provider:auth-methods',
   PROVIDER_AUTHORIZE: 'provider:authorize',
   PROVIDER_AUTH_CALLBACK: 'provider:auth-callback',

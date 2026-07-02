@@ -1,82 +1,90 @@
+import path from 'path'
 import { ipcMain } from 'electron'
 import { CHANNELS } from './channels'
-import { backend } from '../backend-client'
-import { assertConfigKeyAllowed } from './guards'
+import { resolveWithinWorkspace } from './guards'
 
-export function registerConfigHandlers() {
-  ipcMain.handle(CHANNELS.CONFIG_GET, async (_event, key: string, directory?: string) => {
-    assertConfigKeyAllowed(key)
-    return await backend.config.get(key, directory)
-  })
+/**
+ * Config file handlers - dedicated for project configuration files like lcode.jsonc.
+ * These are handled directly in the main process using Node.js fs, separate from
+ * general file operations which go through the backend API.
+ * 
+ * This separation ensures:
+ * 1. Clear responsibility: config files are desktop-specific concern
+ * 2. No dependency on backend HTTP API for config file writes (which doesn't exist)
+ * 3. Faster config operations without HTTP roundtrip
+ */
 
-  ipcMain.handle(CHANNELS.CONFIG_SET, async (_event, key: string, value: unknown, directory?: string) => {
-    assertConfigKeyAllowed(key)
-    await backend.config.set(key, value, directory)
-    return true
-  })
+const ALLOWED_CONFIG_FILES = new Set(['lcode.jsonc', 'lcode.json', '.lcode.jsonc', '.lcode.json'])
 
-  ipcMain.handle(CHANNELS.CONFIG_MODELS, async (_event, directory?: string) => {
-    return await backend.config.models(directory)
-  })
+function isAllowedConfigFile(filePath: string): boolean {
+  const basename = path.basename(filePath)
+  return ALLOWED_CONFIG_FILES.has(basename)
+}
 
-  ipcMain.handle(CHANNELS.CONSOLE_GET, async (_event, directory?: string) => {
-    return await backend.console.get(directory)
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_AUTH_METHODS, async (_event, directory?: string) => {
-    return await backend.provider.authMethods(directory)
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_AUTHORIZE, async (_event, providerID: string, method: number, inputs?: Record<string, string>, directory?: string) => {
-    return await backend.provider.authorize(providerID, method, inputs, directory)
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_AUTH_CALLBACK, async (_event, providerID: string, method: number, code?: string, directory?: string) => {
-    return await backend.provider.authCallback(providerID, method, code, directory)
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_ADD, async (_event, config: { name: string; apiKey: string; baseUrl?: string }, directory?: string) => {
+export function registerConfigFileHandlers() {
+  ipcMain.handle(CHANNELS.CONFIG_FILE_READ, async (_event, filePath: string, directory?: string) => {
+    const fs = await import('fs/promises')
+    
+    // Only allow specific config files
+    if (!isAllowedConfigFile(filePath)) {
+      throw new Error(`Config file not allowed: ${filePath}. Only lcode.jsonc/lcode.json are permitted.`)
+    }
+    
+    // Resolve the file path relative to directory
+    let resolvedPath: string
+    if (path.isAbsolute(filePath)) {
+      resolvedPath = resolveWithinWorkspace(filePath, directory)
+    } else if (directory) {
+      resolvedPath = path.resolve(directory, filePath)
+      // Verify it stays within workspace
+      resolveWithinWorkspace(resolvedPath, directory)
+    } else {
+      throw new Error('No directory provided for config file path')
+    }
+    
+    console.log('[ConfigFileHandler] read: resolved path=', resolvedPath)
+    
     try {
-      return await backend.provider.add(config, directory)
-    } catch (err) {
-      console.error('[ConfigHandler] provider add error:', err)
-      return { success: false, error: 'Failed to add provider' }
+      const content = await fs.readFile(resolvedPath, 'utf-8')
+      return { success: true, content }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      // File not found is a valid case - return empty config
+      if (error.includes('ENOENT')) {
+        return { success: true, content: '{}' }
+      }
+      return { success: false, error }
     }
   })
 
-  ipcMain.handle(CHANNELS.PROVIDER_UPDATE, async (_event, providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string) => {
-    try {
-      return await backend.provider.update(providerId, config, directory)
-    } catch (err) {
-      console.error('[ConfigHandler] provider update error:', err)
-      return { success: false, error: 'Failed to update provider' }
+  ipcMain.handle(CHANNELS.CONFIG_FILE_WRITE, async (_event, filePath: string, content: string, directory?: string) => {
+    const fs = await import('fs/promises')
+    
+    // Only allow specific config files
+    if (!isAllowedConfigFile(filePath)) {
+      throw new Error(`Config file not allowed: ${filePath}. Only lcode.jsonc/lcode.json are permitted.`)
     }
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_DELETE, async (_event, providerId: string, directory?: string) => {
-    try {
-      return await backend.provider.delete(providerId, directory)
-    } catch (err) {
-      console.error('[ConfigHandler] provider delete error:', err)
-      return { success: false, error: 'Failed to delete provider' }
+    
+    // Resolve the file path relative to directory
+    let resolvedPath: string
+    if (path.isAbsolute(filePath)) {
+      resolvedPath = resolveWithinWorkspace(filePath, directory)
+    } else if (directory) {
+      resolvedPath = path.resolve(directory, filePath)
+      // Verify it stays within workspace
+      resolveWithinWorkspace(resolvedPath, directory)
+    } else {
+      throw new Error('No directory provided for config file path')
     }
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_TEST, async (_event, providerIdOrConfig: string | { name: string; apiKey: string; baseUrl?: string }, directory?: string) => {
+    
+    console.log('[ConfigFileHandler] write: resolved path=', resolvedPath)
+    
     try {
-      return await backend.provider.test(providerIdOrConfig, directory)
-    } catch (err) {
-      console.error('[ConfigHandler] provider test error:', err)
-      return { success: false, error: 'Failed to test provider' }
-    }
-  })
-
-  ipcMain.handle(CHANNELS.PROVIDER_REFRESH_MODELS, async (_event, providerId: string, directory?: string) => {
-    try {
-      return await backend.provider.refreshModels(providerId, directory)
-    } catch (err) {
-      console.error('[ConfigHandler] provider refresh models error:', err)
-      return { success: false, error: 'Failed to refresh models' }
+      await fs.writeFile(resolvedPath, content, 'utf-8')
+      return { success: true }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      return { success: false, error }
     }
   })
 }

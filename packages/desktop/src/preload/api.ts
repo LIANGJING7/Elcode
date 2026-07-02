@@ -94,6 +94,14 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_MODELS, directory)
   },
 
+  configFile: {
+    read: (filePath: string, directory?: string): Promise<{ success: boolean; content?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_FILE_READ, filePath, directory),
+    
+    write: (filePath: string, content: string, directory?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_FILE_WRITE, filePath, content, directory)
+  },
+
   console: {
     get: (directory?: string): Promise<ConsoleState> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONSOLE_GET, directory)

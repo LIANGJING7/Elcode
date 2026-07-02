@@ -3,7 +3,7 @@ import { CHANNELS, isValidChannel } from './channels'
 import { startBackend } from '../backend-client'
 import { registerSessionHandlers } from './handlers-session'
 import { registerFileHandlers } from './handlers-file'
-import { registerConfigHandlers } from './handlers-config'
+import { registerConfigFileHandlers } from './handlers-config'
 import { registerWorkspaceHandlers } from './handlers-workspace'
 import { registerSkillHandlers } from './handlers-skill'
 import { registerMcpHandlers } from './handlers-mcp'
@@ -15,7 +15,7 @@ import { registerGlobalStateHandlers } from './handlers-global-state'
 export async function registerIPCHandlers() {
   registerSessionHandlers()
   registerFileHandlers()
-  registerConfigHandlers()
+  registerConfigFileHandlers()
   registerWorkspaceHandlers()
   registerSkillHandlers()
   registerMcpHandlers()

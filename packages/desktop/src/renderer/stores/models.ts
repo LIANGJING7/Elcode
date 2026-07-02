@@ -396,13 +396,11 @@ async function loadModels(directory?: string) {
 
       // 读取 lcode.jsonc 配置文件
       const configPath = 'lcode.jsonc'
-      let configText = ''
-      try {
-        configText = await window.desktop.file.read(configPath, directory)
-      } catch (e) {
-        // 文件不存在，创建新配置
-        configText = '{}'
+      const readResult = await window.desktop.configFile.read(configPath, directory)
+      if (!readResult.success) {
+        return { success: false, error: `读取配置文件失败: ${readResult.error}` }
       }
+      const configText = readResult.content || '{}'
 
       // 解析 JSONC（去除注释和尾部逗号）
       // 简单处理：移除 // 和 /**/ 注释，以及尾部逗号
@@ -431,7 +429,10 @@ async function loadModels(directory?: string) {
 
       // 写入配置文件
       const updatedText = JSON.stringify(config, null, 2)
-      await window.desktop.file.write(configPath, updatedText, directory)
+      const writeResult = await window.desktop.configFile.write(configPath, updatedText, directory)
+      if (!writeResult.success) {
+        return { success: false, error: `写入配置文件失败: ${writeResult.error}` }
+      }
 
       // 更新本地状态
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
@@ -477,12 +478,11 @@ async function loadModels(directory?: string) {
 
       // 读取 lcode.jsonc 配置文件
       const configPath = 'lcode.jsonc'
-      let configText = ''
-      try {
-        configText = await window.desktop.file.read(configPath, directory)
-      } catch (e) {
-        return { success: false, error: '配置文件不存在' }
+      const readResult = await window.desktop.configFile.read(configPath, directory)
+      if (!readResult.success) {
+        return { success: false, error: `读取配置文件失败: ${readResult.error}` }
       }
+      const configText = readResult.content || '{}'
 
       // 解析 JSONC
       let cleanText = configText
@@ -493,14 +493,20 @@ async function loadModels(directory?: string) {
       
       const config = JSON.parse(cleanText)
 
-      // 删除模型
-      if (config.provider?.[providerId]?.models?.[modelId]) {
-        delete config.provider[providerId].models[modelId]
+      // 检查模型是否在配置文件中定义
+      if (!config.provider?.[providerId]?.models?.[modelId]) {
+        return { success: false, error: `模型 '${modelId}' 不在配置文件中定义，无法删除` }
       }
+
+      // 删除模型配置
+      delete config.provider[providerId].models[modelId]
 
       // 写入配置文件
       const updatedText = JSON.stringify(config, null, 2)
-      await window.desktop.file.write(configPath, updatedText, directory)
+      const writeResult = await window.desktop.configFile.write(configPath, updatedText, directory)
+      if (!writeResult.success) {
+        return { success: false, error: `写入配置文件失败: ${writeResult.error}` }
+      }
 
       // 更新本地状态
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
