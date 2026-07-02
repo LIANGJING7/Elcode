@@ -173,6 +173,19 @@
               <div v-else class="text-xs text-text-muted py-4 text-center border border-border rounded-lg">
                 暂无模型，请刷新模型列表
               </div>
+
+              <!-- Add Model Button -->
+              <div class="mt-3">
+                <button
+                  class="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm text-text-muted hover:text-text hover:bg-bg-hover rounded-lg border border-dashed border-border hover:border-solid transition-colors cursor-pointer"
+                  @click="showAddModelModal = true"
+                >
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  <span>添加模型</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -323,6 +336,16 @@
       @select="handleModelSelect"
       @close="showModelSelect = false"
     />
+
+    <!-- Add Model Modal -->
+    <AddModelModal
+      :is-open="showAddModelModal"
+      :provider-id="selectedProviderId"
+      :provider-name="selectedProvider?.name"
+      :directory="directory"
+      @success="handleAddModelSuccess"
+      @close="showAddModelModal = false"
+    />
   </div>
 </template>
 
@@ -336,6 +359,7 @@ import OAuthWaitingDialog from './OAuthWaitingDialog.vue'
 import ModelSelectDialog from './ModelSelectDialog.vue'
 import AddProviderModal from './AddProviderModal.vue'
 import EditProviderModal from './EditProviderModal.vue'
+import AddModelModal from './AddModelModal.vue'
 import type { AuthorizationResult } from '../../types/ipc'
 
 const workspaceStore = useWorkspaceStore()
@@ -365,6 +389,7 @@ const showConnectDialog = ref(false)
 const showAuthDialog = ref(false)
 const showOAuthWaiting = ref(false)
 const showModelSelect = ref(false)
+const showAddModelModal = ref(false)
 const selectedProviderId = ref<string>('')
 const selectedAuthMethod = ref<AuthMethod | undefined>(undefined)
 const oauthInputs = ref<Record<string, string>>({})
@@ -513,6 +538,12 @@ function handleModelSelect(providerId: string, modelId: string) {
   if (provider) {
     selectedProviderId.value = provider.id
   }
+}
+
+function handleAddModelSuccess(providerId: string, modelId: string) {
+  showAddModelModal.value = false
+  // 刷新模型列表
+  modelsStore.loadModels(directory.value)
 }
 
 function handleEdit(providerId: string) {

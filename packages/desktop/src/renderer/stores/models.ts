@@ -38,6 +38,21 @@ export interface ConsoleState {
   switchableOrgCount: number
 }
 
+// 添加模型的参数类型
+export interface AddModelPayload {
+  modelId: string
+  name?: string
+  limitContext?: number
+  limitOutput?: number
+}
+
+// 模型操作结果类型
+export interface ModelMutationResult {
+  success: boolean
+  model?: ProviderModel
+  error?: string
+}
+
 // Helper: deduplicate and limit recent models (same as TUI)
 function updateRecentModels(
   model: { providerID: string; modelID: string },
@@ -351,6 +366,155 @@ async function loadModels(directory?: string) {
     }
   }
 
+  async function addModel(
+    providerId: string,
+    payload: AddModelPayload,
+    directory?: string
+  ): Promise<ModelMutationResult> {
+    saving.value = true
+    error.value = null
+    try {
+      // 验证模型ID格式
+      const validPattern = /^[a-zA-Z0-9\-_\/]+$/
+      if (!validPattern.test(payload.modelId)) {
+        return { success: false, error: '模型ID只能包含字母、数字、-、_ 和 /' }
+      }
+
+      // 检查供应商是否存在
+      const provider = providers.value.find(p => p.id === providerId)
+      if (!provider) {
+        return { success: false, error: `供应商 '${providerId}' 不存在` }
+      }
+
+      // 检查模型是否已存在
+      if (provider.models?.[payload.modelId]) {
+        return { success: false, error: `模型 '${payload.modelId}' 已存在` }
+      }
+
+      // 读取 lcode.jsonc 配置文件
+      const configPath = 'lcode.jsonc'
+      let configText = ''
+      try {
+        configText = await window.desktop.file.read(configPath, directory)
+      } catch (e) {
+        // 文件不存在，创建新配置
+        configText = '{}'
+      }
+
+      // 解析 JSONC（去除注释和尾部逗号）
+      // 简单处理：移除 // 和 /**/ 注释，以及尾部逗号
+      let cleanText = configText
+        .replace(/\/\/.*$/gm, '') // 移除单行注释
+        .replace(/\/\*[\s\S]*?\*\//g, '') // 移除多行注释
+        .replace(/,\s*}/g, '}') // 移除对象尾部逗号
+        .replace(/,\s*]/g, ']') // 移除数组尾部逗号
+      
+      const config = JSON.parse(cleanText)
+
+      // 构建新模型配置
+      const newModelConfig: Record<string, any> = {}
+      if (payload.name) newModelConfig.name = payload.name
+      if (payload.limitContext || payload.limitOutput) {
+        newModelConfig.limit = {}
+        if (payload.limitContext) newModelConfig.limit.context = payload.limitContext
+        if (payload.limitOutput) newModelConfig.limit.output = payload.limitOutput
+      }
+
+      // 更新配置
+      config.provider = config.provider || {}
+      config.provider[providerId] = config.provider[providerId] || {}
+      config.provider[providerId].models = config.provider[providerId].models || {}
+      config.provider[providerId].models[payload.modelId] = newModelConfig
+
+      // 写入配置文件
+      const updatedText = JSON.stringify(config, null, 2)
+      await window.desktop.file.write(configPath, updatedText, directory)
+
+      // 更新本地状态
+      const providerIndex = providers.value.findIndex(p => p.id === providerId)
+      if (providerIndex !== -1) {
+        const newModel: ProviderModel = {
+          id: payload.modelId,
+          name: payload.name || payload.modelId
+        }
+        providers.value[providerIndex].models[payload.modelId] = newModel
+      }
+
+      return { 
+        success: true, 
+        model: { id: payload.modelId, name: payload.name || payload.modelId }
+      }
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : '添加模型失败'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function deleteModel(
+    providerId: string,
+    modelId: string,
+    directory?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    saving.value = true
+    error.value = null
+    try {
+      // 检查供应商是否存在
+      const provider = providers.value.find(p => p.id === providerId)
+      if (!provider) {
+        return { success: false, error: `供应商 '${providerId}' 不存在` }
+      }
+
+      // 检查模型是否存在
+      if (!provider.models?.[modelId]) {
+        return { success: false, error: `模型 '${modelId}' 不存在` }
+      }
+
+      // 读取 lcode.jsonc 配置文件
+      const configPath = 'lcode.jsonc'
+      let configText = ''
+      try {
+        configText = await window.desktop.file.read(configPath, directory)
+      } catch (e) {
+        return { success: false, error: '配置文件不存在' }
+      }
+
+      // 解析 JSONC
+      let cleanText = configText
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']')
+      
+      const config = JSON.parse(cleanText)
+
+      // 删除模型
+      if (config.provider?.[providerId]?.models?.[modelId]) {
+        delete config.provider[providerId].models[modelId]
+      }
+
+      // 写入配置文件
+      const updatedText = JSON.stringify(config, null, 2)
+      await window.desktop.file.write(configPath, updatedText, directory)
+
+      // 更新本地状态
+      const providerIndex = providers.value.findIndex(p => p.id === providerId)
+      if (providerIndex !== -1) {
+        delete providers.value[providerIndex].models[modelId]
+      }
+
+      return { success: true }
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : '删除模型失败'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      saving.value = false
+    }
+  }
+
   function clearModels() {
     providers.value = []
     connectedProviders.value = []
@@ -395,6 +559,8 @@ async function loadModels(directory?: string) {
     deleteProvider,
     testProvider,
     refreshModels,
+    addModel,
+    deleteModel,
     clearModels
   }
 })
