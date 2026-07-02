@@ -15,6 +15,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError, AddProviderPayload, UpdateProviderPayload, ProviderMutationResult, ProviderTestResult, ProviderRefreshResult } from "../groups/provider"
 import { ProviderV2 } from "@/core/provider"
+import { ConfigV1 } from "@/core/v1/config/config"
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
   return self.pipe(
@@ -309,49 +310,58 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       )
     })
 
-    // Delete a model from provider config
+    // Delete a model from provider config (writes to config file)
     const deleteModel = Effect.fn("ProviderHttpApi.deleteModel")(function* (ctx: {
       params: { providerID: ProviderV2.ID, modelID: string }
     }) {
       console.log('[DeleteModel] providerID:', ctx.params.providerID, 'modelID:', ctx.params.modelID)
       
-      return yield* withCatalog(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
-            console.log('[DeleteModel] Catalog.Service acquired')
-            
-            const transform = yield* catalog.transform()
-            console.log('[DeleteModel] transform acquired')
-            
-            // Remove the model using editor.model.remove
-            yield* transform((editor) => {
-              console.log('[DeleteModel] executing transform')
-              const existingModel = editor.model.get(ctx.params.providerID, ctx.params.modelID)
-              console.log('[DeleteModel] existing model:', existingModel ? 'found' : 'not found')
-              
-              if (existingModel) {
-                console.log('[DeleteModel] removing model:', ctx.params.modelID)
-                editor.model.remove(ctx.params.providerID, ctx.params.modelID)
-                console.log('[DeleteModel] model removed')
-              } else {
-                console.log('[DeleteModel] model not in catalog, skipping')
-              }
-            })
-            
-            console.log('[DeleteModel] transform completed')
-            return { success: true }
-          }),
-        ),
-      ).pipe(
-        Effect.catch((e) => {
-          console.log('[DeleteModel] ERROR:', e)
-          return Effect.succeed({
-            success: false,
-            error: "Failed to delete model from config",
-          })
-        }),
-      )
+      // Use Config.Service to read and write the global config file
+      const cfg = yield* Config.Service
+      
+      // Get current global config
+      const currentConfig = yield* cfg.getGlobal()
+      console.log('[DeleteModel] current config keys:', Object.keys(currentConfig))
+      console.log('[DeleteModel] current provider keys:', currentConfig.provider ? Object.keys(currentConfig.provider) : 'no provider')
+      
+      // Check if provider and model exist in config
+      if (!currentConfig.provider?.[ctx.params.providerID]) {
+        console.log('[DeleteModel] provider not in config')
+        return { success: true, notInConfig: true }
+      }
+      
+      const providerConfig = currentConfig.provider[ctx.params.providerID]
+      console.log('[DeleteModel] provider config:', JSON.stringify(providerConfig).slice(0, 300))
+      
+      if (!providerConfig.models?.[ctx.params.modelID]) {
+        console.log('[DeleteModel] model not in provider.models')
+        return { success: true, notInConfig: true }
+      }
+      
+      console.log('[DeleteModel] model found in config, deleting...')
+      
+      // Delete the model from config
+      delete providerConfig.models[ctx.params.modelID]
+      
+      // If no models left, optionally clean up empty provider
+      if (Object.keys(providerConfig.models || {}).length === 0) {
+        console.log('[DeleteModel] no models left, keeping empty provider.models')
+      }
+      
+      // Write back to config file
+      const updatedConfig: ConfigV1.Info = {
+        ...currentConfig,
+        provider: {
+          ...currentConfig.provider,
+          [ctx.params.providerID]: providerConfig
+        }
+      }
+      
+      console.log('[DeleteModel] writing updated config...')
+      const result = yield* cfg.updateGlobal(updatedConfig)
+      console.log('[DeleteModel] config updated, changed:', result.changed)
+      
+      return { success: true, notInConfig: false }
     })
 
     return handlers
