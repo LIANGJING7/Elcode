@@ -33,6 +33,15 @@ packages/desktop/build/
 # Temp files
 trellis-temp/
 
+# Database debug/migration scripts
+__db_*.mjs
+__migrate_*.mjs
+nul
+
+# Release directories
+packages/desktop/release/
+packages/desktop/release_new/
+
 # Local config
 config.json
 
