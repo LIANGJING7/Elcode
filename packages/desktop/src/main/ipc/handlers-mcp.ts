@@ -6,6 +6,7 @@ import type { MCPStatus, MCPAddPayload } from '../../types/ipc'
 /**
  * MCP IPC handlers - Phase 5
  * Core provides /mcp endpoints: GET status, POST add, POST connect/disconnect.
+ * Plus tools, prompts, resources endpoints.
  */
 export function registerMcpHandlers() {
   // MCP_STATUS: forward to backend GET /mcp
@@ -58,6 +59,50 @@ export function registerMcpHandlers() {
     } catch (err) {
       console.error('[McpHandler] disconnect error:', err)
       return false
+    }
+  })
+
+  // MCP_TOOLS: forward to backend GET /mcp/tools
+  ipcMain.handle(IPC_CHANNELS.MCP_TOOLS, async (_, directory?: string) => {
+    try {
+      const tools = await backend.mcp.tools(directory)
+      return tools as Record<string, unknown[]>
+    } catch (err) {
+      console.error('[McpHandler] tools error:', err)
+      return {}
+    }
+  })
+
+  // MCP_PROMPTS: forward to backend GET /mcp/prompts
+  ipcMain.handle(IPC_CHANNELS.MCP_PROMPTS, async (_, directory?: string) => {
+    try {
+      const prompts = await backend.mcp.prompts(directory)
+      return prompts as Record<string, unknown[]>
+    } catch (err) {
+      console.error('[McpHandler] prompts error:', err)
+      return {}
+    }
+  })
+
+  // MCP_RESOURCES: forward to backend GET /mcp/resources
+  ipcMain.handle(IPC_CHANNELS.MCP_RESOURCES, async (_, directory?: string) => {
+    try {
+      const resources = await backend.mcp.resources(directory)
+      return resources as Record<string, unknown[]>
+    } catch (err) {
+      console.error('[McpHandler] resources error:', err)
+      return {}
+    }
+  })
+
+  // MCP_SERVER_TOOLS: forward to backend GET /mcp/:name/tools
+  ipcMain.handle(IPC_CHANNELS.MCP_SERVER_TOOLS, async (_, name: string, directory?: string) => {
+    try {
+      const tools = await backend.mcp.serverTools(name, directory)
+      return tools as unknown[]
+    } catch (err) {
+      console.error('[McpHandler] serverTools error:', err)
+      return []
     }
   })
 }

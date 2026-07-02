@@ -8,6 +8,12 @@ import type { Conversation } from "../types/ipc"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Convert Windows backslash paths to forward slash for database compatibility
+function storagePath(input: string): string {
+  if (process.platform !== "win32") return input
+  return input.replaceAll("\\", "/")
+}
+
 let backendProcess: ChildProcess | null = null
 let backendPort: number | null = null
 let backendReady = false
@@ -172,53 +178,53 @@ export async function stopBackend(): Promise<void> {
 export const backend = {
   session: {
     create: async (directory: string, workspaceID?: string): Promise<string> => {
-      const params = new URLSearchParams({ directory })
+      const params = new URLSearchParams({ directory: storagePath(directory) })
       if (workspaceID) params.set("workspaceID", workspaceID)
       const result = await request("POST", `/session?${params.toString()}`)
       return (result as { id: string }).id
     },
     
     get: async (sessionID: string, directory?: string): Promise<unknown> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/session/${sessionID}?${params}`)
     },
     
     list: async (directory?: string, workspaceID?: string): Promise<unknown[]> => {
       const params = new URLSearchParams()
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       if (workspaceID) params.set("workspaceID", workspaceID)
       return request("GET", `/session?${params.toString()}`) as Promise<unknown[]>
     },
     
     messages: async (sessionID: string, limit?: number, directory?: string): Promise<unknown[]> => {
       const params = new URLSearchParams({ limit: String(limit || 100) })
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       return request("GET", `/session/${sessionID}/message?${params.toString()}`) as Promise<unknown[]>
     },
     
     prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; id: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       await request("POST", `/session/${sessionID}/prompt_async?${params}`, payload)
     },
     
     interrupt: async (sessionID: string, directory?: string): Promise<void> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       await request("POST", `/session/${sessionID}/abort?${params}`)
     },
     
     resume: async (sessionID: string, directory?: string): Promise<void> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       await request("POST", `/session/${sessionID}/prompt_async?${params}`, { prompt: [] })
     },
 
     remove: async (sessionID: string, directory?: string): Promise<boolean> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       const result = await request("DELETE", `/session/${sessionID}?${params}`)
       return result === true || result === null
     },
     
     update: async (sessionID: string, patch: { title?: string }, directory?: string): Promise<unknown> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("PATCH", `/session/${sessionID}?${params}`, patch)
     },
     
@@ -226,7 +232,7 @@ export const backend = {
       if (!backendPort) return () => {}
       
       const params = new URLSearchParams()
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       // 后端 SSE 端点是 /event（不是 /session/:id/events）
       const url = `http://localhost:${backendPort}/event?${params.toString()}`
       console.log('[SSE CONNECT] url:', url)
@@ -285,85 +291,85 @@ export const backend = {
   file: {
     read: async (filePath: string, directory?: string): Promise<string> => {
       const params = new URLSearchParams({ path: filePath })
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       return request("GET", `/file?${params.toString()}`) as Promise<string>
     },
     
     write: async (filePath: string, content: string, directory?: string): Promise<void> => {
       const params = new URLSearchParams({ path: filePath })
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       await request("POST", `/file?${params.toString()}`, { content })
     },
     
     list: async (cwd: string, pattern?: string, directory?: string): Promise<unknown[]> => {
       const params = new URLSearchParams({ cwd })
       if (pattern) params.set("pattern", pattern)
-      if (directory) params.set("directory", directory)
+      if (directory) params.set("directory", storagePath(directory))
       return request("GET", `/file/list?${params.toString()}`) as Promise<unknown[]>
     },
   },
   
   config: {
     get: async (key: string, directory?: string): Promise<unknown> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       // GET /config returns full config object, extract the specific key
       const fullConfig = await request("GET", `/config?${params}`) as Record<string, unknown>
       return fullConfig?.[key]
     },
 
     set: async (key: string, value: unknown, directory?: string): Promise<void> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       // Use PATCH /config to update config (supports partial updates)
       // The key is mapped to the config field name
       await request("PATCH", `/config?${params}`, { [key]: value })
     },
 
     models: async (directory?: string): Promise<{ all: unknown[]; default: string[]; connected: string[] }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/provider?${params}`) as Promise<{ all: unknown[]; default: string[]; connected: string[] }>
     },
   },
 
   console: {
     get: async (directory?: string): Promise<{ consoleManagedProviders: string[]; activeOrgName?: string; switchableOrgCount: number }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/experimental/console?${params}`) as Promise<{ consoleManagedProviders: string[]; activeOrgName?: string; switchableOrgCount: number }>
     },
   },
 
   provider: {
     authMethods: async (directory?: string): Promise<Record<string, unknown[]>> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/provider/auth?${params}`) as Promise<Record<string, unknown[]>>
     },
 
     authorize: async (providerID: string, method: number, inputs?: Record<string, string>, directory?: string): Promise<{ url?: string; method: string; instructions?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/provider/${providerID}/oauth/authorize?${params}`, { method, inputs }) as Promise<{ url?: string; method: string; instructions?: string }>
     },
 
     authCallback: async (providerID: string, method: number, code?: string, directory?: string): Promise<boolean> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/provider/${providerID}/oauth/callback?${params}`, { method, code }) as Promise<boolean>
     },
 
     add: async (config: { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/provider?${params}`, config) as Promise<{ success: boolean; provider?: unknown; error?: string }>
     },
 
     update: async (providerId: string, config: { apiKey?: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; provider?: unknown; error?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("PATCH", `/provider/${providerId}?${params}`, config) as Promise<{ success: boolean; provider?: unknown; error?: string }>
     },
 
     delete: async (providerId: string, directory?: string): Promise<{ success: boolean; error?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("DELETE", `/provider/${providerId}?${params}`) as Promise<{ success: boolean; error?: string }>
     },
 
     test: async (providerIdOrConfig: string | { name: string; apiKey: string; baseUrl?: string }, directory?: string): Promise<{ success: boolean; modelCount?: number; error?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       if (typeof providerIdOrConfig === 'string') {
         return request("POST", `/provider/${providerIdOrConfig}/test?${params}`) as Promise<{ success: boolean; modelCount?: number; error?: string }>
       } else {
@@ -372,7 +378,7 @@ export const backend = {
     },
 
     refreshModels: async (providerId: string, directory?: string): Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/provider/${providerId}/refresh-models?${params}`) as Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }>
     },
   },
@@ -380,30 +386,50 @@ export const backend = {
   // Phase 5: Skills & MCP
   skill: {
     list: async (directory?: string): Promise<unknown[]> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/api/skill?${params}`) as Promise<unknown[]>
     },
   },
   
   mcp: {
     status: async (directory?: string): Promise<unknown> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/mcp?${params}`)
     },
     
     add: async (name: string, config: unknown, directory?: string): Promise<unknown> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/mcp?${params}`, { name, config })
     },
     
     connect: async (name: string, directory?: string): Promise<boolean> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/mcp/${name}/connect?${params}`) as Promise<boolean>
     },
     
     disconnect: async (name: string, directory?: string): Promise<boolean> => {
-      const params = directory ? new URLSearchParams({ directory }).toString() : ""
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("POST", `/mcp/${name}/disconnect?${params}`) as Promise<boolean>
+    },
+    
+    tools: async (directory?: string): Promise<Record<string, unknown[]>> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/mcp/tools?${params}`) as Promise<Record<string, unknown[]>>
+    },
+    
+    prompts: async (directory?: string): Promise<Record<string, unknown[]>> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/mcp/prompts?${params}`) as Promise<Record<string, unknown[]>>
+    },
+    
+    resources: async (directory?: string): Promise<Record<string, unknown[]>> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/mcp/resources?${params}`) as Promise<Record<string, unknown[]>>
+    },
+    
+    serverTools: async (name: string, directory?: string): Promise<unknown[]> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/mcp/${name}/tools?${params}`) as Promise<unknown[]>
     },
   },
 
@@ -417,40 +443,55 @@ export const backend = {
        */
       list: async (query: SessionListQuery): Promise<SessionListResult> => {
         if (!backendPort || !backendReady) {
+          console.error('[BACKEND_SESSION_LIST] Backend not ready - port:', backendPort, 'ready:', backendReady)
           throw new Error("Backend not ready")
         }
         
         const params = new URLSearchParams()
-        if (query.directory) params.set('directory', query.directory)
-        if (query.workspace) params.set('workspaceID', query.workspace)
+        // Use scope=project to query all sessions in the project, not filter by directory
+        // This matches TUI behavior and avoids project_id mismatch issues
+        params.set('scope', 'project')
         if (query.start) params.set('start', String(query.start))
         if (query.search) params.set('search', query.search)
         if (query.limit) params.set('limit', String(query.limit))
         
         const url = `http://localhost:${backendPort}/session?${params.toString()}`
+        console.log('[BACKEND_SESSION_LIST] Requesting:', url)
         
         return new Promise((resolve, reject) => {
           const req = http.request(url, { method: "GET" }, (res) => {
+            console.log('[BACKEND_SESSION_LIST] Response status:', res.statusCode)
             let data = ""
             res.on("data", chunk => data += chunk)
             res.on("end", () => {
+              console.log('[BACKEND_SESSION_LIST] Response data length:', data.length)
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const rawSessions = data ? JSON.parse(data) : []
+                  console.log('[BACKEND_SESSION_LIST] Raw sessions count:', Array.isArray(rawSessions) ? rawSessions.length : 'not array')
+                  if (Array.isArray(rawSessions) && rawSessions.length > 0) {
+                    console.log('[BACKEND_SESSION_LIST] First session:', JSON.stringify(rawSessions[0]).slice(0, 200))
+                  }
                   const conversations = (rawSessions as Array<Record<string, unknown>>).map(toConversation)
+                  console.log('[BACKEND_SESSION_LIST] Converted conversations:', conversations.length)
                   resolve({
                     conversations: conversations,
                     nextCursor: undefined  // Instance API doesn't support cursor pagination
                   })
-                } catch {
+                } catch (parseError) {
+                  console.error('[BACKEND_SESSION_LIST] Parse error:', parseError, 'Data:', data.slice(0, 200))
                   reject(new Error(`Failed to parse response: ${data}`))
                 }
               } else {
+                console.error('[BACKEND_SESSION_LIST] HTTP error:', res.statusCode, data.slice(0, 200))
                 reject(new Error(`HTTP ${res.statusCode}: ${data}`))
               }
             })
           })
-          req.on("error", reject)
+          req.on("error", (err) => {
+            console.error('[BACKEND_SESSION_LIST] Request error:', err)
+            reject(err)
+          })
           req.end()
         })
       },

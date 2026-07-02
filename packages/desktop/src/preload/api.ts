@@ -11,8 +11,16 @@ export const desktopAPI = {
     get: (sessionID: string, directory?: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET, sessionID, directory),
     
-    list: (query?: SessionListQuery): Promise<SessionListResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST, query),
+    list: (query?: SessionListQuery): Promise<SessionListResult> => {
+      console.log('[PRELOAD_SESSION_LIST] Invoking with query:', JSON.stringify(query))
+      return ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST, query).then((result) => {
+        console.log('[PRELOAD_SESSION_LIST] Result received:', JSON.stringify(result).slice(0, 300))
+        return result
+      }).catch((err) => {
+        console.error('[PRELOAD_SESSION_LIST] Error:', err)
+        throw err
+      })
+    },
     
     messages: (sessionID: string, limit?: number, directory?: string): Promise<Message[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_MESSAGES, sessionID, limit, directory),
@@ -157,7 +165,19 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.MCP_CONNECT, name, directory),
 
     disconnect: (name: string, directory?: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MCP_DISCONNECT, name, directory)
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_DISCONNECT, name, directory),
+
+    tools: (directory?: string): Promise<Record<string, unknown[]>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_TOOLS, directory),
+
+    prompts: (directory?: string): Promise<Record<string, unknown[]>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_PROMPTS, directory),
+
+    resources: (directory?: string): Promise<Record<string, unknown[]>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_RESOURCES, directory),
+
+    serverTools: (name: string, directory?: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_SERVER_TOOLS, name, directory),
   },
 
   window: {

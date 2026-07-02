@@ -270,6 +270,10 @@ export const IPC_CHANNELS = {
   MCP_ADD: 'mcp:add',
   MCP_CONNECT: 'mcp:connect',
   MCP_DISCONNECT: 'mcp:disconnect',
+  MCP_TOOLS: 'mcp:tools',
+  MCP_PROMPTS: 'mcp:prompts',
+  MCP_RESOURCES: 'mcp:resources',
+  MCP_SERVER_TOOLS: 'mcp:serverTools',
 
   // Window
   WINDOW_SET_TITLE_BAR_OVERLAY: 'window:set-title-bar-overlay',
