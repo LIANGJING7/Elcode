@@ -77,6 +77,19 @@ export function registerMcpHandlers() {
     }
   })
 
+  // MCP_REMOVE: forward to backend DELETE /mcp/:name
+  ipcMain.handle(IPC_CHANNELS.MCP_REMOVE, async (_, name: string, directory?: string) => {
+    try {
+      console.log('[McpHandler] remove: name=', name, 'directory=', directory)
+      const result = await backend.mcp.remove(name, directory)
+      console.log('[McpHandler] remove result:', result)
+      return result
+    } catch (err) {
+      console.error('[McpHandler] remove error:', err)
+      return { success: false }
+    }
+  })
+
   // MCP_TOOLS: forward to backend GET /mcp/tools
   ipcMain.handle(IPC_CHANNELS.MCP_TOOLS, async (_, directory?: string) => {
     try {

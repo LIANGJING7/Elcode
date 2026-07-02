@@ -512,6 +512,14 @@ export const backend = {
       return request("POST", `/mcp/${name}/disconnect?${params}`) as Promise<boolean>
     },
     
+    remove: async (name: string, directory?: string): Promise<{ success: boolean }> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      console.log('[Backend] mcp.remove DELETE /mcp/' + name + '?' + params)
+      const result = await request("DELETE", `/mcp/${name}?${params}`) as { success: boolean }
+      console.log('[Backend] mcp.remove result:', result)
+      return result
+    },
+    
     tools: async (directory?: string): Promise<Record<string, unknown[]>> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/mcp/tools?${params}`) as Promise<Record<string, unknown[]>>

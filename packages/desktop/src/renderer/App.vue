@@ -204,7 +204,7 @@ watch(
       // 并行加载，带异常隔离
       await Promise.allSettled([
         modelsStore.loadModels(newPath),
-        mcpStore.loadStatus(newPath),
+        mcpStore.loadStatusImmediate(newPath),
         skillStore.load(newPath),
       ])
     } else if (!newPath && oldPath) {

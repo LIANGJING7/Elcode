@@ -135,9 +135,7 @@ const canAdd = computed(() => {
   return true
 })
 
-onMounted(() => {
-  mcpStore.loadStatus(currentWorkspace.value?.path)
-})
+// App.vue already loads MCP status on init, no need to reload here
 
 async function handleConnect(name: string) {
   await mcpStore.connect(name, currentWorkspace.value?.path)

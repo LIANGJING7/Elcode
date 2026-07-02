@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { McpServerNotFoundError } from "../errors"
-import { AddPayload, AuthCallbackPayload, StatusMap, UnsupportedOAuthError } from "../groups/mcp"
+import { AddPayload, AuthCallbackPayload, StatusMap, UnsupportedOAuthError, RemoveResponse } from "../groups/mcp"
 
 export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handlers) =>
   Effect.gen(function* () {
@@ -102,6 +102,21 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
       return true
     })
 
+    const remove = Effect.fn("McpHttpApi.remove")(function* (ctx: { params: { name: string } }) {
+      console.log('[McpHttpApi.remove] Request to remove:', ctx.params.name)
+      yield* mcp
+        .remove(ctx.params.name)
+        .pipe(
+          Effect.catchTag("MCP.NotFoundError", (error) =>
+            Effect.fail(
+              new McpServerNotFoundError({ name: error.name, message: `MCP server not found: ${error.name}` }),
+            ),
+          ),
+        )
+      console.log('[McpHttpApi.remove] Remove successful')
+      return { success: true as const }
+    })
+
     // Tools handler - get all tools grouped by server
     const tools = Effect.fn("McpHttpApi.tools")(function* () {
       const allTools = yield* mcp.tools()
@@ -170,6 +185,7 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
       .handle("authRemove", authRemove)
       .handle("connect", connect)
       .handle("disconnect", disconnect)
+      .handle("remove", remove)
       .handle("tools", tools)
       .handle("prompts", prompts)
       .handle("resources", resources)

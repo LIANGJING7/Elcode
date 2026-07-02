@@ -618,7 +618,10 @@ export const layer = Layer.effect(
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
+      console.log('[Config.invalidate] invalidating global cache and instance state')
       yield* invalidateGlobal
+      // Also invalidate instance state so cfgSvc.get() reads fresh config
+      yield* InstanceState.invalidate(state)
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {

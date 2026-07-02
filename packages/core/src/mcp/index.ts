@@ -1,3 +1,5 @@
+import path from "path"
+import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
 import { ConfigV1 } from "@/core/v1/config/config"
 import { serviceUse } from "@/core/effect/service-use"
@@ -14,6 +16,8 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "@/config/config"
+import { ConfigPaths } from "@/config/paths"
+import { Global } from "@/core/global"
 import { ConfigMCPV1 } from "@/core/v1/config/mcp"
 import { NamedError } from "@/core/util/error"
 import { InstallationVersion } from "@/core/installation/version"
@@ -243,6 +247,7 @@ export interface Interface {
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly remove: (name: string) => Effect.Effect<{ success: boolean }, NotFoundError>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
@@ -648,6 +653,115 @@ export const layer = Layer.effect(
       return { status: s.status }
     })
 
+    const remove = Effect.fn("MCP.remove")(function* (name: string) {
+      console.log('[MCP.remove] Removing server:', name)
+      // Check if MCP server exists
+      yield* requireMcpConfig(name)
+      
+      const s = yield* InstanceState.get(state)
+      const fs = yield* FSUtil.Service
+      
+      // Close client connection
+      console.log('[MCP.remove] Closing client connection')
+      yield* closeClient(s, name)
+      
+      // Remove from memory state
+      delete s.clients[name]
+      delete s.defs[name]
+      delete s.status[name]
+      delete s.config[name]
+      console.log('[MCP.remove] Removed from memory state')
+      
+      // Helper to patch JSONC file and remove MCP key
+      const patchMcpInFile = Effect.fnUntraced(function* (filepath: string) {
+        console.log('[MCP.remove] Checking file:', filepath)
+        const text = yield* fs.readFileStringSafe(filepath)
+        if (!text) return false
+        
+        const errors: Array<{ error: unknown }> = []
+        const data = parseJsonc(text, errors, { allowTrailingComma: true })
+        if (errors.length > 0) return false
+        
+        // Check if this file has the MCP config
+        if (!data?.mcp?.[name]) return false
+        
+        console.log('[MCP.remove] Found MCP in file:', filepath, 'removing...')
+        
+        // Patch the JSONC to remove the MCP key
+        const patch = { mcp: { [name]: undefined } }
+        const updated = patchJsoncRecursive(text, patch)
+        
+        // Write back
+        yield* fs.writeFileString(filepath, updated).pipe(Effect.orDie)
+        console.log('[MCP.remove] File updated:', filepath)
+        return true
+      })
+      
+      // Recursive JSONC patch function (same as in config.ts)
+      function patchJsoncRecursive(input: string, patch: unknown, path: string[] = []): string {
+        if (typeof patch !== "object" || patch === null) {
+          const edits = modify(input, path, patch, {
+            formattingOptions: { insertSpaces: true, tabSize: 2 },
+          })
+          return applyEdits(input, edits)
+        }
+        return Object.entries(patch as Record<string, unknown>).reduce(
+          (result, [key, value]) => patchJsoncRecursive(result, value, [...path, key]),
+          input,
+        )
+      }
+      
+      let configUpdated = false
+      
+      // 1. Try global config files
+      const globalDir = Global.Path.config
+      for (const file of ["lcode.jsonc", "lcode.json", "config.json"]) {
+        const filepath = path.join(globalDir, file)
+        if (yield* patchMcpInFile(filepath)) {
+          configUpdated = true
+          break // Only update one file
+        }
+      }
+      
+      // 2. Try workspace config files (lcode.jsonc in project directory)
+      const projectDir = yield* InstanceState.directory
+      for (const file of ["lcode.jsonc", "lcode.json", "config.json"]) {
+        const filepath = path.join(projectDir, file)
+        if (yield* patchMcpInFile(filepath)) {
+          configUpdated = true
+          break
+        }
+      }
+      
+      // 3. Try .lcode directory config files
+      const lcodeDirs = yield* ConfigPaths.directories(projectDir)
+      for (const dir of lcodeDirs) {
+        if (dir === globalDir) continue // Already checked
+        for (const file of ["lcode.jsonc", "lcode.json"]) {
+          const filepath = path.join(dir, file)
+          if (yield* patchMcpInFile(filepath)) {
+            configUpdated = true
+            break
+          }
+        }
+        if (configUpdated) break
+      }
+      
+      if (!configUpdated) {
+        console.log('[MCP.remove] MCP not found in any config file, was only in memory')
+      }
+      
+      // Invalidate config cache so next status call reads fresh config
+      console.log('[MCP.remove] Invalidating config cache')
+      yield* cfgSvc.invalidate()
+      
+      // Remove auth tokens if any
+      yield* auth.remove(name).pipe(Effect.ignore)
+      
+      console.log('[MCP.remove] Remove completed successfully')
+      return { success: true }
+    })
+
     const connect = Effect.fn("MCP.connect")(function* (name: string) {
       const mcp = yield* requireMcpConfig(name)
       yield* createAndStore(name, { ...mcp, enabled: true })
@@ -951,6 +1065,7 @@ export const layer = Layer.effect(
       prompts,
       resources,
       add,
+      remove,
       connect,
       disconnect,
       getPrompt,

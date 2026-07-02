@@ -1,5 +1,24 @@
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex h-full flex-col p-5">
+    <!-- Toast notification -->
+    <div 
+      v-if="toastMessage" 
+      class="fixed top-12 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all duration-300"
+      :class="toastType === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'"
+    >
+      <div class="flex items-center gap-2">
+        <svg v-if="toastType === 'success'" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span class="text-sm font-medium">{{ toastMessage }}</span>
+      </div>
+    </div>
+
     <!-- Header -->
     <div class="flex-shrink-0 mb-6">
       <h2 class="text-2xl font-bold text-text mb-2">MCP 服务器</h2>
@@ -15,7 +34,6 @@
         :loading="loading"
         @select="handleSelect"
         @add="showAddDialog = true"
-        @open-config="handleOpenConfig"
       />
 
 <!-- Right: Server detail -->
@@ -65,16 +83,15 @@
           </div>
 
           <!-- Detail body -->
-          <div class="flex-1 overflow-y-auto p-5 space-y-6">
-            <!-- Connection Section -->
-            <ConnectionSection
-              :status="selectedStatus || { status: 'disabled' }"
-              :testing="testing"
-              @test="handleTestConnection"
-            />
+          <div class="flex-1 overflow-y-auto p-5 space-y-4">
+            <!-- Error info -->
+            <div v-if="selectedStatus?.error" class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <label class="text-xs text-red-400 block mb-1">错误信息</label>
+              <span class="text-sm text-red-400">{{ selectedStatus.error }}</span>
+            </div>
 
-            <!-- Config Section (only for new/edit) -->
-            <div v-if="editing" class="space-y-4 pt-4 border-t border-border">
+            <!-- Config display -->
+            <div class="space-y-4">
               <BasicSection
                 :config="editConfig"
                 :is-new="false"
@@ -92,44 +109,11 @@
                 :config="editConfig"
                 @update="handleConfigUpdate"
               />
-
-              <div class="flex gap-2 pt-2">
-                <button
-                  class="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
-                  @click="handleSave"
-                >
-                  保存
-                </button>
-                <button
-                  class="px-4 py-2 border border-border hover:border-border-light text-text text-sm rounded-lg transition-colors"
-                  @click="editing = false"
-                >
-                  取消
-                </button>
-              </div>
-            </div>
-
-            <!-- Read-only config display -->
-            <div v-else class="space-y-4 pt-4 border-t border-border">
-              <div>
-                <label class="text-xs text-text-muted block mb-1.5">类型</label>
-                <span class="text-sm text-text">{{ selectedStatus?.status === 'connected' ? '已连接' : '未连接' }}</span>
-              </div>
-              <div v-if="selectedStatus?.error">
-                <label class="text-xs text-text-muted block mb-1.5">错误信息</label>
-                <span class="text-sm text-red-400">{{ selectedStatus.error }}</span>
-              </div>
             </div>
           </div>
 
           <!-- Detail footer -->
-          <div class="flex items-center justify-between px-5 py-3 border-t border-border flex-shrink-0">
-            <button
-              class="px-3 py-1.5 text-xs text-text-muted hover:text-text rounded-lg transition-colors cursor-pointer"
-              @click="editing = !editing"
-            >
-              {{ editing ? '取消编辑' : '编辑配置' }}
-            </button>
+          <div class="flex items-center justify-end px-5 py-3 border-t border-border flex-shrink-0">
             <button
               class="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
               @click="showDeleteConfirm = true"
@@ -218,12 +202,22 @@ import McpServerList from './mcp/McpServerList.vue'
 import BasicSection from './mcp/sections/BasicSection.vue'
 import CommandConfig from './mcp/sections/CommandConfig.vue'
 import HttpConfig from './mcp/sections/HttpConfig.vue'
-import ConnectionSection from './mcp/sections/ConnectionSection.vue'
-import { useMcpConnection } from '../../composables/mcp/useMcpConnection'
 import type { McpConfig, McpServerStatus } from '../../../types/ipc'
 
 const mcpStore = useMcpStore()
 const workspaceStore = useWorkspaceStore()
+
+// Toast notification state
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+function showToast(message: string, type: 'success' | 'error' = 'success') {
+  toastMessage.value = message
+  toastType.value = type
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 3000)
+}
 
 const { servers, loading, error } = storeToRefs(mcpStore)
 const { currentWorkspace } = storeToRefs(workspaceStore)
@@ -233,7 +227,6 @@ const directory = computed(() => currentWorkspace.value?.path)
 const selectedServer = ref<string | null>(null)
 const showAddDialog = ref(false)
 const showDeleteConfirm = ref(false)
-const editing = ref(false)
 const connecting = ref(false)
 
 // Server configurations from backend (real config, not just status)
@@ -284,34 +277,30 @@ const statusLabel = computed(() => {
   }
 })
 
-// Connection testing composable
-const { testing, testConnection, connect: doConnect, disconnect: doDisconnect } = useMcpConnection(
-  selectedServer.value || '',
-  directory.value || undefined
-)
-
 const canAdd = computed(() => {
   const errors = validateConfig(newConfig.value)
   return errors.length === 0
 })
 
 onMounted(async () => {
+  // App.vue already loads MCP status on init, no need to reload here
+  // Just load server configs for editing
   console.log('[SettingsMcp] onMounted, directory:', directory.value)
-  console.log('[SettingsMcp] currentWorkspace:', currentWorkspace.value)
-  await mcpStore.loadStatus(directory.value)
-  console.log('[SettingsMcp] status loaded, servers:', Object.keys(servers.value))
   await loadServerConfigs()
   console.log('[SettingsMcp] configs loaded, serverConfigs:', Object.keys(serverConfigs.value))
+  // Select first server if available
   if (Object.keys(servers.value).length > 0) {
     selectedServer.value = Object.keys(servers.value)[0]
     console.log('[SettingsMcp] auto-selected:', selectedServer.value)
   }
 })
 
+// Only reload when directory actually changes
 watch(directory, async (newDir, oldDir) => {
   console.log('[SettingsMcp] directory changed:', oldDir, '->', newDir)
   if (newDir && newDir !== oldDir) {
-    await mcpStore.loadStatus(newDir)
+    // Directory changed, need to reload everything
+    await mcpStore.loadStatusImmediate(newDir)
     await loadServerConfigs()
   }
 })
@@ -350,12 +339,6 @@ watch(selectedServer, (name) => {
 
 function handleSelect(name: string) {
   selectedServer.value = name
-  editing.value = false
-}
-
-function handleOpenConfig() {
-  // TODO: Open lcode.jsonc in external editor
-  console.log('[SettingsMcp] Open config file')
 }
 
 function handleConfigUpdate(config: McpConfig) {
@@ -386,11 +369,6 @@ async function handleDisconnect(name: string) {
   }
 }
 
-async function handleTestConnection() {
-  if (!selectedServer.value) return
-  await testConnection()
-}
-
 async function handleAddServer() {
   const config = newConfig.value
   const errors = validateConfig(config)
@@ -414,18 +392,23 @@ async function handleAddServer() {
   newConfig.value = { name: '', type: 'local', enabled: true }
 }
 
-async function handleSave() {
+async function handleConfirmDelete() {
   if (!selectedServer.value) return
-  // Note: Backend doesn't support update yet, this is a placeholder
-  // For now, we'd need to delete and re-add
-  editing.value = false
-}
-
-function handleConfirmDelete() {
-  // Note: Backend doesn't support delete yet via IPC
-  // This is a placeholder for future implementation
-  showDeleteConfirm.value = false
-  console.log('[SettingsMcp] Delete server:', selectedServer.value)
+  
+  const serverName = selectedServer.value
+  const result = await mcpStore.removeServer(serverName, directory.value)
+  if (result.success) {
+    showDeleteConfirm.value = false
+    showToast(`服务器 "${serverName}" 已删除`, 'success')
+    // Clear selection if deleted server was selected
+    if (Object.keys(servers.value).length > 0) {
+      selectedServer.value = Object.keys(servers.value)[0]
+    } else {
+      selectedServer.value = null
+    }
+  } else {
+    showToast(`删除失败`, 'error')
+  }
 }
 
 function validateConfig(config: McpConfig): string[] {

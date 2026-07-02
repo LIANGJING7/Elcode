@@ -181,6 +181,9 @@ export const desktopAPI = {
     disconnect: (name: string, directory?: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_DISCONNECT, name, directory),
 
+    remove: (name: string, directory?: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_REMOVE, name, directory),
+
     tools: (directory?: string): Promise<Record<string, unknown[]>> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_TOOLS, directory),
 

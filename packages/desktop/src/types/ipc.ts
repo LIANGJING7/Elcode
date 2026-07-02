@@ -274,6 +274,7 @@ export const IPC_CHANNELS = {
   MCP_STATUS: 'mcp:status',
   MCP_CONFIG: 'mcp:config',
   MCP_ADD: 'mcp:add',
+  MCP_REMOVE: 'mcp:remove',
   MCP_CONNECT: 'mcp:connect',
   MCP_DISCONNECT: 'mcp:disconnect',
   MCP_TOOLS: 'mcp:tools',

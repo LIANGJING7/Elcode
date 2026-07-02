@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex h-full flex-col p-5">
     <!-- Header -->
     <div class="flex-shrink-0 mb-6">
       <h2 class="text-2xl font-bold text-text mb-2">模型设置</h2>

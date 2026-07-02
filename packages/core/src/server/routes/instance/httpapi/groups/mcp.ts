@@ -24,6 +24,9 @@ export const AuthCallbackPayload = Schema.Struct({
 export const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
 })
+export const RemoveResponse = Schema.Struct({
+  success: Schema.Literal(true),
+})
 export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
   { error: Schema.String },
   { httpApiStatus: 400 },
@@ -36,6 +39,7 @@ export const McpPaths = {
   authAuthenticate: "/mcp/:name/auth/authenticate",
   connect: "/mcp/:name/connect",
   disconnect: "/mcp/:name/disconnect",
+  remove: "/mcp/:name",
   tools: "/mcp/tools",
   prompts: "/mcp/prompts",
   resources: "/mcp/resources",
@@ -153,6 +157,18 @@ export const McpApi = HttpApi.make("mcp")
           OpenApi.annotations({
             identifier: "mcp.disconnect",
             description: "Disconnect an MCP server.",
+          }),
+        ),
+        HttpApiEndpoint.delete("remove", McpPaths.remove, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(RemoveResponse, "MCP server removed successfully"),
+          error: McpServerNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.remove",
+            summary: "Remove MCP server",
+            description: "Remove an MCP server from configuration and disconnect it.",
           }),
         ),
         // Tools endpoint - get all tools grouped by server

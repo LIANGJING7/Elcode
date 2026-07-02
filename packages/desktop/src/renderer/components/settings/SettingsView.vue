@@ -1,7 +1,7 @@
 <template>
   <div class="settings-view flex h-full">
     <!-- Settings content (main area) -->
-    <div class="settings-content flex-1 overflow-hidden" :class="section === 'models' || section === 'skills' ? '' : 'p-6 overflow-y-auto'">
+    <div class="settings-content flex-1 overflow-hidden" :class="section === 'models' || section === 'skills' || section === 'mcp' ? '' : 'p-6 overflow-y-auto'">
       <div :class="containerClass">
         <SettingsAppearance v-if="section === 'appearance'" />
         <SettingsModels v-else-if="section === 'models'" />
@@ -25,7 +25,7 @@ const ui = useUiStore()
 const section = computed(() => ui.settingsSection)
 
 const containerClass = computed(() => {
-  if (section.value === 'models' || section.value === 'skills') {
+  if (section.value === 'models' || section.value === 'skills' || section.value === 'mcp') {
     return 'h-full'
   }
   return 'max-w-xl mx-auto'
