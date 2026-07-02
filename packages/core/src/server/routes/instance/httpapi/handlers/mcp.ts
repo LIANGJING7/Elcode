@@ -98,6 +98,64 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
       return true
     })
 
+    // Tools handler - get all tools grouped by server
+    const tools = Effect.fn("McpHttpApi.tools")(function* () {
+      const allTools = yield* mcp.tools()
+      // Group by server: { serverName: [tool1, tool2, ...] }
+      const grouped: Record<string, unknown[]> = {}
+      for (const [key, tool] of Object.entries(allTools)) {
+        const serverName = key.split(':')[0]
+        if (!grouped[serverName]) grouped[serverName] = []
+        grouped[serverName].push(tool)
+      }
+      return grouped
+    })
+
+    // Prompts handler - get all prompts
+    const prompts = Effect.fn("McpHttpApi.prompts")(function* () {
+      const allPrompts = yield* mcp.prompts()
+      // Group by server
+      const grouped: Record<string, unknown[]> = {}
+      for (const [key, prompt] of Object.entries(allPrompts)) {
+        const serverName = key.split(':')[0]
+        if (!grouped[serverName]) grouped[serverName] = []
+        grouped[serverName].push(prompt)
+      }
+      return grouped
+    })
+
+    // Resources handler - get all resources
+    const resources = Effect.fn("McpHttpApi.resources")(function* () {
+      const allResources = yield* mcp.resources()
+      // Group by server
+      const grouped: Record<string, unknown[]> = {}
+      for (const [key, resource] of Object.entries(allResources)) {
+        const serverName = key.split(':')[0]
+        if (!grouped[serverName]) grouped[serverName] = []
+        grouped[serverName].push(resource)
+      }
+      return grouped
+    })
+
+    // Server-specific tools handler
+    const serverTools = Effect.fn("McpHttpApi.serverTools")(function* (ctx: { params: { name: string } }) {
+      const status = yield* mcp.status()
+      if (!(ctx.params.name in status))
+        return yield* new McpServerNotFoundError({
+          name: ctx.params.name,
+          message: `MCP server not found: ${ctx.params.name}`,
+        })
+      
+      const allTools = yield* mcp.tools()
+      const serverTools: unknown[] = []
+      for (const [key, tool] of Object.entries(allTools)) {
+        if (key.startsWith(ctx.params.name + ':')) {
+          serverTools.push(tool)
+        }
+      }
+      return serverTools
+    })
+
     return handlers
       .handle("status", status)
       .handle("add", add)
@@ -107,5 +165,9 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
       .handle("authRemove", authRemove)
       .handle("connect", connect)
       .handle("disconnect", disconnect)
+      .handle("tools", tools)
+      .handle("prompts", prompts)
+      .handle("resources", resources)
+      .handle("serverTools", serverTools)
   }),
 )

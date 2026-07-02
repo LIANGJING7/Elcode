@@ -36,6 +36,10 @@ export const McpPaths = {
   authAuthenticate: "/mcp/:name/auth/authenticate",
   connect: "/mcp/:name/connect",
   disconnect: "/mcp/:name/disconnect",
+  tools: "/mcp/tools",
+  prompts: "/mcp/prompts",
+  resources: "/mcp/resources",
+  serverTools: "/mcp/:name/tools",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -134,6 +138,63 @@ export const McpApi = HttpApi.make("mcp")
           OpenApi.annotations({
             identifier: "mcp.disconnect",
             description: "Disconnect an MCP server.",
+          }),
+        ),
+        // Tools endpoint - get all tools grouped by server
+        HttpApiEndpoint.get("tools", McpPaths.tools, {
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Record(Schema.String, Schema.Array(MCP.ToolSchema)),
+            "MCP tools list grouped by server"
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.tools",
+            summary: "Get MCP tools",
+            description: "Get all tools from connected MCP servers, grouped by server name.",
+          }),
+        ),
+        // Prompts endpoint - get all prompts
+        HttpApiEndpoint.get("prompts", McpPaths.prompts, {
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Record(Schema.String, Schema.Array(Schema.Unknown)),
+            "MCP prompts list grouped by server"
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.prompts",
+            summary: "Get MCP prompts",
+            description: "Get all prompts from connected MCP servers.",
+          }),
+        ),
+        // Resources endpoint - get all resources
+        HttpApiEndpoint.get("resources", McpPaths.resources, {
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Record(Schema.String, Schema.Array(MCP.Resource)),
+            "MCP resources list grouped by server"
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.resources",
+            summary: "Get MCP resources",
+            description: "Get all resources from connected MCP servers.",
+          }),
+        ),
+        // Server-specific tools endpoint
+        HttpApiEndpoint.get("serverTools", McpPaths.serverTools, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Array(MCP.ToolSchema),
+            "Tools for specific MCP server"
+          ),
+          error: McpServerNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.server.tools",
+            summary: "Get tools for specific MCP server",
           }),
         ),
       )
