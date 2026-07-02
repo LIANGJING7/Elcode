@@ -3,6 +3,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import http from "http"
 import fs from "fs"
+import { app } from "electron"
 import type { SessionListQuery, SessionListResult } from "../types/session"
 import type { Conversation } from "../types/ipc"
 
@@ -12,6 +13,43 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 function storagePath(input: string): string {
   if (process.platform !== "win32") return input
   return input.replaceAll("\\", "/")
+}
+
+// Resolve the backend executable path based on development vs production mode
+function getBackendExecutablePath(): { command: string; args: string[]; cwd: string } {
+  // In packaged mode, use the compiled opencode.exe
+  if (app.isPackaged) {
+    const resourcesPath = process.resourcesPath
+    const backendExe = path.join(resourcesPath, "backend", "opencode.exe")
+    
+    if (fs.existsSync(backendExe)) {
+      console.log(`[Backend] Using packaged backend: ${backendExe}`)
+      // Use serve command with dynamic port allocation
+      return { command: backendExe, args: ["serve", "--port", "0", "--hostname", "localhost"], cwd: resourcesPath }
+    }
+    
+    // Fallback: try to find bun in resources
+    const bunExe = process.platform === "win32"
+      ? path.join(resourcesPath, "bun", "bun.exe")
+      : path.join(resourcesPath, "bun", "bun")
+    
+    if (fs.existsSync(bunExe)) {
+      console.log(`[Backend] Using bundled bun: ${bunExe}`)
+      const launcherPath = path.join(__dirname, "backend-launcher.js")
+      return { command: bunExe, args: ["run", launcherPath], cwd: resourcesPath }
+    }
+    
+    throw new Error(`Backend executable not found at ${backendExe}`)
+  }
+  
+  // Development mode: use bun to run the launcher
+  const projectRoot = path.resolve(__dirname, "../../../..")
+  const launcherPath = path.resolve(__dirname, "./backend-launcher.js")
+  const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
+  const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
+  
+  console.log(`[Backend] Development mode, using bun with launcher: ${actualLauncherPath}`)
+  return { command: "bun", args: ["run", actualLauncherPath], cwd: projectRoot }
 }
 
 let backendProcess: ChildProcess | null = null
@@ -96,20 +134,13 @@ export async function startBackend(): Promise<{ port: number }> {
     return { port: backendPort }
   }
 
-  const projectRoot = path.resolve(__dirname, "../../../..")
-
   console.log("=== Starting backend ===")
-  console.log(`Project root: ${projectRoot}`)
 
   return new Promise((resolve, reject) => {
-    // Run the launcher. In development, we use the source file directly.
-    // In production (packaged), we use the compiled JS in dist/main/.
-    // The launcher lives at packages/desktop/src/main/backend-launcher.ts
-    // or dist/main/backend-launcher.js after build (same directory as index.js).
-    const launcherPath = path.resolve(__dirname, "./backend-launcher.js")
-    const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
-    const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
-    console.log(`Launcher path: ${actualLauncherPath}`)
+    const { command, args, cwd } = getBackendExecutablePath()
+    console.log(`Backend command: ${command}`)
+    console.log(`Backend args: ${args.join(" ")}`)
+    console.log(`Backend cwd: ${cwd}`)
     
     // The backend is a local, loopback-only subprocess that we spawn and talk
     // to ourselves — there's no network exposure to protect. The core server
@@ -121,8 +152,9 @@ export async function startBackend(): Promise<{ port: number }> {
     const childEnv = { ...process.env }
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_PASSWORD
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_USERNAME
-    backendProcess = spawn("bun", ["run", actualLauncherPath], {
-      cwd: projectRoot,
+    
+    backendProcess = spawn(command, args, {
+      cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
       shell: process.platform === "win32",
@@ -147,7 +179,13 @@ export async function startBackend(): Promise<{ port: number }> {
       stdout += text
       console.log("[Backend]", text.trim())
 
-      const match = text.match(/PORT:(\d+)/)
+      // Support two output formats:
+      // 1. PORT:${port} - from backend-launcher.ts
+      // 2. "opencode server listening on http://${hostname}:${port}" - from compiled executable
+      let match = text.match(/PORT:(\d+)/)
+      if (!match) {
+        match = text.match(/opencode server listening on http:\/\/[\d.]+:(\d+)/)
+      }
       if (match && !portFound) {
         portFound = true
         settled = true

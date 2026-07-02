@@ -10,8 +10,9 @@ import { getActiveWorkspaceRoot } from './handlers-workspace'
 
 // Handle the common directory-traversal / absolute-escape attempts. We resolve
 // the target against the workspace root and require the result to stay inside.
-export function resolveWithinWorkspace(target: string): string {
-  const root = getActiveWorkspaceRoot()
+// If directory is provided, use it; otherwise fall back to active workspace root.
+export function resolveWithinWorkspace(target: string, directory?: string): string {
+  const root = directory ?? getActiveWorkspaceRoot()
   if (!root) {
     throw new Error('No active workspace: file access denied')
   }
