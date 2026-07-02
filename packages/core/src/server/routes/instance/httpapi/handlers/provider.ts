@@ -313,32 +313,46 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const deleteModel = Effect.fn("ProviderHttpApi.deleteModel")(function* (ctx: {
       params: { providerID: ProviderV2.ID, modelID: string }
     }) {
+      console.log('[DeleteModel] providerID:', ctx.params.providerID, 'modelID:', ctx.params.modelID)
+      
       return yield* withCatalog(
         Effect.scoped(
           Effect.gen(function* () {
             const catalog = yield* Catalog.Service
+            console.log('[DeleteModel] Catalog.Service acquired')
+            
             const transform = yield* catalog.transform()
+            console.log('[DeleteModel] transform acquired')
             
             // Try to remove the model from config
             yield* transform((editor) => {
+              console.log('[DeleteModel] executing transform')
               editor.provider.update(ctx.params.providerID, (provider) => {
+                console.log('[DeleteModel] provider keys before:', Object.keys(provider))
+                console.log('[DeleteModel] provider.models:', provider.models ? Object.keys(provider.models) : 'no models')
                 // Check if model exists in config's models
                 if (provider.models && provider.models[ctx.params.modelID]) {
+                  console.log('[DeleteModel] model found, deleting:', ctx.params.modelID)
                   delete provider.models[ctx.params.modelID]
+                  console.log('[DeleteModel] model deleted, remaining models:', Object.keys(provider.models || {}))
+                } else {
+                  console.log('[DeleteModel] model NOT in config, skipping')
                 }
               })
             })
             
+            console.log('[DeleteModel] transform completed')
             return { success: true }
           }),
         ),
       ).pipe(
-        Effect.catch(() =>
-          Effect.succeed({
+        Effect.catch((e) => {
+          console.log('[DeleteModel] ERROR:', e)
+          return Effect.succeed({
             success: false,
             error: "Failed to delete model from config",
-          }),
-        ),
+          })
+        }),
       )
     })
 
