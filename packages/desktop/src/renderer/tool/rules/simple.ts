@@ -32,7 +32,7 @@ export function makeSimpleMeta(
     title: string
     summary: (tool: ToolCall) => string
     component: ToolMeta['component']
-    defaultInteraction?: 'inline' | 'inspect'
+    defaultInteraction?: 'inline' | 'panel' | 'none'
   },
 ): ToolMeta<SimpleViewModel> {
   return {

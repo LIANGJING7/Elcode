@@ -8,7 +8,7 @@
  *   - tool.output.content      (V2 image: file part with base64)
  *   - tool.output.result       (V1: {display:{type,path,text,lineStart,...}} or output string)
  *
- * Interaction: 'inspect' — file content / directory listing best in right panel.
+ * Interaction: 'panel' — file content / directory listing best in right panel.
  */
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
@@ -171,7 +171,7 @@ export function makeReadMeta(component: ToolMeta['component']): ToolMeta<ReadVie
     icon: '→',
     title: 'Read',
     component,
-    defaultInteraction: 'inspect',
+    defaultInteraction: 'panel',
     summary: pathSummary,
     createViewModel: createReadViewModel,
   }

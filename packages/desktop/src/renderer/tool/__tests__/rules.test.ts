@@ -37,7 +37,7 @@ describe('tool registry', () => {
 
   it('registerMany registers all', () => {
     const a = { names: ['a'], icon: 'a', title: 'A', component: {} as never, defaultInteraction: 'inline' as const, summary: () => '', createViewModel: () => ({ _kind: 'a' }) }
-    const b = { names: ['b'], icon: 'b', title: 'B', component: {} as never, defaultInteraction: 'inspect' as const, summary: () => '', createViewModel: () => ({ _kind: 'b' }) }
+    const b = { names: ['b'], icon: 'b', title: 'B', component: {} as never, defaultInteraction: 'panel' as const, summary: () => '', createViewModel: () => ({ _kind: 'b' }) }
     registerMany([a, b])
     expect(getTool('a')).toBe(a)
     expect(getTool('b')).toBe(b)

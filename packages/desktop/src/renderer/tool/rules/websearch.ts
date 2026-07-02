@@ -10,7 +10,7 @@
  * only a provider-formatted text blob. The view renders it as preformatted
  * text; a future enhancement could parse it into structured results.
  *
- * Interaction: 'inspect' — result text best viewed in the right panel.
+ * Interaction: 'panel' — result text best viewed in the right panel.
  */
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
@@ -54,7 +54,7 @@ export function makeWebSearchMeta(component: ToolMeta['component']): ToolMeta<We
     icon: '◈',
     title: 'Search',
     component,
-    defaultInteraction: 'inspect',
+    defaultInteraction: 'panel',
     summary: (tool) => truncate(firstArgString(tool.args, ['query'])),
     createViewModel: createWebSearchViewModel,
   }

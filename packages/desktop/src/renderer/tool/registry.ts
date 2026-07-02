@@ -19,9 +19,10 @@ export interface ToolViewModel {
 }
 
 /** How a tool call's detail is primarily surfaced.
- *  - 'inline'  : clicking the row expands the detail inline (edit/write/bash/todo/task)
- *  - 'inspect' : clicking the row opens the right-side Inspector panel (grep/glob/read/web_*) */
-export type ToolInteraction = 'inline' | 'inspect'
+ *  - 'inline' : clicking the row expands the detail inline (edit/write/bash/todo/task)
+ *  - 'panel'  : clicking the row opens the right-side ArtifactPanel (grep/glob/read/web_*)
+ *  - 'none'   : no click response (for pure display tools) */
+export type ToolInteraction = 'inline' | 'panel' | 'none'
 
 /** ToolMeta — declares how a tool is displayed. The Presenter hook
  *  `createViewModel` converts a ToolCall into a local ViewModel for the

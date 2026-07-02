@@ -7,7 +7,7 @@
  *   - tool.output.content[0].text      (fallback: parse "Found N matches" blob)
  *   - tool.output.result               (V1: {matches, truncated} + output string)
  *
- * Interaction: 'inspect' — matches are a list, best viewed in the right panel.
+ * Interaction: 'panel' — matches are a list, best viewed in the right panel.
  */
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
@@ -106,7 +106,7 @@ export function makeGrepMeta(component: ToolMeta['component']): ToolMeta<GrepVie
     icon: '✱',
     title: 'Grep',
     component,
-    defaultInteraction: 'inspect',
+    defaultInteraction: 'panel',
     summary: (tool) => `"${truncate(firstArgString(tool.args, ['pattern']))}"`,
     createViewModel: createGrepViewModel,
   }

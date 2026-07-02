@@ -6,7 +6,7 @@
  *   - tool.output.structured   (V2: { url, contentType, format, output })
  *   - tool.output.content[0].text / tool.output.result (fallback content string)
  *
- * Interaction: 'inspect' — fetched content best viewed in the right panel.
+ * Interaction: 'panel' — fetched content best viewed in the right panel.
  */
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
@@ -51,7 +51,7 @@ export function makeWebFetchMeta(component: ToolMeta['component']): ToolMeta<Web
     icon: '%',
     title: 'WebFetch',
     component,
-    defaultInteraction: 'inspect',
+    defaultInteraction: 'panel',
     summary: (tool) => truncate(firstArgString(tool.args, ['url'])),
     createViewModel: createWebFetchViewModel,
   }
