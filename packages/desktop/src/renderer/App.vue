@@ -119,6 +119,8 @@ import { useWorkspaceStore } from './stores/workspace'
 import { useUiStore } from './stores/ui'
 import { useModelsStore } from './stores/models'
 import { useThemeStore } from './stores/theme'
+import { useMcpStore } from './stores/mcp'
+import { useSkillStore } from './stores/skill'
 import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
 useGlobalShortcuts()
@@ -128,6 +130,8 @@ const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
 const modelsStore = useModelsStore()
 const themeStore = useThemeStore()
+const mcpStore = useMcpStore()
+const skillStore = useSkillStore()
 
 const sidebarWidth = '260px'
 
@@ -194,14 +198,20 @@ const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'm
 })
 
 watch(
-  () => workspaceStore.currentWorkspace,
-  async (newWorkspace, oldWorkspace) => {
-    // 只在 currentWorkspace 变化时加载，不立即执行（避免初始化时清空）
-    if (newWorkspace && newWorkspace !== oldWorkspace) {
-      await modelsStore.loadModels(newWorkspace.path)
-    } else if (!newWorkspace && oldWorkspace) {
-      // 只在从有值变成 null 时清空，而不是初始化时
+  () => workspaceStore.currentWorkspace?.path,
+  async (newPath, oldPath) => {
+    if (newPath && newPath !== oldPath) {
+      // 并行加载，带异常隔离
+      await Promise.allSettled([
+        modelsStore.loadModels(newPath),
+        mcpStore.loadStatus(newPath),
+        skillStore.load(newPath),
+      ])
+    } else if (!newPath && oldPath) {
+      // 清空状态
       modelsStore.clearModels()
+      mcpStore.clear()
+      skillStore.clear()
     }
   }
 )
@@ -223,8 +233,14 @@ onMounted(async () => {
   }
 
   if (workspaceStore.currentWorkspace) {
-    await sessionStore.reload()
-    await modelsStore.loadModels(workspaceStore.currentWorkspace.path)
+    const path = workspaceStore.currentWorkspace.path
+    // 并行加载，互不影响
+    await Promise.allSettled([
+      sessionStore.reload(),
+      modelsStore.loadModels(path),
+      mcpStore.loadStatus(path),
+      skillStore.load(path),
+    ])
   }
 })
 
