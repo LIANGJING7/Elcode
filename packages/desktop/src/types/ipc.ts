@@ -123,6 +123,78 @@ export interface MCPAddPayload {
   timeout?: number
 }
 
+// Extended MCP types for settings page
+export interface McpRuntimeState {
+  connection: ConnectionState
+  latency?: number
+  protocolVersion?: string
+  sessionId?: string
+  reconnectCount?: number
+  lastConnected?: string
+  lastError?: string
+}
+
+export interface AuthenticationState {
+  state: 'disabled' | 'required' | 'opening' | 'waiting' | 'authenticated' | 'failed'
+  account?: string
+  expiresAt?: string
+  authorizationUrl?: string
+  error?: string
+}
+
+export interface McpServerStatus {
+  status: 'connected' | 'disabled' | 'failed' | 'auth_required' | 'auth_failed' | 'testing'
+  error?: string
+  // Extended fields - may be empty if backend doesn't support yet
+  runtime?: McpRuntimeState
+  authentication?: AuthenticationState
+  capabilities?: Record<string, boolean>
+  tools?: ToolInfo[]
+  resources?: ResourceInfo[]
+  prompts?: PromptInfo[]
+}
+
+export interface ToolInfo {
+  name: string
+  description?: string
+}
+
+export interface ResourceInfo {
+  uri: string
+  name?: string
+  description?: string
+}
+
+export interface PromptInfo {
+  name: string
+  description?: string
+}
+
+export interface McpConfig {
+  name: string
+  type: 'local' | 'remote'
+  enabled?: boolean
+  
+  // Command type
+  command?: string
+  args?: string[]
+  cwd?: string
+  environment?: Record<string, string>
+  
+  // HTTP/SSE type
+  url?: string
+  headers?: Record<string, string>
+  oauth?: {
+    clientId?: string
+    clientSecret?: string
+    scope?: string
+  } | false
+  
+  timeout?: number
+}
+
+export type ConnectionState = 'connected' | 'disconnected' | 'connecting' | 'error'
+
 export interface AuthMethodPrompt {
   type: 'text' | 'select'
   key: string
