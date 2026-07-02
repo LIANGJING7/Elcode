@@ -339,14 +339,12 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       }
       
       console.log('[DeleteModel] model found in config, deleting...')
+      console.log('[DeleteModel] models before delete:', Object.keys(providerConfig.models || {}))
       
-      // Delete the model from config
-      delete providerConfig.models[ctx.params.modelID]
+      // Delete the model from config - set to undefined to trigger JSONC removal
+      providerConfig.models[ctx.params.modelID] = undefined
       
-      // If no models left, optionally clean up empty provider
-      if (Object.keys(providerConfig.models || {}).length === 0) {
-        console.log('[DeleteModel] no models left, keeping empty provider.models')
-      }
+      console.log('[DeleteModel] models after setting undefined:', Object.keys(providerConfig.models || {}))
       
       // Write back to config file
       const updatedConfig: ConfigV1.Info = {
@@ -356,6 +354,10 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           [ctx.params.providerID]: providerConfig
         }
       }
+      
+      console.log('[DeleteModel] updatedConfig provider[' + ctx.params.providerID + '] models:')
+      console.log('[DeleteModel]   keys:', Object.keys(updatedConfig.provider[ctx.params.providerID].models || {}))
+      console.log('[DeleteModel]   qwen3.5-plus value:', updatedConfig.provider[ctx.params.providerID].models?.["qwen3.5-plus"])
       
       console.log('[DeleteModel] writing updated config...')
       const result = yield* cfg.updateGlobal(updatedConfig)
