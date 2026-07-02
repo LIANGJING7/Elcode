@@ -15,9 +15,12 @@ export const useMcpStore = defineStore('mcp', () => {
     loading.value = true
     error.value = null
     try {
+      console.log('[McpStore] loadStatus: directory=', directory)
       const status = await window.desktop.mcp.status(directory)
+      console.log('[McpStore] loadStatus result:', JSON.stringify(status).slice(0, 500))
       servers.value = status
     } catch (err) {
+      console.error('[McpStore] loadStatus error:', err)
       error.value = err instanceof Error ? err.message : 'Failed to load MCP status'
       servers.value = {}
     } finally {

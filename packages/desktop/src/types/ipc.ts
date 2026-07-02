@@ -267,6 +267,7 @@ export const IPC_CHANNELS = {
   SKILL_LIST: 'skill:list',
   SKILL_WRITE: 'skill:write',
   MCP_STATUS: 'mcp:status',
+  MCP_CONFIG: 'mcp:config',
   MCP_ADD: 'mcp:add',
   MCP_CONNECT: 'mcp:connect',
   MCP_DISCONNECT: 'mcp:disconnect',

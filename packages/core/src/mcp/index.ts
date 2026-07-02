@@ -237,6 +237,7 @@ interface State {
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
+  readonly config: () => Effect.Effect<Record<string, ConfigMCPV1.Info>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
@@ -603,6 +604,24 @@ export const layer = Layer.effect(
       return result
     })
 
+    const config = Effect.fn("MCP.config")(function* () {
+      const s = yield* InstanceState.get(state)
+      const cfg = yield* cfgSvc.get()
+      const mcpConfig = cfg.mcp ?? {}
+      const result: Record<string, ConfigMCPV1.Info> = {}
+
+      for (const [key, mcp] of Object.entries(mcpConfig)) {
+        if (!isMcpConfigured(mcp)) continue
+        result[key] = mcp
+      }
+
+      for (const [key, mcp] of Object.entries(s.config)) {
+        if (!result[key]) result[key] = mcp
+      }
+
+      return result
+    })
+
     const clients = Effect.fn("MCP.clients")(function* () {
       const s = yield* InstanceState.get(state)
       return s.clients
@@ -926,6 +945,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       status,
+      config,
       clients,
       tools,
       prompts,

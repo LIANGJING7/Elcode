@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process"
+import { spawn, ChildProcess, execFileSync } from "child_process"
 import path from "path"
 import { fileURLToPath } from "url"
 import http from "http"
@@ -17,6 +17,45 @@ function storagePath(input: string): string {
 let backendProcess: ChildProcess | null = null
 let backendPort: number | null = null
 let backendReady = false
+
+// Safety net: if the Electron main process is about to exit for any reason
+// (user Ctrl+C, hard kill, crash, Vite restart in dev), Node still runs the
+// `exit` handler synchronously. Use a synchronous taskkill so the child
+// `bun.exe` backend-launcher is guaranteed to be torn down with us and does
+// not leak as an orphan accumulating across dev iterations.
+function killBackendSync(): void {
+  const proc = backendProcess
+  if (!proc) return
+  backendProcess = null
+  if (proc.exitCode !== null) return
+  const pid = proc.pid
+  try {
+    if (process.platform === "win32" && pid) {
+      // /T kills the whole process tree (cmd -> bun), /F forces it.
+      // Synchronous so it completes before the main process dies.
+      execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      })
+    } else {
+      proc.kill("SIGTERM")
+    }
+  } catch {
+    // already gone
+  }
+}
+
+process.on("exit", killBackendSync)
+// SIGINT/SIGTERM come from Ctrl+C / `bun run dev` restarts. Electron forwards
+// them, but the default `exit` listener above only runs if the process
+// actually exits. Force a synchronous teardown here too.
+const signalShutdown = (): void => {
+  killBackendSync()
+  // Give stdio a tick to flush, then exit non-zero so parent tooling sees it.
+  process.exit(130)
+}
+process.on("SIGINT", signalShutdown)
+process.on("SIGTERM", signalShutdown)
 
 const request = (method: string, pathname: string, body?: unknown): Promise<unknown> => {
   if (!backendPort || !backendReady) {
@@ -137,7 +176,7 @@ export async function startBackend(): Promise<{ port: number }> {
     setTimeout(() => {
       if (!portFound) {
         fail("Backend startup timeout (15s)")
-        stopBackend()
+        stopBackend().catch(() => {})
       }
     }, 15000)
   })
@@ -148,8 +187,14 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
   const procPid = proc.pid
   try {
     if (process.platform === "win32") {
-      // taskkill /T kills the whole process tree; /F forces it.
-      spawn("taskkill", ["/pid", String(procPid), "/T", "/F"], { windowsHide: true })
+      // taskkill /T kills the whole process tree (cmd -> bun); /F forces it.
+      // Synchronous so the tree is actually dead before we resolve — the
+      // previous async spawn() could race the main process exit and leak the
+      // child as an orphan.
+      execFileSync("taskkill", ["/pid", String(procPid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      })
     } else {
       proc.kill("SIGTERM")
     }
@@ -168,10 +213,11 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 }
 
 export async function stopBackend(): Promise<void> {
-  if (backendProcess) {
-    await killProcessTree(backendProcess)
+  const proc = backendProcess
+  if (proc) {
     backendProcess = null
     backendReady = false
+    await killProcessTree(proc)
   }
 }
 
@@ -394,7 +440,18 @@ export const backend = {
   mcp: {
     status: async (directory?: string): Promise<unknown> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      return request("GET", `/mcp?${params}`)
+      console.log('[Backend] mcp.status GET /mcp?' + params)
+      const result = await request("GET", `/mcp?${params}`)
+      console.log('[Backend] mcp.status response:', JSON.stringify(result).slice(0, 500))
+      return result
+    },
+    
+    config: async (directory?: string): Promise<Record<string, unknown>> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      console.log('[Backend] mcp.config GET /mcp/config?' + params)
+      const result = await request("GET", `/mcp/config?${params}`) as Record<string, unknown>
+      console.log('[Backend] mcp.config response:', JSON.stringify(result).slice(0, 500))
+      return result
     },
     
     add: async (name: string, config: unknown, directory?: string): Promise<unknown> => {
@@ -448,9 +505,15 @@ export const backend = {
         }
         
         const params = new URLSearchParams()
-        // Use scope=project to query all sessions in the project, not filter by directory
-        // This matches TUI behavior and avoids project_id mismatch issues
-        params.set('scope', 'project')
+        // Forward directory/workspace so WorkspaceRoutingMiddleware resolves the
+        // user's project (not the launcher's cwd). Without these, the backend
+        // falls back to process.cwd() (the monorepo root) and returns sessions
+        // for the wrong project_id, yielding an empty list.
+        if (query.directory) params.set('directory', storagePath(query.directory))
+        // Do NOT set scope=project: without it, listByProject uses the
+        // exact-directory filter (session.ts:1016-1020) so only sessions
+        // whose `directory` column matches the selected workspace are
+        // returned (subdirectory sessions are excluded).
         if (query.start) params.set('start', String(query.start))
         if (query.search) params.set('search', query.search)
         if (query.limit) params.set('limit', String(query.limit))

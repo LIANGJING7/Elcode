@@ -229,6 +229,9 @@ const showDeleteConfirm = ref(false)
 const editing = ref(false)
 const connecting = ref(false)
 
+// Server configurations from backend (real config, not just status)
+const serverConfigs = ref<Record<string, McpConfig>>({})
+
 // Edit config state
 const editConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
 
@@ -280,19 +283,45 @@ const canAdd = computed(() => {
 })
 
 onMounted(async () => {
+  console.log('[SettingsMcp] onMounted, directory:', directory.value)
   await mcpStore.loadStatus(directory.value)
+  console.log('[SettingsMcp] status loaded, servers:', Object.keys(servers.value))
+  await loadServerConfigs()
+  console.log('[SettingsMcp] configs loaded, serverConfigs:', Object.keys(serverConfigs.value))
   if (Object.keys(servers.value).length > 0) {
     selectedServer.value = Object.keys(servers.value)[0]
+    console.log('[SettingsMcp] auto-selected:', selectedServer.value)
   }
 })
 
+async function loadServerConfigs() {
+  try {
+    console.log('[SettingsMcp] loadServerConfigs: directory=', directory.value)
+    const rawConfigs = await window.desktop.mcp.config(directory.value)
+    console.log('[SettingsMcp] rawConfigs:', JSON.stringify(rawConfigs).slice(0, 500))
+    const converted: Record<string, McpConfig> = {}
+    for (const [name, cfg] of Object.entries(rawConfigs)) {
+      converted[name] = convertBackendConfig(name, cfg as BackendMcpConfig)
+    }
+    serverConfigs.value = converted
+    console.log('[SettingsMcp] converted configs:', Object.keys(converted))
+  } catch (err) {
+    console.error('[SettingsMcp] Failed to load configs:', err)
+  }
+}
+
 watch(selectedServer, (name) => {
   if (name) {
-    // Initialize edit config from selected server
-    editConfig.value = {
-      name: name,
-      type: 'local', // Default, would need backend support to know actual type
-      enabled: convertedServers.value[name]?.status !== 'disabled'
+    // Use real config from backend, or fall back to basic
+    const realConfig = serverConfigs.value[name]
+    if (realConfig) {
+      editConfig.value = { ...realConfig }
+    } else {
+      editConfig.value = {
+        name: name,
+        type: 'local',
+        enabled: convertedServers.value[name]?.status !== 'disabled'
+      }
     }
   }
 })
@@ -319,6 +348,7 @@ async function handleConnect(name: string) {
   connecting.value = true
   try {
     await mcpStore.connect(name, directory.value)
+    await loadServerConfigs()
   } finally {
     connecting.value = false
   }
@@ -328,6 +358,7 @@ async function handleDisconnect(name: string) {
   connecting.value = true
   try {
     await mcpStore.disconnect(name, directory.value)
+    await loadServerConfigs()
   } finally {
     connecting.value = false
   }
@@ -354,6 +385,7 @@ async function handleAddServer() {
   }
 
   await mcpStore.addServer(payload, directory.value)
+  await loadServerConfigs()
   showAddDialog.value = false
   selectedServer.value = config.name
   // Reset new config
@@ -405,6 +437,44 @@ function convertBackendStatus(status: string): McpServerStatus['status'] {
     case 'needs_auth': return 'auth_required'
     case 'needs_client_registration': return 'auth_required'
     default: return 'disabled'
+  }
+}
+
+// Backend config shape (ConfigMCPV1.Info = Local | Remote)
+interface BackendMcpConfig {
+  type: 'local' | 'remote'
+  command?: string[]
+  url?: string
+  enabled?: boolean
+  environment?: Record<string, string>
+  headers?: Record<string, string>
+  oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+  timeout?: number
+}
+
+// Convert backend ConfigMCPV1.Info to frontend McpConfig
+function convertBackendConfig(name: string, cfg: BackendMcpConfig): McpConfig {
+  if (cfg.type === 'local') {
+    const [command, ...args] = cfg.command || []
+    return {
+      name,
+      type: 'local',
+      enabled: cfg.enabled,
+      command: command || '',
+      args: args.length > 0 ? args : undefined,
+      environment: cfg.environment,
+      timeout: cfg.timeout
+    }
+  } else {
+    return {
+      name,
+      type: 'remote',
+      enabled: cfg.enabled,
+      url: cfg.url || '',
+      headers: cfg.headers,
+      oauth: cfg.oauth,
+      timeout: cfg.timeout
+    }
   }
 }
 </script>

@@ -12,10 +12,25 @@ export function registerMcpHandlers() {
   // MCP_STATUS: forward to backend GET /mcp
   ipcMain.handle(IPC_CHANNELS.MCP_STATUS, async (_, directory?: string) => {
     try {
+      console.log('[McpHandler] status: directory=', directory)
       const status = await backend.mcp.status(directory)
+      console.log('[McpHandler] status result:', JSON.stringify(status).slice(0, 500))
       return status as Record<string, MCPStatus>
     } catch (err) {
       console.error('[McpHandler] status error:', err)
+      return {}
+    }
+  })
+
+  // MCP_CONFIG: forward to backend GET /mcp/config
+  ipcMain.handle(IPC_CHANNELS.MCP_CONFIG, async (_, directory?: string) => {
+    try {
+      console.log('[McpHandler] config: directory=', directory)
+      const config = await backend.mcp.config(directory)
+      console.log('[McpHandler] config result:', JSON.stringify(config).slice(0, 500))
+      return config as Record<string, unknown>
+    } catch (err) {
+      console.error('[McpHandler] config error:', err)
       return {}
     }
   })

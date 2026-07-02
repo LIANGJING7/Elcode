@@ -40,6 +40,7 @@ export const McpPaths = {
   prompts: "/mcp/prompts",
   resources: "/mcp/resources",
   serverTools: "/mcp/:name/tools",
+  config: "/mcp/config",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -54,6 +55,20 @@ export const McpApi = HttpApi.make("mcp")
             identifier: "mcp.status",
             summary: "Get MCP status",
             description: "Get the status of all Model Context Protocol (MCP) servers.",
+          }),
+        ),
+        // Config endpoint - get all MCP server configurations
+        HttpApiEndpoint.get("config", McpPaths.config, {
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.Record(Schema.String, ConfigMCPV1.Info),
+            "MCP server configurations"
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.config",
+            summary: "Get MCP configurations",
+            description: "Get the configuration of all Model Context Protocol (MCP) servers.",
           }),
         ),
         HttpApiEndpoint.post("add", McpPaths.status, {

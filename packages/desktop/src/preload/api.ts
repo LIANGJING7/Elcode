@@ -158,6 +158,9 @@ export const desktopAPI = {
     status: (directory?: string): Promise<Record<string, MCPStatus>> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_STATUS, directory),
 
+    config: (directory?: string): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_CONFIG, directory),
+
     add: (payload: MCPAddPayload, directory?: string): Promise<Record<string, MCPStatus>> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_ADD, payload, directory),
 

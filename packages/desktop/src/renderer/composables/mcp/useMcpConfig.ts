@@ -1,8 +1,29 @@
 import { ref, computed } from 'vue'
 import type { McpConfig, McpServerStatus, MCPStatus } from '../../../types/ipc'
 
+// Backend config shape (ConfigMCPV1.Info = Local | Remote)
+interface BackendLocalConfig {
+  type: 'local'
+  command: string[]
+  environment?: Record<string, string>
+  enabled?: boolean
+  timeout?: number
+}
+
+interface BackendRemoteConfig {
+  type: 'remote'
+  url: string
+  enabled?: boolean
+  headers?: Record<string, string>
+  oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
+  timeout?: number
+}
+
+type BackendMcpConfig = BackendLocalConfig | BackendRemoteConfig
+
 export function useMcpConfig() {
   const servers = ref<Record<string, McpServerStatus>>({})
+  const configs = ref<Record<string, McpConfig>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -10,16 +31,28 @@ export function useMcpConfig() {
     loading.value = true
     error.value = null
     try {
-      const status = await window.desktop.mcp.status(directory)
+      // Fetch both status and config in parallel
+      const [statusResult, configResult] = await Promise.all([
+        window.desktop.mcp.status(directory),
+        window.desktop.mcp.config(directory)
+      ])
+
       // Convert MCPStatus to McpServerStatus format
-      const converted: Record<string, McpServerStatus> = {}
-      for (const [name, s] of Object.entries(status)) {
-        converted[name] = {
+      const convertedStatus: Record<string, McpServerStatus> = {}
+      for (const [name, s] of Object.entries(statusResult)) {
+        convertedStatus[name] = {
           status: convertStatus(s.status),
           error: s.error
         }
       }
-      servers.value = converted
+      servers.value = convertedStatus
+
+      // Convert backend config to frontend McpConfig format
+      const convertedConfig: Record<string, McpConfig> = {}
+      for (const [name, cfg] of Object.entries(configResult)) {
+        convertedConfig[name] = convertBackendConfig(name, cfg as BackendMcpConfig)
+      }
+      configs.value = convertedConfig
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load MCP config'
     } finally {
@@ -40,15 +73,8 @@ export function useMcpConfig() {
         timeout: config.timeout
       }
       const status = await window.desktop.mcp.add(payload, directory)
-      // Convert and update servers
-      const converted: Record<string, McpServerStatus> = {}
-      for (const [name, s] of Object.entries(status)) {
-        converted[name] = {
-          status: convertStatus(s.status),
-          error: s.error
-        }
-      }
-      servers.value = converted
+      // Reload both status and config after add
+      await loadConfig(directory)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to add server'
       throw err
@@ -110,6 +136,7 @@ export function useMcpConfig() {
 
   return {
     servers,
+    configs,
     loading,
     error,
     loadConfig,
@@ -132,8 +159,35 @@ function convertStatus(status: MCPStatus['status']): McpServerStatus['status'] {
     case 'needs_auth':
       return 'auth_required'
     case 'needs_client_registration':
-      return 'auth_required' // Treat as auth required for UI
+      return 'auth_required'
     default:
       return 'disabled'
+  }
+}
+
+// Convert backend ConfigMCPV1.Info to frontend McpConfig
+function convertBackendConfig(name: string, cfg: BackendMcpConfig): McpConfig {
+  if (cfg.type === 'local') {
+    // command is string[] where [0] is the command, [1..] are args
+    const [command, ...args] = cfg.command
+    return {
+      name,
+      type: 'local',
+      enabled: cfg.enabled,
+      command: command || '',
+      args: args.length > 0 ? args : undefined,
+      environment: cfg.environment,
+      timeout: cfg.timeout
+    }
+  } else {
+    return {
+      name,
+      type: 'remote',
+      enabled: cfg.enabled,
+      url: cfg.url,
+      headers: cfg.headers,
+      oauth: cfg.oauth,
+      timeout: cfg.timeout
+    }
   }
 }
