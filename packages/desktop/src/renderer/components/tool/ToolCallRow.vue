@@ -5,12 +5,10 @@
  * Layout: [status icon] [meta.icon] [tool name (mono)] [summary (bold)] [→]
  *
  * Click signals:
- *   - @activate : whole-row click — parent decides inline-expand vs inspect
- *                 based on the tool's defaultInteraction.
- *   - @inspect  : summary-area click — always opens the Inspector (so even
- *                 inline-mode tools can be inspected by clicking the summary).
+ *   - @activate : whole-row click — parent decides behavior based on interaction
+ *                 mode (inline expand vs panel open).
  *   - @expand   : explicit expand arrow click — always toggles inline detail
- *                 (lets inspect-mode tools still be expanded inline if wanted).
+ *                 (lets panel-mode tools still be expanded inline if wanted).
  *
  * Accepts both ToolCall (history) and StreamingToolCall (live) since
  * StreamingToolCall extends ToolCall.
@@ -28,8 +26,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   activate: []
   expand: []
-  inspect: [id: string]
-  openFile: [tool: ToolCall]
 }>()
 
 // Status icon derived from tool.status (works for both history + streaming)
@@ -82,19 +78,13 @@ const summaryText = computed(() => {
       {{ meta.icon }}
     </span>
 
-    <!-- Tool name (mono, fixed width) — click opens file tab -->
-    <span
-      class="tool-name text-xs font-mono text-text-secondary w-20 shrink-0 truncate cursor-pointer hover:text-accent"
-      @click.stop="emit('openFile', tool)"
-    >
+    <!-- Tool name (mono, fixed width) -->
+    <span class="tool-name text-xs font-mono text-text-secondary w-20 shrink-0 truncate">
       {{ displayName }}
     </span>
 
-    <!-- Summary (bold) — click opens file tab -->
-    <span
-      class="summary text-xs text-text-primary font-medium flex-1 truncate cursor-pointer hover:text-accent"
-      @click.stop="emit('openFile', tool)"
-    >
+    <!-- Summary (bold) -->
+    <span class="summary text-xs text-text-primary font-medium flex-1 truncate">
       {{ summaryText }}
     </span>
 

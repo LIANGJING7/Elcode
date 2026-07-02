@@ -8,8 +8,9 @@
  * expanded detail panel.
  *
  * Click behavior follows the tool's `defaultInteraction`:
- *   - 'inline'  : clicking the row expands the detail inline (edit/write/bash/...)
- *   - 'inspect' : clicking the row opens the right-side Inspector (grep/glob/read/...)
+ *   - 'inline' : clicking the row expands the detail inline (edit/write/bash/...)
+ *   - 'panel'  : clicking the row opens the right-side ArtifactPanel (grep/glob/read/...)
+ *   - 'none'   : no click response
  *
  * ToolCall is the single business model; StreamingToolCall extends it, so this
  * component accepts ToolCall and transparently handles live + historical data.
@@ -30,7 +31,7 @@ const props = withDefaults(defineProps<{
   defaultExpanded: false,
 })
 
-const emit = defineEmits<{ inspect: [id: string]; openFile: [tool: ToolCall] }>()
+const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
 
 const expanded = ref(props.defaultExpanded)
 
@@ -44,13 +45,14 @@ function toggleExpanded() {
   expanded.value = !expanded.value
 }
 
-// Row click: 'inline' → toggle expand; 'inspect' → emit inspect.
+// Row click: 'inline' → toggle expand; 'panel' → emit openFile; 'none' → no action.
 function handleRowActivate() {
-  if (interaction.value === 'inspect') {
-    emit('inspect', props.tool.id)
-  } else {
+  if (interaction.value === 'panel') {
+    emit('openFile', props.tool)
+  } else if (interaction.value === 'inline') {
     toggleExpanded()
   }
+  // 'none' - no response
 }
 </script>
 
@@ -63,8 +65,6 @@ function handleRowActivate() {
       :meta="meta"
       @activate="handleRowActivate"
       @expand="toggleExpanded"
-      @inspect="(id) => emit('inspect', id)"
-      @open-file="(tool) => emit('openFile', tool)"
     />
 
     <!-- Expanded detail -->
