@@ -12,16 +12,23 @@
       <McpServerList
         :servers="serverList"
         :selected-server="selectedServer || undefined"
+        :loading="loading"
         @select="handleSelect"
         @add="showAddDialog = true"
         @open-config="handleOpenConfig"
       />
 
-      <!-- Right: Server detail -->
+<!-- Right: Server detail -->
       <div class="flex-1 min-w-0 border border-border rounded-lg overflow-hidden flex flex-col">
+        <!-- Loading state -->
+        <div v-if="loading && !selectedServer" class="flex-1 flex flex-col items-center justify-center gap-3 text-text-muted">
+          <div class="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full"></div>
+          <span class="text-sm">正在加载 MCP 服务器状态...</span>
+          <span class="text-xs">首次加载需要连接服务器，可能需要一些时间</span>
+        </div>
         <!-- Empty state -->
-        <div v-if="!selectedServer" class="flex-1 flex items-center justify-center text-text-muted text-sm">
-          请从左侧选择一个服务器
+        <div v-else-if="!selectedServer" class="flex-1 flex items-center justify-center text-text-muted text-sm">
+          请在左侧选择一个服务器
         </div>
 
         <!-- Detail view -->
