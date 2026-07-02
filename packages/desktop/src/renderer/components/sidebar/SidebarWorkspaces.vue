@@ -1,18 +1,9 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-vue-next'
 import { useWorkspaceStore } from '../../stores/workspace'
 
 const store = useWorkspaceStore()
 const { workspaces, currentWorkspace } = storeToRefs(store)
-
-// + Add Workspace = 显式调 openFolderPicker(弹目录对话框), 拿到 path 再 addWorkspace.
-// 与 SidebarSessions 的 + New Session(createSession, 不弹目录) 语义区分开.
-async function add() {
-  const path = await store.openFolderPicker()
-  if (path) await store.addWorkspace(path)
-}
 
 function select(id: string) {
   const ws = workspaces.value.find(w => w.id === id)
@@ -40,17 +31,6 @@ function select(id: string) {
         </button>
       </li>
     </ul>
-
-    <Button
-      variant="outline"
-      data-testid="add-workspace"
-      size="sm"
-      class="mt-1 w-full gap-2"
-      @click="add"
-    >
-      <Plus class="w-4 h-4" />
-      <span>Add Workspace</span>
-    </Button>
   </div>
 </template>
 

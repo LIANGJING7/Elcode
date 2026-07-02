@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import type { McpServerStatus } from '../../../../types/ipc'
 import McpServerItem from './McpServerItem.vue'
 
@@ -57,5 +57,13 @@ defineEmits<{
   'open-config': []
 }>()
 
-const serverNames = computed(() => Object.keys(props.servers).sort())
+watch(() => props.servers, (servers) => {
+  console.log('[McpServerList] props.servers updated:', servers, 'keys:', Object.keys(servers))
+}, { immediate: true })
+
+const serverNames = computed(() => {
+  const names = Object.keys(props.servers).sort()
+  console.log('[McpServerList] serverNames computed:', names)
+  return names
+})
 </script>

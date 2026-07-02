@@ -622,23 +622,15 @@ function handleDeleteModel(modelId: string) {
 async function confirmDeleteModel() {
   if (!selectedProvider.value || !deletingModelId.value) return
 
-  // Call the update provider API to remove the model
-  // Note: The backend may not support removing individual models,
-  // so this may need backend changes. For now, just remove from local state.
-  const provider = selectedProvider.value
-  const newModels = { ...provider.models }
-  delete newModels[deletingModelId.value]
+  const result = await modelsStore.deleteModel(selectedProvider.value.id, deletingModelId.value, directory.value)
 
-  const result = await modelsStore.updateProvider(provider.id, {
-    // We don't have a dedicated delete-model API, so we just refresh
-  }, directory.value)
-
-  // Refresh models to get updated list
-  await handleRefreshModels(provider.id)
-
-  showDeleteModelConfirm.value = false
-  deletingModelId.value = ''
-  deletingModelName.value = ''
+  if (result.success) {
+    showDeleteModelConfirm.value = false
+    deletingModelId.value = ''
+    deletingModelName.value = ''
+  } else {
+    console.error('Delete model failed:', result.error)
+  }
 }
 </script>
 

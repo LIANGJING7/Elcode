@@ -40,18 +40,40 @@ app.whenReady().then(async () => {
   })
 })
 
+// Teardown must finish before the main process actually dies — otherwise
+// Electron exits while `stopBackend()` is still running taskkill and the
+// child `bun.exe` backend-launcher leaks as an orphan. The `exit`/SIGINT
+// handlers in backend-client.ts are a synchronous safety net, but the normal
+// quit path should be clean.
+let shuttingDown = false
+
+async function teardownAndQuit(): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
+  try {
+    await stopBackend()
+    const { IPC_CHANNELS } = await import('./ipc/channels')
+    const channels = Object.values(IPC_CHANNELS) as string[]
+    channels.forEach(channel => ipcMain.removeHandler(channel))
+  } catch (err) {
+    console.error('Teardown error:', err)
+  } finally {
+    app.exit(0)
+  }
+}
+
 app.on('window-all-closed', () => {
-  stopBackend()
   if (process.platform !== 'darwin') {
-    app.quit()
+    void teardownAndQuit()
   }
 })
 
-app.on('before-quit', async () => {
-  await stopBackend()
-  const { IPC_CHANNELS } = await import('./ipc/channels')
-  const channels = Object.values(IPC_CHANNELS) as string[]
-  channels.forEach(channel => ipcMain.removeHandler(channel))
+// `before-quit` fires for both manual quit (Cmd+Q / tray) and programmatic
+// `app.quit()`. Prevent the default quit so we control the final exit; the
+// sync exit-handler on the backend process still covers hard-kill cases.
+app.on('before-quit', (event) => {
+  event.preventDefault()
+  void teardownAndQuit()
 })
 
 process.on('uncaughtException', (error) => {

@@ -2,8 +2,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDebounceFn } from '@vueuse/core'
-import { Button } from '@/components/ui/button'
-import { Plus, X, Loader2 } from 'lucide-vue-next'
+import { X, Loader2 } from 'lucide-vue-next'
 import { useSessionStore } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
 import { useUiStore } from '../../stores/ui'
@@ -18,6 +17,36 @@ const streamingStore = useStreamingStore()
 const { state, pagination, hasMore } = storeToRefs(sessionStore)
 const { currentWorkspace } = storeToRefs(workspaceStore)
 const currentSessionId = computed(() => sessionStore.currentSessionId)
+
+// Debug: watch conversations changes
+watch(
+  () => state.value.conversations,
+  (convs) => {
+    console.log('[SIDEBAR_SESSIONS] Conversations updated:', convs.length, 'items')
+    if (convs.length > 0) {
+      console.log('[SIDEBAR_SESSIONS] First conversation:', JSON.stringify(convs[0]).slice(0, 150))
+    }
+  },
+  { immediate: true }
+)
+
+// Debug: watch loading state
+watch(
+  () => state.value.isLoading,
+  (loading) => {
+    console.log('[SIDEBAR_SESSIONS] isLoading changed to:', loading)
+  }
+)
+
+// Debug: watch error state
+watch(
+  () => state.value.error,
+  (error) => {
+    if (error) {
+      console.error('[SIDEBAR_SESSIONS] Error detected:', error)
+    }
+  }
+)
 
 // 搜索输入（debounce 300ms 在 UI 层处理）
 const searchInput = ref('')
@@ -51,15 +80,6 @@ const showDeleteConfirm = ref(false)
 const deletingSessionId = ref<string | null>(null)
 const deletingSessionTitle = ref('')
 const isDeleting = ref(false)
-
-// 新建会话
-function newSession() {
-  console.log('[DEBUG SidebarSessions] newSession called')
-  sessionStore.startNewSession()
-  // Don't call ui.setView('chat') here - effectiveView will return 'newSession'
-  // because currentSessionId is null and isPendingNewSession is true.
-  // The view will switch to 'chat' automatically when a session is created.
-}
 
 // 选择会话
 function select(id: string) {
@@ -180,17 +200,6 @@ function isSessionStreaming(sessionId: string): boolean {
       <span v-if="searchInput">No conversations match "{{ searchInput }}"</span>
       <span v-else>No conversations yet</span>
     </div>
-
-    <!-- 新建会话按钮 -->
-    <Button
-      data-testid="new-session"
-      size="sm"
-      class="mt-1 w-full gap-2 shrink-0"
-      @click="newSession"
-    >
-      <Plus class="w-4 h-4" />
-      <span>New Session</span>
-    </Button>
 
     <!-- 删除确认对话框 -->
     <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

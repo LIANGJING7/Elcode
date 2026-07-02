@@ -241,17 +241,23 @@ const newConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
 // Convert store servers (MCPStatus) to McpServerStatus format
 const convertedServers = computed<Record<string, McpServerStatus>>(() => {
   const result: Record<string, McpServerStatus> = {}
+  console.log('[SettingsMcp] convertedServers computing from servers.value:', servers.value, 'keys:', Object.keys(servers.value))
   for (const [name, status] of Object.entries(servers.value)) {
     result[name] = {
       status: convertBackendStatus(status.status),
       error: status.error
     }
   }
+  console.log('[SettingsMcp] convertedServers result:', result, 'keys:', Object.keys(result))
   return result
 })
 
 // Use converted servers for the list component
-const serverList = computed(() => convertedServers.value)
+const serverList = computed(() => {
+  const list = convertedServers.value
+  console.log('[SettingsMcp] serverList computed:', list, 'keys:', Object.keys(list))
+  return list
+})
 
 const selectedStatus = computed(() => {
   if (!selectedServer.value) return null
@@ -284,6 +290,7 @@ const canAdd = computed(() => {
 
 onMounted(async () => {
   console.log('[SettingsMcp] onMounted, directory:', directory.value)
+  console.log('[SettingsMcp] currentWorkspace:', currentWorkspace.value)
   await mcpStore.loadStatus(directory.value)
   console.log('[SettingsMcp] status loaded, servers:', Object.keys(servers.value))
   await loadServerConfigs()
@@ -291,6 +298,14 @@ onMounted(async () => {
   if (Object.keys(servers.value).length > 0) {
     selectedServer.value = Object.keys(servers.value)[0]
     console.log('[SettingsMcp] auto-selected:', selectedServer.value)
+  }
+})
+
+watch(directory, async (newDir, oldDir) => {
+  console.log('[SettingsMcp] directory changed:', oldDir, '->', newDir)
+  if (newDir && newDir !== oldDir) {
+    await mcpStore.loadStatus(newDir)
+    await loadServerConfigs()
   }
 })
 

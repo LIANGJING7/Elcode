@@ -5,7 +5,8 @@ import SidebarWorkspaces from '../SidebarWorkspaces.vue'
 import { useWorkspaceStore } from '../../../stores/workspace'
 import type { Workspace } from '../../../../types/ipc'
 
-// 真实 store 方法会落到 window.desktop IPC, 这里按 session.test.ts 的约定 stub
+// 真实 store 方法会落到 window.desktop IPC, 这里按 session.test.ts 的约定 stub.
+// 注: Add Workspace 按钮已移除, 添加工作区改由 WelcomeView 的 open-folder 入口承担.
 const mockWorkspace = {
   list: vi.fn().mockResolvedValue([]),
   getCwd: vi.fn().mockResolvedValue(''),
@@ -26,23 +27,6 @@ describe('SidebarWorkspaces', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-  })
-
-  it('点 + 触发 addWorkspace (调 openFolderPicker + 写 workspaces.json)', async () => {
-    const store = useWorkspaceStore()
-    // openFolderPicker 走 IPC, 这里 mock 成"用户选了 C:/picked"
-    vi.spyOn(store, 'openFolderPicker').mockResolvedValue('C:/picked')
-    // addWorkspace 保留真实实现(spy 记录调用), 但其内部 window.desktop.workspace.add 也要能落地
-    mockWorkspace.add.mockResolvedValue(mkWs({ id: 'ws-picked', path: 'C:/picked', name: 'picked' }))
-    const spyAdd = vi.spyOn(store, 'addWorkspace')
-
-    const w = mount(SidebarWorkspaces)
-    await w.find('button[data-testid="add-workspace"]').trigger('click')
-    // 等待组件内 await 链落地
-    await vi.waitFor(() => expect(spyAdd).toHaveBeenCalled())
-
-    expect(store.openFolderPicker).toHaveBeenCalled()
-    expect(spyAdd).toHaveBeenCalledWith('C:/picked')
   })
 
   it('点击 workspace 行触发 selectWorkspace', async () => {

@@ -120,13 +120,16 @@ async function loadModels(directory?: string) {
       const connectedSet = new Set(result.connected || [])
       console.log('[loadModels] connectedSet:', connectedSet)
       
-      const allProviders = result.all as ProviderInfo[]
-      const filteredProviders = connectedSet.size > 0 
-        ? allProviders.filter(p => connectedSet.has(p.id))
-        : allProviders
-      console.log('[loadModels] 过滤后的 providers:', filteredProviders)
+      // 从后端返回的 key 和 options 中提取 apiKey 和 baseUrl
+      const mappedProviders = (result.all as any[]).map((p: any) => ({
+        ...p,
+        apiKey: p.key || undefined,
+        baseUrl: p.options?.baseURL || p.options?.baseUrl || undefined,
+      }))
       
-      providers.value = filteredProviders
+      providers.value = connectedSet.size > 0 
+        ? mappedProviders.filter(p => connectedSet.has(p.id))
+        : mappedProviders
       connectedProviders.value = result.connected || []
       console.log('[loadModels] 最终 providers.value:', providers.value)
       

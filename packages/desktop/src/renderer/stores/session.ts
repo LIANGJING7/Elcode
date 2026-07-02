@@ -164,6 +164,9 @@ export const useSessionStore = defineStore('session', () => {
     generation++
     const currentGen = generation
 
+    console.log('[SESSION_STORE_RELOAD] Starting reload, gen:', currentGen, 'silent:', options?.silent)
+    console.log('[SESSION_STORE_RELOAD] Query:', JSON.stringify(query))
+
     if (!options?.silent) {
       state.isLoading = true
       state.conversations = []
@@ -172,6 +175,7 @@ export const useSessionStore = defineStore('session', () => {
     state.error = null
 
     try {
+      console.log('[SESSION_STORE_RELOAD] Calling window.desktop.session.list...')
       const result = await window.desktop.session.list({
         directory: query.directory,
         workspace: query.workspace,
@@ -180,16 +184,26 @@ export const useSessionStore = defineStore('session', () => {
         limit: query.limit,
       })
 
-      if (currentGen !== generation) return
+      console.log('[SESSION_STORE_RELOAD] Result received:', JSON.stringify(result).slice(0, 500))
+      console.log('[SESSION_STORE_RELOAD] Conversations count:', result.conversations?.length ?? 0)
+
+      if (currentGen !== generation) {
+        console.log('[SESSION_STORE_RELOAD] Generation mismatch, skipping - current:', currentGen, 'latest:', generation)
+        return
+      }
 
       state.conversations = result.conversations
       pagination.nextCursor = result.nextCursor ?? null
+      
+      console.log('[SESSION_STORE_RELOAD] State updated - conversations:', state.conversations.length, 'nextCursor:', pagination.nextCursor)
     } catch (e) {
+      console.error('[SESSION_STORE_RELOAD] Error:', e)
       if (currentGen !== generation) return
       state.error = e instanceof Error ? e.message : 'Failed to load conversations'
     } finally {
       if (currentGen === generation) {
         state.isLoading = false
+        console.log('[SESSION_STORE_RELOAD] Loading complete, isLoading set to false')
 
         // Restore remembered session after reload (for workspace switching)
         if (pendingRestoreSession) {

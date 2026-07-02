@@ -241,9 +241,17 @@ export function registerSessionHandlers() {
   })
 
   ipcMain.handle(CHANNELS.SESSION_LIST, async (_event, query?: SessionListQuery): Promise<SessionListResult> => {
+    console.log('[SESSION_LIST] Handler called with query:', JSON.stringify(query))
     // Use experimental API with cursor pagination support
-    const result = await backend.experimental.session.list(query ?? {})
-    return result
+    try {
+      const result = await backend.experimental.session.list(query ?? {})
+      console.log('[SESSION_LIST] Backend returned:', JSON.stringify(result).slice(0, 500))
+      console.log('[SESSION_LIST] Conversations count:', result.conversations?.length ?? 0)
+      return result
+    } catch (e) {
+      console.error('[SESSION_LIST] Error:', e)
+      throw e
+    }
   })
 
   ipcMain.handle(CHANNELS.SESSION_MESSAGES, async (_event, sessionID: string, limit?: number, directory?: string) => {
