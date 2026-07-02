@@ -130,7 +130,10 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_TEST, providerIdOrConfig, directory),
 
     refreshModels: (providerId: string, directory?: string): Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_REFRESH_MODELS, providerId, directory)
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_REFRESH_MODELS, providerId, directory),
+
+    deleteModel: (providerId: string, modelId: string, directory?: string): Promise<{ success: boolean; fromApi?: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_DELETE_MODEL, providerId, modelId, directory)
   },
 
   workspace: {

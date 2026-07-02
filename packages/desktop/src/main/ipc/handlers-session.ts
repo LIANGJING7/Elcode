@@ -408,6 +408,53 @@ export function registerSessionHandlers() {
     await backend.config.set(key, value, directory)
     return true
   })
+
+  // Delete model from provider config
+  ipcMain.handle(CHANNELS.PROVIDER_DELETE_MODEL, async (_event, providerId: string, modelId: string, directory?: string) => {
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    
+    if (!directory) {
+      return { success: false, error: 'No directory provided' }
+    }
+    
+    const configPath = path.resolve(directory, 'lcode.jsonc')
+    
+    try {
+      const configText = await fs.readFile(configPath, 'utf-8')
+      
+      // Parse JSONC (remove comments and trailing commas)
+      let cleanText = configText
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']')
+      
+      const config = JSON.parse(cleanText)
+      
+      // Check if model exists in config
+      if (!config.provider?.[providerId]?.models?.[modelId]) {
+        // Model not in config file - just return success (it's from API discovery)
+        return { success: true, fromApi: true }
+      }
+      
+      // Delete model from config
+      delete config.provider[providerId].models[modelId]
+      
+      // Write back
+      const updatedText = JSON.stringify(config, null, 2)
+      await fs.writeFile(configPath, updatedText, 'utf-8')
+      
+      return { success: true, fromApi: false }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      // If file doesn't exist, model can't be in config
+      if (error.includes('ENOENT')) {
+        return { success: true, fromApi: true }
+      }
+      return { success: false, error }
+    }
+  })
 }
 
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {

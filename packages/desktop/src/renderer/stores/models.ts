@@ -476,39 +476,14 @@ async function loadModels(directory?: string) {
         return { success: false, error: `模型 '${modelId}' 不存在` }
       }
 
-      // 读取 lcode.jsonc 配置文件
-      const configPath = 'lcode.jsonc'
-      const readResult = await window.desktop.configFile.read(configPath, directory)
-      if (!readResult.success) {
-        return { success: false, error: `读取配置文件失败: ${readResult.error}` }
-      }
-      const configText = readResult.content || '{}'
-
-      // 解析 JSONC
-      let cleanText = configText
-        .replace(/\/\/.*$/gm, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/,\s*}/g, '}')
-        .replace(/,\s*]/g, ']')
+      // 调用后端 API 删除模型
+      const result = await window.desktop.provider.deleteModel(providerId, modelId, directory)
       
-      const config = JSON.parse(cleanText)
-
-      // 检查模型是否在配置文件中定义
-      if (!config.provider?.[providerId]?.models?.[modelId]) {
-        return { success: false, error: `模型 '${modelId}' 不在配置文件中定义，无法删除` }
+      if (!result.success) {
+        return { success: false, error: result.error }
       }
 
-      // 删除模型配置
-      delete config.provider[providerId].models[modelId]
-
-      // 写入配置文件
-      const updatedText = JSON.stringify(config, null, 2)
-      const writeResult = await window.desktop.configFile.write(configPath, updatedText, directory)
-      if (!writeResult.success) {
-        return { success: false, error: `写入配置文件失败: ${writeResult.error}` }
-      }
-
-      // 更新本地状态
+      // 更新本地状态（无论模型来自配置文件还是 API，都从 UI 移除）
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
       if (providerIndex !== -1) {
         delete providers.value[providerIndex].models[modelId]
