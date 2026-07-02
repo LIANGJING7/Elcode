@@ -1,94 +1,200 @@
 <template>
-  <div class="settings-section">
-    <h2 class="text-lg font-medium text-text mb-4">MCP Servers</h2>
-
-    <div v-if="loading" class="text-text-muted text-center py-8">
-      Loading MCP status...
+  <div class="flex h-full flex-col">
+    <!-- Header -->
+    <div class="flex-shrink-0 mb-6">
+      <h2 class="text-2xl font-bold text-text mb-2">MCP 服务器</h2>
+      <p class="text-sm text-text-muted">管理 MCP 服务器配置，连接后可在聊天时使用工具。</p>
     </div>
 
-    <div v-else-if="error" class="text-red-400 text-center py-8">
-      {{ error }}
-    </div>
-
-    <div v-else-if="serverNames.length === 0" class="text-text-muted text-center py-8">
-      No MCP servers configured
-    </div>
-
-    <div v-else class="space-y-3">
-      <McpCard
-        v-for="name in serverNames"
-        :key="name"
-        :name="name"
-        :status="servers[name]"
-        @connect="handleConnect(name)"
-        @disconnect="handleDisconnect(name)"
+    <!-- Two-column layout -->
+    <div class="flex flex-1 min-h-0 gap-4">
+      <!-- Left: Server list -->
+      <McpServerList
+        :servers="serverList"
+        :selected-server="selectedServer || undefined"
+        @select="handleSelect"
+        @add="showAddDialog = true"
+        @open-config="handleOpenConfig"
       />
+
+      <!-- Right: Server detail -->
+      <div class="flex-1 min-w-0 border border-border rounded-lg overflow-hidden flex flex-col">
+        <!-- Empty state -->
+        <div v-if="!selectedServer" class="flex-1 flex items-center justify-center text-text-muted text-sm">
+          请从左侧选择一个服务器
+        </div>
+
+        <!-- Detail view -->
+        <div v-else class="flex flex-col h-full">
+          <!-- Detail header -->
+          <div class="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+            <h3 class="text-lg font-semibold text-text">{{ selectedServer }}</h3>
+            <div class="flex items-center gap-2">
+              <span
+                class="px-2.5 py-1 rounded-md text-xs font-medium"
+                :class="selectedStatus?.status === 'connected'
+                  ? 'bg-green-500/10 text-green-500'
+                  : 'bg-text-muted/10 text-text-muted'"
+              >
+                {{ statusLabel }}
+              </span>
+              <button
+                v-if="selectedStatus?.status !== 'connected'"
+                class="px-3 py-1.5 text-xs bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
+                :disabled="connecting"
+                @click="handleConnect(selectedServer)"
+              >
+                {{ connecting ? '连接中...' : '连接' }}
+              </button>
+              <button
+                v-else
+                class="px-3 py-1.5 text-xs border border-border hover:border-border-light text-text rounded-lg transition-colors cursor-pointer"
+                :disabled="connecting"
+                @click="handleDisconnect(selectedServer)"
+              >
+                {{ connecting ? '断开中...' : '断开' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Detail body -->
+          <div class="flex-1 overflow-y-auto p-5 space-y-6">
+            <!-- Connection Section -->
+            <ConnectionSection
+              :status="selectedStatus || { status: 'disabled' }"
+              :testing="testing"
+              @test="handleTestConnection"
+            />
+
+            <!-- Config Section (only for new/edit) -->
+            <div v-if="editing" class="space-y-4 pt-4 border-t border-border">
+              <BasicSection
+                :config="editConfig"
+                :is-new="false"
+                @update="handleConfigUpdate"
+              />
+
+              <CommandConfig
+                v-if="editConfig.type === 'local'"
+                :config="editConfig"
+                @update="handleConfigUpdate"
+              />
+
+              <HttpConfig
+                v-if="editConfig.type === 'remote'"
+                :config="editConfig"
+                @update="handleConfigUpdate"
+              />
+
+              <div class="flex gap-2 pt-2">
+                <button
+                  class="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+                  @click="handleSave"
+                >
+                  保存
+                </button>
+                <button
+                  class="px-4 py-2 border border-border hover:border-border-light text-text text-sm rounded-lg transition-colors"
+                  @click="editing = false"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+
+            <!-- Read-only config display -->
+            <div v-else class="space-y-4 pt-4 border-t border-border">
+              <div>
+                <label class="text-xs text-text-muted block mb-1.5">类型</label>
+                <span class="text-sm text-text">{{ selectedStatus?.status === 'connected' ? '已连接' : '未连接' }}</span>
+              </div>
+              <div v-if="selectedStatus?.error">
+                <label class="text-xs text-text-muted block mb-1.5">错误信息</label>
+                <span class="text-sm text-red-400">{{ selectedStatus.error }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detail footer -->
+          <div class="flex items-center justify-between px-5 py-3 border-t border-border flex-shrink-0">
+            <button
+              class="px-3 py-1.5 text-xs text-text-muted hover:text-text rounded-lg transition-colors cursor-pointer"
+              @click="editing = !editing"
+            >
+              {{ editing ? '取消编辑' : '编辑配置' }}
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+              @click="showDeleteConfirm = true"
+            >
+              删除服务器
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Add MCP server -->
-    <div class="mt-6 pt-6 border-t border-border">
-      <button
-        class="px-4 py-2 rounded-lg bg-bg-hover hover:bg-bg-elevated border border-border text-text text-sm font-medium transition-colors"
-        @click="showAddDialog = true"
-      >
-        Add MCP Server
-      </button>
+    <!-- Add Server Dialog (inline) -->
+    <div v-if="showAddDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-bg-elevated border border-border rounded-lg shadow-xl w-full max-w-md p-5">
+        <h3 class="text-sm font-medium text-text mb-4">添加 MCP 服务器</h3>
+        <div class="space-y-4">
+          <BasicSection
+            :config="newConfig"
+            :is-new="true"
+            @update="handleNewConfigUpdate"
+          />
+
+          <CommandConfig
+            v-if="newConfig.type === 'local'"
+            :config="newConfig"
+            @update="handleNewConfigUpdate"
+          />
+
+          <HttpConfig
+            v-if="newConfig.type === 'remote'"
+            :config="newConfig"
+            @update="handleNewConfigUpdate"
+          />
+
+          <div class="flex gap-2 justify-end pt-2">
+            <button
+              class="px-4 py-2 text-xs bg-bg border border-border hover:border-border-light rounded text-text cursor-pointer transition-all duration-fast"
+              @click="showAddDialog = false"
+            >
+              取消
+            </button>
+            <button
+              class="px-4 py-2 text-xs bg-accent hover:bg-accent-hover rounded text-white cursor-pointer transition-all duration-fast"
+              :disabled="!canAdd"
+              @click="handleAddServer"
+            >
+              添加
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Add MCP Dialog (simple inline form) -->
-    <div v-if="showAddDialog" class="mt-4 p-4 rounded-lg bg-bg-surface border border-border">
-      <h3 class="text-sm font-medium text-text mb-3">Add MCP Server</h3>
-      <div class="space-y-3">
-        <div>
-          <label class="text-2xs text-text-muted block mb-1">Name</label>
-          <input
-            v-model="newServer.name"
-            type="text"
-            class="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-text text-sm outline-none focus:border-accent"
-            placeholder="my-mcp-server"
-          />
-        </div>
-        <div>
-          <label class="text-2xs text-text-muted block mb-1">Type</label>
-          <select
-            v-model="newServer.type"
-            class="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-text text-sm outline-none focus:border-accent"
-          >
-            <option value="local">Local (stdio)</option>
-            <option value="remote">Remote (HTTP)</option>
-          </select>
-        </div>
-        <div v-if="newServer.type === 'local'">
-          <label class="text-2xs text-text-muted block mb-1">Command</label>
-          <input
-            v-model="localCommand"
-            type="text"
-            class="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-text text-sm outline-none focus:border-accent"
-            placeholder="npx -y my-mcp-server"
-          />
-        </div>
-        <div v-if="newServer.type === 'remote'">
-          <label class="text-2xs text-text-muted block mb-1">URL</label>
-          <input
-            v-model="newServer.url"
-            type="text"
-            class="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-text text-sm outline-none focus:border-accent"
-            placeholder="https://api.example.com/mcp"
-          />
-        </div>
-        <div class="flex gap-2">
+    <!-- Delete Confirmation Dialog -->
+    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-bg-elevated border border-border rounded-lg shadow-xl w-full max-w-sm p-5">
+        <h3 class="text-sm font-medium text-text mb-2">确认删除</h3>
+        <p class="text-xs text-text-muted mb-4">
+          确定要删除 {{ selectedServer }} 吗？此操作不可撤销。
+        </p>
+        <div class="flex gap-2 justify-end">
           <button
-            class="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-            :disabled="!canAdd"
-            @click="handleAdd"
+            class="px-4 py-2 text-xs bg-bg border border-border hover:border-border-light rounded text-text cursor-pointer transition-all duration-fast"
+            @click="showDeleteConfirm = false"
           >
-            Add
+            取消
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-bg-hover hover:bg-bg-elevated border border-border text-text text-sm transition-colors"
-            @click="showAddDialog = false"
+            class="px-4 py-2 text-xs bg-red-500 hover:bg-red-400 rounded text-white cursor-pointer transition-all duration-fast"
+            @click="handleConfirmDelete"
           >
-            Cancel
+            删除
           </button>
         </div>
       </div>
@@ -97,12 +203,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMcpStore } from '../../stores/mcp'
 import { useWorkspaceStore } from '../../stores/workspace'
-import McpCard from '../mcp/McpCard.vue'
-import type { MCPAddPayload } from '../../../types/ipc'
+import McpServerList from './mcp/McpServerList.vue'
+import BasicSection from './mcp/sections/BasicSection.vue'
+import CommandConfig from './mcp/sections/CommandConfig.vue'
+import HttpConfig from './mcp/sections/HttpConfig.vue'
+import ConnectionSection from './mcp/sections/ConnectionSection.vue'
+import { useMcpConnection } from '../../composables/mcp/useMcpConnection'
+import type { McpConfig, McpServerStatus } from '../../../types/ipc'
 
 const mcpStore = useMcpStore()
 const workspaceStore = useWorkspaceStore()
@@ -110,58 +221,190 @@ const workspaceStore = useWorkspaceStore()
 const { servers, loading, error } = storeToRefs(mcpStore)
 const { currentWorkspace } = storeToRefs(workspaceStore)
 
-const serverNames = computed(() => Object.keys(servers.value).sort())
+const directory = computed(() => currentWorkspace.value?.path)
 
+const selectedServer = ref<string | null>(null)
 const showAddDialog = ref(false)
-const newServer = ref<MCPAddPayload>({
-  name: '',
-  type: 'local',
-  command: [],
-  url: ''
+const showDeleteConfirm = ref(false)
+const editing = ref(false)
+const connecting = ref(false)
+
+// Edit config state
+const editConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
+
+// New server config
+const newConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
+
+// Convert store servers (MCPStatus) to McpServerStatus format
+const convertedServers = computed<Record<string, McpServerStatus>>(() => {
+  const result: Record<string, McpServerStatus> = {}
+  for (const [name, status] of Object.entries(servers.value)) {
+    result[name] = {
+      status: convertBackendStatus(status.status),
+      error: status.error
+    }
+  }
+  return result
 })
-const localCommand = ref('')
+
+// Use converted servers for the list component
+const serverList = computed(() => convertedServers.value)
+
+const selectedStatus = computed(() => {
+  if (!selectedServer.value) return null
+  return convertedServers.value[selectedServer.value] || null
+})
+
+const statusLabel = computed(() => {
+  if (!selectedStatus.value) return '未知'
+  switch (selectedStatus.value.status) {
+    case 'connected': return '已连接'
+    case 'disabled': return '已禁用'
+    case 'failed': return '连接失败'
+    case 'auth_required': return '需要认证'
+    case 'auth_failed': return '认证失败'
+    case 'testing': return '测试中'
+    default: return '未知'
+  }
+})
+
+// Connection testing composable
+const { testing, testConnection, connect: doConnect, disconnect: doDisconnect } = useMcpConnection(
+  selectedServer.value || '',
+  directory.value || undefined
+)
 
 const canAdd = computed(() => {
-  if (!newServer.value.name.trim()) return false
-  if (newServer.value.type === 'local' && !localCommand.value.trim()) return false
-  if (newServer.value.type === 'remote' && !newServer.value.url?.trim()) return false
-  return true
+  const errors = validateConfig(newConfig.value)
+  return errors.length === 0
 })
 
-onMounted(() => {
-  mcpStore.loadStatus(currentWorkspace.value?.path)
+onMounted(async () => {
+  await mcpStore.loadStatus(directory.value)
+  if (Object.keys(servers.value).length > 0) {
+    selectedServer.value = Object.keys(servers.value)[0]
+  }
 })
+
+watch(selectedServer, (name) => {
+  if (name) {
+    // Initialize edit config from selected server
+    editConfig.value = {
+      name: name,
+      type: 'local', // Default, would need backend support to know actual type
+      enabled: convertedServers.value[name]?.status !== 'disabled'
+    }
+  }
+})
+
+function handleSelect(name: string) {
+  selectedServer.value = name
+  editing.value = false
+}
+
+function handleOpenConfig() {
+  // TODO: Open lcode.jsonc in external editor
+  console.log('[SettingsMcp] Open config file')
+}
+
+function handleConfigUpdate(config: McpConfig) {
+  editConfig.value = { ...config }
+}
+
+function handleNewConfigUpdate(config: McpConfig) {
+  newConfig.value = { ...config }
+}
 
 async function handleConnect(name: string) {
-  await mcpStore.connect(name, currentWorkspace.value?.path)
+  connecting.value = true
+  try {
+    await mcpStore.connect(name, directory.value)
+  } finally {
+    connecting.value = false
+  }
 }
 
 async function handleDisconnect(name: string) {
-  await mcpStore.disconnect(name, currentWorkspace.value?.path)
+  connecting.value = true
+  try {
+    await mcpStore.disconnect(name, directory.value)
+  } finally {
+    connecting.value = false
+  }
 }
 
-async function handleAdd() {
-  const payload: MCPAddPayload = {
-    name: newServer.value.name.trim(),
-    type: newServer.value.type,
-    enabled: true
+async function handleTestConnection() {
+  if (!selectedServer.value) return
+  await testConnection()
+}
+
+async function handleAddServer() {
+  const config = newConfig.value
+  const errors = validateConfig(config)
+  if (errors.length > 0) return
+
+  const payload = {
+    name: config.name,
+    type: config.type,
+    enabled: config.enabled ?? true,
+    command: config.command ? [config.command, ...config.args || []] : undefined,
+    url: config.url,
+    environment: config.environment,
+    timeout: config.timeout
   }
 
-  if (payload.type === 'local') {
-    payload.command = localCommand.value.trim().split(' ')
-  } else {
-    payload.url = newServer.value.url?.trim() || ''
-  }
-
-  await mcpStore.addServer(payload, currentWorkspace.value?.path)
+  await mcpStore.addServer(payload, directory.value)
   showAddDialog.value = false
-  newServer.value = { name: '', type: 'local', command: [], url: '' }
-  localCommand.value = ''
+  selectedServer.value = config.name
+  // Reset new config
+  newConfig.value = { name: '', type: 'local', enabled: true }
+}
+
+async function handleSave() {
+  if (!selectedServer.value) return
+  // Note: Backend doesn't support update yet, this is a placeholder
+  // For now, we'd need to delete and re-add
+  editing.value = false
+}
+
+function handleConfirmDelete() {
+  // Note: Backend doesn't support delete yet via IPC
+  // This is a placeholder for future implementation
+  showDeleteConfirm.value = false
+  console.log('[SettingsMcp] Delete server:', selectedServer.value)
+}
+
+function validateConfig(config: McpConfig): string[] {
+  const errors: string[] = []
+  if (!config.name?.trim()) {
+    errors.push('名称不能为空')
+  }
+  if (config.type === 'local') {
+    if (!config.command?.trim()) {
+      errors.push('命令不能为空')
+    }
+  } else {
+    if (!config.url?.trim()) {
+      errors.push('URL 不能为空')
+    }
+    try {
+      new URL(config.url!)
+    } catch {
+      errors.push('URL 格式无效')
+    }
+  }
+  return errors
+}
+
+// Convert backend status to frontend status
+function convertBackendStatus(status: string): McpServerStatus['status'] {
+  switch (status) {
+    case 'connected': return 'connected'
+    case 'disabled': return 'disabled'
+    case 'failed': return 'failed'
+    case 'needs_auth': return 'auth_required'
+    case 'needs_client_registration': return 'auth_required'
+    default: return 'disabled'
+  }
 }
 </script>
-
-<style scoped>
-.settings-section {
-  /* Section styling */
-}
-</style>
