@@ -42,8 +42,21 @@ export interface ConsoleState {
 export interface AddModelPayload {
   modelId: string
   name?: string
-  limitContext?: number
-  limitOutput?: number
+  options?: {
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+    textVerbosity?: 'low' | 'medium' | 'high'
+    reasoningSummary?: 'auto' | 'concise' | 'hidden'
+    include?: string[]
+    thinking?: {
+      type?: 'enabled' | 'disabled'
+      budgetTokens?: number
+    }
+  }
+  variants?: Record<string, {
+    reasoningEffort?: string
+    textVerbosity?: string
+    reasoningSummary?: string
+  }>
 }
 
 // 模型操作结果类型
@@ -372,66 +385,50 @@ async function loadModels(directory?: string) {
   async function addModel(
     providerId: string,
     payload: AddModelPayload,
-    directory?: string
+    _directory?: string
   ): Promise<ModelMutationResult> {
     saving.value = true
     error.value = null
     try {
+      console.log('[modelsStore.addModel] START', { providerId, payload })
+
       // 验证模型ID格式
-      const validPattern = /^[a-zA-Z0-9\-_\/]+$/
+      const validPattern = /^[a-zA-Z0-9\-_\/.]+$/
       if (!validPattern.test(payload.modelId)) {
-        return { success: false, error: '模型ID只能包含字母、数字、-、_ 和 /' }
+        console.log('[modelsStore.addModel] FAILED: invalid modelId pattern')
+        return { success: false, error: '模型ID只能包含字母、数字、-、_、/ 和 .' }
       }
 
       // 检查供应商是否存在
       const provider = providers.value.find(p => p.id === providerId)
       if (!provider) {
+        console.log('[modelsStore.addModel] FAILED: provider not found')
         return { success: false, error: `供应商 '${providerId}' 不存在` }
       }
 
       // 检查模型是否已存在
       if (provider.models?.[payload.modelId]) {
+        console.log('[modelsStore.addModel] FAILED: model already exists')
         return { success: false, error: `模型 '${payload.modelId}' 已存在` }
       }
 
-      // 读取 lcode.jsonc 配置文件
-      const configPath = 'lcode.jsonc'
-      const readResult = await window.desktop.configFile.read(configPath, directory)
-      if (!readResult.success) {
-        return { success: false, error: `读取配置文件失败: ${readResult.error}` }
-      }
-      const configText = readResult.content || '{}'
+      // 构建模型配置
+      const modelConfig: {
+        name?: string
+        options?: AddModelPayload['options']
+        variants?: AddModelPayload['variants']
+      } = {}
+      if (payload.name) modelConfig.name = payload.name
+      if (payload.options) modelConfig.options = payload.options
+      if (payload.variants) modelConfig.variants = payload.variants
 
-      // 解析 JSONC（去除注释和尾部逗号）
-      // 简单处理：移除 // 和 /**/ 注释，以及尾部逗号
-      let cleanText = configText
-        .replace(/\/\/.*$/gm, '') // 移除单行注释
-        .replace(/\/\*[\s\S]*?\*\//g, '') // 移除多行注释
-        .replace(/,\s*}/g, '}') // 移除对象尾部逗号
-        .replace(/,\s*]/g, ']') // 移除数组尾部逗号
-      
-      const config = JSON.parse(cleanText)
+      // 调用 IPC 添加模型
+      console.log('[modelsStore.addModel] calling IPC model.add')
+      const result = await window.desktop.lcode.model.add(providerId, payload.modelId, modelConfig)
+      console.log('[modelsStore.addModel] IPC result:', result)
 
-      // 构建新模型配置
-      const newModelConfig: Record<string, any> = {}
-      if (payload.name) newModelConfig.name = payload.name
-      if (payload.limitContext || payload.limitOutput) {
-        newModelConfig.limit = {}
-        if (payload.limitContext) newModelConfig.limit.context = payload.limitContext
-        if (payload.limitOutput) newModelConfig.limit.output = payload.limitOutput
-      }
-
-      // 更新配置
-      config.provider = config.provider || {}
-      config.provider[providerId] = config.provider[providerId] || {}
-      config.provider[providerId].models = config.provider[providerId].models || {}
-      config.provider[providerId].models[payload.modelId] = newModelConfig
-
-      // 写入配置文件
-      const updatedText = JSON.stringify(config, null, 2)
-      const writeResult = await window.desktop.configFile.write(configPath, updatedText, directory)
-      if (!writeResult.success) {
-        return { success: false, error: `写入配置文件失败: ${writeResult.error}` }
+      if (!result.success) {
+        return { success: false, error: result.error || '添加模型失败' }
       }
 
       // 更新本地状态
@@ -444,12 +441,14 @@ async function loadModels(directory?: string) {
         providers.value[providerIndex].models[payload.modelId] = newModel
       }
 
+      console.log('[modelsStore.addModel] SUCCESS')
       return { 
         success: true, 
         model: { id: payload.modelId, name: payload.name || payload.modelId }
       }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : '添加模型失败'
+      console.error('[modelsStore.addModel] EXCEPTION:', e)
       error.value = errorMsg
       return { success: false, error: errorMsg }
     } finally {
@@ -460,11 +459,13 @@ async function loadModels(directory?: string) {
   async function deleteModel(
     providerId: string,
     modelId: string,
-    directory?: string
+    _directory?: string
   ): Promise<{ success: boolean; error?: string }> {
     saving.value = true
     error.value = null
     try {
+      console.log('[modelsStore.deleteModel] START', { providerId, modelId })
+
       // 检查供应商是否存在
       const provider = providers.value.find(p => p.id === providerId)
       if (!provider) {
@@ -476,14 +477,15 @@ async function loadModels(directory?: string) {
         return { success: false, error: `模型 '${modelId}' 不存在` }
       }
 
-      // 调用后端 API 删除模型
-      const result = await window.desktop.provider.deleteModel(providerId, modelId, directory)
-      
+      // 调用 IPC 删除模型
+      const result = await window.desktop.lcode.model.delete(providerId, modelId)
+      console.log('[modelsStore.deleteModel] IPC result:', result)
+
       if (!result.success) {
         return { success: false, error: result.error }
       }
 
-      // 更新本地状态（无论模型来自配置文件还是 API，都从 UI 移除）
+      // 更新本地状态
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
       if (providerIndex !== -1) {
         delete providers.value[providerIndex].models[modelId]
@@ -492,6 +494,7 @@ async function loadModels(directory?: string) {
       return { success: true }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : '删除模型失败'
+      console.error('[modelsStore.deleteModel] EXCEPTION:', e)
       error.value = errorMsg
       return { success: false, error: errorMsg }
     } finally {
