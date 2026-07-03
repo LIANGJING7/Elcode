@@ -5,8 +5,12 @@ import type { GrepViewModel } from '../tool/rules/grep'
 import type { GlobViewModel } from '../tool/rules/glob'
 import type { WebFetchViewModel } from '../tool/rules/webfetch'
 import type { WebSearchViewModel } from '../tool/rules/websearch'
+import type { FileRenderModel, DiffRenderModel, RenderLine, RenderToken } from './render'
 
-// ===== Base Line Types =====
+// Re-export render types for convenience
+export type { RenderLine, RenderToken, FileRenderModel, DiffRenderModel } from './render'
+
+// ===== Base Line Types (Legacy - use RenderLine instead) =====
 interface BaseLine {
   id: string
 }
@@ -22,6 +26,7 @@ export interface DiffLine extends BaseLine {
   oldLine?: number
   newLine?: number
   text: string
+  tokens?: RenderToken[] // Added: syntax highlighting tokens
 }
 
 export interface HunkInfo {
@@ -38,20 +43,8 @@ export interface HighlightRange {
 }
 
 // ===== FileModel (Domain) =====
-export interface ReadFileModel {
-  _kind: 'read'
-  filePath: string
-  fileName: string
-  directory?: string
-  lines: TextLine[]
-  totalLines?: number
-  truncated?: boolean
-  lineStart?: number
-  options: {
-    wrap?: boolean
-    showLineNumbers?: boolean
-  }
-}
+// ReadFileModel now uses FileRenderModel from render.ts
+export type ReadFileModel = FileRenderModel
 
 export interface DiffModel {
   _kind: 'diff'
