@@ -18,6 +18,12 @@ export interface ToolViewModel {
   readonly _kind: string
 }
 
+/** Tool category - determines how tools are grouped in timeline.
+ *  - 'execution' : bash/edit/write/todo/task - inline expandable, show in flow
+ *  - 'query'     : read/grep/glob/web_fetch/web_search - foldable group
+ *  - 'default'   : unknown tools - fallback behavior */
+export type ToolCategory = 'execution' | 'query' | 'default'
+
 /** How a tool call's detail is primarily surfaced.
  *  - 'inline' : clicking the row expands the detail inline (edit/write/bash/todo/task)
  *  - 'panel'  : clicking the row opens the right-side ArtifactPanel (grep/glob/read/web_*)
@@ -42,6 +48,8 @@ export interface ToolMeta<V extends ToolViewModel = ToolViewModel> {
   createViewModel: (tool: ToolCall) => V
   /** Default interaction when the compact row is clicked. */
   defaultInteraction: ToolInteraction
+  /** Tool category - determines grouping in timeline. */
+  category: ToolCategory
 }
 
 // ============================================
@@ -73,4 +81,9 @@ export function removeTool(name: string): void {
 /** Remove all registered metas (for tests). */
 export function clearTools(): void {
   registry.clear()
+}
+
+/** Get the category for a tool name. Falls back to 'default' if not found. */
+export function getToolCategory(name: string): ToolCategory {
+  return registry.get(name)?.category ?? 'default'
 }

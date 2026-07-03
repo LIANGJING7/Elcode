@@ -42,5 +42,6 @@ export function makeWriteMeta(component: ToolMeta['component']): ToolMeta<WriteV
     defaultInteraction: 'inline',
     summary: pathSummary,
     createViewModel: createWriteViewModel,
+    category: 'execution',
   }
 }

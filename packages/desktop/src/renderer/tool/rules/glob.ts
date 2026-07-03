@@ -67,5 +67,6 @@ export function makeGlobMeta(component: ToolMeta['component']): ToolMeta<GlobVie
     defaultInteraction: 'panel',
     summary: (tool) => truncate(firstArgString(tool.args, ['pattern'])),
     createViewModel: createGlobViewModel,
+    category: 'query',
   }
 }

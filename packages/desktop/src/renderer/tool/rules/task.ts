@@ -54,5 +54,6 @@ export function makeTaskMeta(component: ToolMeta['component']): ToolMeta<TaskVie
     defaultInteraction: 'inline',
     summary: (tool) => truncate(createTaskViewModel(tool).description, 40),
     createViewModel: createTaskViewModel,
+    category: 'execution',
   }
 }

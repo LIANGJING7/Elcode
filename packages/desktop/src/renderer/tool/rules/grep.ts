@@ -109,5 +109,6 @@ export function makeGrepMeta(component: ToolMeta['component']): ToolMeta<GrepVie
     defaultInteraction: 'panel',
     summary: (tool) => `"${truncate(firstArgString(tool.args, ['pattern']))}"`,
     createViewModel: createGrepViewModel,
+    category: 'query',
   }
 }

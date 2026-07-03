@@ -58,5 +58,6 @@ export function makeTodoMeta(component: ToolMeta['component']): ToolMeta<TodoVie
     defaultInteraction: 'inline',
     summary: () => 'Update todo list',
     createViewModel: createTodoViewModel,
+    category: 'execution',
   }
 }

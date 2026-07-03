@@ -54,5 +54,6 @@ export function makeWebFetchMeta(component: ToolMeta['component']): ToolMeta<Web
     defaultInteraction: 'panel',
     summary: (tool) => truncate(firstArgString(tool.args, ['url'])),
     createViewModel: createWebFetchViewModel,
+    category: 'query',
   }
 }

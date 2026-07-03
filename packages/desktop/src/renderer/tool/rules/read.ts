@@ -174,5 +174,6 @@ export function makeReadMeta(component: ToolMeta['component']): ToolMeta<ReadVie
     defaultInteraction: 'panel',
     summary: pathSummary,
     createViewModel: createReadViewModel,
+    category: 'query',
   }
 }

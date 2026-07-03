@@ -44,5 +44,6 @@ export function makeEditMeta(component: ToolMeta['component']): ToolMeta<EditVie
     defaultInteraction: 'inline',
     summary: pathSummary,
     createViewModel: createEditViewModel,
+    category: 'execution',
   }
 }

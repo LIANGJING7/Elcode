@@ -66,5 +66,6 @@ export function makeBashMeta(component: ToolMeta['component']): ToolMeta<BashVie
     defaultInteraction: 'inline',
     summary: commandSummary,
     createViewModel: createBashViewModel,
+    category: 'execution',
   }
 }
