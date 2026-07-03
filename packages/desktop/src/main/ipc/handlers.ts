@@ -3,24 +3,24 @@ import { CHANNELS, isValidChannel } from './channels'
 import { startBackend } from '../backend-client'
 import { registerSessionHandlers } from './handlers-session'
 import { registerFileHandlers } from './handlers-file'
-import { registerConfigFileHandlers } from './handlers-config'
 import { registerWorkspaceHandlers } from './handlers-workspace'
 import { registerSkillHandlers } from './handlers-skill'
 import { registerMcpHandlers } from './handlers-mcp'
 import { registerWindowHandlers } from './handlers-window'
 import { registerGlobalStateHandlers } from './handlers-global-state'
+import { registerLcodeConfigHandlers } from './handlers-lcode-config'
 
 ;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
 export async function registerIPCHandlers() {
   registerSessionHandlers()
   registerFileHandlers()
-  registerConfigFileHandlers()
   registerWorkspaceHandlers()
   registerSkillHandlers()
   registerMcpHandlers()
   registerWindowHandlers()
   registerGlobalStateHandlers()
+  registerLcodeConfigHandlers()
 
   ipcMain.handle(CHANNELS.WORKSPACE_GET_CWD, () => {
     return process.cwd()

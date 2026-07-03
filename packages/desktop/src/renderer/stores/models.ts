@@ -13,6 +13,7 @@ export interface ProviderInfo {
   name: string
   source: string
   models: Record<string, ProviderModel>
+  npm?: string
   apiKey?: string
   baseUrl?: string
   errorMessage?: string

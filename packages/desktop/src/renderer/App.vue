@@ -201,16 +201,12 @@ watch(
   () => workspaceStore.currentWorkspace?.path,
   async (newPath, oldPath) => {
     if (newPath && newPath !== oldPath) {
-      // 并行加载，带异常隔离
       await Promise.allSettled([
         modelsStore.loadModels(newPath),
-        mcpStore.loadStatusImmediate(newPath),
         skillStore.load(newPath),
       ])
     } else if (!newPath && oldPath) {
-      // 清空状态
       modelsStore.clearModels()
-      mcpStore.clear()
       skillStore.clear()
     }
   }
@@ -234,11 +230,10 @@ onMounted(async () => {
 
   if (workspaceStore.currentWorkspace) {
     const path = workspaceStore.currentWorkspace.path
-    // 并行加载，互不影响
     await Promise.allSettled([
       sessionStore.reload(),
       modelsStore.loadModels(path),
-      mcpStore.loadStatus(path),
+      mcpStore.loadStatusImmediate(),
       skillStore.load(path),
     ])
   }

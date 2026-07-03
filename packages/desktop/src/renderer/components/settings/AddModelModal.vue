@@ -52,7 +52,7 @@
                   <input v-model="listInput[field.key]" type="text" :placeholder="field.itemPlaceholder" class="form-input flex-1 px-3 py-2 bg-bg border border-border rounded text-sm text-text focus:border-border-light focus:outline-none" />
                   <button type="button" class="px-3 py-2 text-xs bg-bg border border-border hover:border-border-light rounded text-text cursor-pointer" @click="addListItem(field.key)">+ Add</button>
                 </div>
-                <div v-if="formValues[field.key]?.length" class="space-y-1">
+                <div v-if="(formValues[field.key] as string[])?.length" class="space-y-1">
                   <div v-for="(item, idx) in formValues[field.key]" :key="idx" class="flex items-center gap-2 px-3 py-2 bg-bg rounded text-sm text-text">
                     <span class="flex-1 truncate">{{ item }}</span>
                     <button type="button" class="text-text-muted hover:text-red-400 cursor-pointer" @click="removeListItem(field.key, idx)">×</button>
@@ -152,7 +152,7 @@ function buildOptions(): AddModelPayload['options'] {
   if (formValues.value['reasoningEffort']) options.reasoningEffort = formValues.value['reasoningEffort'] as AddModelPayload['options']['reasoningEffort']
   if (formValues.value['textVerbosity']) options.textVerbosity = formValues.value['textVerbosity'] as AddModelPayload['options']['textVerbosity']
   if (formValues.value['reasoningSummary']) options.reasoningSummary = formValues.value['reasoningSummary'] as AddModelPayload['options']['reasoningSummary']
-  if (formValues.value['include']?.length) options.include = formValues.value['include'] as string[]
+  if ((formValues.value['include'] as string[])?.length) options.include = formValues.value['include'] as string[]
   const thinkingType = formValues.value['thinking.type']
   const thinkingBudget = formValues.value['thinking.budgetTokens']
   if (thinkingType || thinkingBudget) {

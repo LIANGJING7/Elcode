@@ -19,10 +19,10 @@
           <div class="px-3 py-1.5 bg-bg-surface text-xs text-text-muted">名称</div>
           <div class="px-3 py-1.5 bg-bg-surface text-xs text-text-muted">值</div>
         </div>
-        <div
+<div
           v-for="[key, value] in headerEntries"
           :key="key"
-          class="grid grid-cols-2 gap-px bg-border divide-x divide-border"
+          class="grid grid-cols-[1fr_1fr_auto] gap-px bg-border"
         >
           <input
             :value="key"
@@ -32,22 +32,37 @@
           />
           <div class="flex items-center gap-1 px-3 py-2 bg-bg-surface">
             <input
-              :value="showHeaderValues[key] ? value : '****'"
+              :value="showHeaderValues[key] ? '****' : value"
               type="text"
               class="flex-1 text-sm text-text outline-none"
-              :readonly="!showHeaderValues[key]"
+              :readonly="showHeaderValues[key]"
               @input="updateHeaderValue(key, ($event.target as HTMLInputElement).value)"
             />
             <button
               class="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text"
               @click="toggleHeaderValue(key)"
+              :title="showHeaderValues[key] ? '显示值' : '隐藏值'"
             >
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-if="showHeaderValues[key]" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+              <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                 <circle cx="12" cy="12" r="3"/>
               </svg>
             </button>
           </div>
+          <button
+            class="w-10 flex items-center justify-center bg-bg-surface text-text-muted hover:text-red-500"
+            @click="deleteHeader(key)"
+            title="删除"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
         <button
           class="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-muted hover:text-text border-t border-border"
@@ -185,5 +200,11 @@ function updateHeaderValue(key: string, value: string) {
 
 function toggleHeaderValue(key: string) {
   showHeaderValues[key] = !showHeaderValues[key]
+}
+
+function deleteHeader(key: string) {
+  if (!localConfig.headers) return
+  delete localConfig.headers[key]
+  delete showHeaderValues[key]
 }
 </script>
