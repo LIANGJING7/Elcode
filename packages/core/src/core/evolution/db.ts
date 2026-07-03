@@ -18,9 +18,7 @@ export interface EvolutionDBInterface {
   readonly getPolicyTraces: (cycleId: Schema.CycleId) => Effect.Effect<Schema.PolicyTrace[]>
 }
 
-export class EvolutionDB extends Context.Service<EvolutionDB, EvolutionDBInterface>()(
-  "@opencode/evolution/EvolutionDB"
-) {}
+export class EvolutionDB extends Context.Service<EvolutionDB, EvolutionDBInterface>()("@opencode/evolution/EvolutionDB") {}
 
 export const evolutionDBLayer: Layer.Layer<EvolutionDB, never, never> = Layer.effect(
   EvolutionDB,
@@ -282,3 +280,5 @@ export const evolutionDBLayer: Layer.Layer<EvolutionDB, never, never> = Layer.ef
     })
   })
 )
+
+export const Test = evolutionDBLayer

@@ -1,5 +1,5 @@
 import { Effect, Layer, Context } from "effect"
-import { EvolutionDB } from "./db"
+import { EvolutionDB, Test as EvolutionDBTest } from "./db"
 import * as Schema from "./schema"
 import { randomUUID } from "crypto"
 
@@ -22,9 +22,7 @@ export interface TrajectoryRecorderInterface {
   ) => Effect.Effect<void>
 }
 
-export class TrajectoryRecorder extends Context.Service<TrajectoryRecorder, TrajectoryRecorderInterface>()(
-  "@opencode/evolution/TrajectoryRecorder"
-) {}
+export class TrajectoryRecorder extends Context.Service<TrajectoryRecorder, TrajectoryRecorderInterface>()("@opencode/evolution/TrajectoryRecorder") {}
 
 export const trajectoryRecorderLayer: Layer.Layer<TrajectoryRecorder, never, EvolutionDB> = Layer.effect(
   TrajectoryRecorder,
@@ -105,4 +103,9 @@ export const trajectoryRecorderLayer: Layer.Layer<TrajectoryRecorder, never, Evo
         }),
     })
   })
+)
+
+export const Test = Layer.provide(
+  trajectoryRecorderLayer,
+  EvolutionDBTest
 )
