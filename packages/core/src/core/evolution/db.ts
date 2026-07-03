@@ -248,7 +248,7 @@ export const evolutionDBLayer: Layer.Layer<EvolutionDB, never, never> = Layer.ef
         Effect.sync(() => {
           const stmt = db.prepare(`
             UPDATE evolution_cycles
-            SET status = ?, updated_at = ?, provenance = ?, pattern = ?, confidence_model = ?, proposal = ?
+            SET status = ?, updated_at = ?, provenance = ?, pattern = ?, confidence_model = ?, proposal = ?, trajectories = ?
             WHERE cycle_id = ?
           `)
           stmt.run(
@@ -258,6 +258,7 @@ export const evolutionDBLayer: Layer.Layer<EvolutionDB, never, never> = Layer.ef
             cycle.pattern || null,
             cycle.confidence_model ? JSON.stringify(cycle.confidence_model) : null,
             cycle.proposal || null,
+            JSON.stringify(cycle.trajectories),
             cycle.cycle_id
           )
         }),
