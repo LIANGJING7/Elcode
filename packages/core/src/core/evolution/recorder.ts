@@ -26,7 +26,7 @@ export class TrajectoryRecorder extends Context.Service<TrajectoryRecorder, Traj
   "@opencode/evolution/TrajectoryRecorder"
 ) {}
 
-export const trajectoryRecorderLayer = Layer.effect(
+export const trajectoryRecorderLayer: Layer.Layer<TrajectoryRecorder, never, EvolutionDB> = Layer.effect(
   TrajectoryRecorder,
   Effect.gen(function* () {
     const db = yield* EvolutionDB
@@ -36,27 +36,29 @@ export const trajectoryRecorderLayer = Layer.effect(
       startTime: number
     }>()
 
+    const recordImpl = (skillId: Schema.SkillId, sessionId: string, triggerEvent: Schema.TriggerEvent, context: Schema.TaskContext, actions: Schema.Action[], outcome: Schema.Outcome, feedback?: Schema.UserFeedback) =>
+      Effect.gen(function* () {
+        const trajectoryId = randomUUID() as Schema.TrajectoryId
+
+        const trajectory: Schema.Trajectory = {
+          trajectory_id: trajectoryId,
+          skill_id: skillId,
+          session_id: sessionId,
+          trigger_event: triggerEvent,
+          context,
+          actions,
+          outcome,
+          feedback,
+          created_at: Date.now(),
+        }
+
+        yield* db.insertTrajectory(trajectory)
+
+        return trajectoryId
+      })
+
     return TrajectoryRecorder.of({
-      record: (skillId, sessionId, triggerEvent, context, actions, outcome, feedback) =>
-        Effect.gen(function* () {
-          const trajectoryId = randomUUID() as Schema.TrajectoryId
-
-          const trajectory: Schema.Trajectory = {
-            trajectory_id: trajectoryId,
-            skill_id: skillId,
-            session_id: sessionId,
-            trigger_event: triggerEvent,
-            context,
-            actions,
-            outcome,
-            feedback,
-            created_at: Date.now(),
-          }
-
-          yield* db.insertTrajectory(trajectory)
-
-          return trajectoryId
-        }),
+      record: recordImpl,
 
       recordHook: (skillId, sessionId, hookType, context) =>
         Effect.gen(function* () {
@@ -68,7 +70,7 @@ export const trajectoryRecorderLayer = Layer.effect(
               startTime: Date.now(),
             })
 
-            yield* TrajectoryRecorder.record(
+            yield* recordImpl(
               skillId,
               sessionId,
               "skill_start",
@@ -85,7 +87,7 @@ export const trajectoryRecorderLayer = Layer.effect(
 
             const duration = Date.now() - ongoing.startTime
 
-            yield* TrajectoryRecorder.record(
+            yield* recordImpl(
               skillId,
               sessionId,
               hookType === "end" ? "skill_end" : "error",

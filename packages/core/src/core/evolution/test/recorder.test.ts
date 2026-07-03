@@ -7,8 +7,8 @@ import * as Schema from "../schema"
 describe("TrajectoryRecorder", () => {
   it("should record a complete trajectory", async () => {
     const program = Effect.gen(function* () {
-      const db = yield* EvolutionDB
       const recorder = yield* TrajectoryRecorder
+      const db = yield* EvolutionDB
 
       yield* db.init()
 
@@ -40,14 +40,17 @@ describe("TrajectoryRecorder", () => {
       expect(trajectories[0].actions.length).toBe(1)
     })
 
-    const fullLayer = Layer.provide(trajectoryRecorderLayer, evolutionDBLayer)
-    await Effect.runPromise(program.pipe(Effect.provide(fullLayer)))
+    const testLayer = Layer.merge(
+      evolutionDBLayer,
+      trajectoryRecorderLayer
+    )
+    await Effect.runPromise(program.pipe(Effect.provide(testLayer)))
   })
 
   it("should record skill start/end hooks", async () => {
     const program = Effect.gen(function* () {
-      const db = yield* EvolutionDB
       const recorder = yield* TrajectoryRecorder
+      const db = yield* EvolutionDB
 
       yield* db.init()
 
@@ -71,7 +74,10 @@ describe("TrajectoryRecorder", () => {
       expect(trajectories[1].trigger_event).toBe("skill_end")
     })
 
-    const fullLayer = Layer.provide(trajectoryRecorderLayer, evolutionDBLayer)
-    await Effect.runPromise(program.pipe(Effect.provide(fullLayer)))
+    const testLayer = Layer.merge(
+      evolutionDBLayer,
+      trajectoryRecorderLayer
+    )
+    await Effect.runPromise(program.pipe(Effect.provide(testLayer)))
   })
 })

@@ -22,9 +22,9 @@ export class EvolutionDB extends Context.Service<EvolutionDB, EvolutionDBInterfa
   "@opencode/evolution/EvolutionDB"
 ) {}
 
-export const evolutionDBLayer = Layer.effect(
+export const evolutionDBLayer: Layer.Layer<EvolutionDB, never, never> = Layer.effect(
   EvolutionDB,
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const dbPath = process.env.EVOLUTION_DB_PATH || ":memory:"
     const db = new Database(dbPath)
 
