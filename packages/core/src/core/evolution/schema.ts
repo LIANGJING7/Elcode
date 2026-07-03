@@ -98,13 +98,9 @@ export type EvolutionCycle = typeof EvolutionCycle.Type
 export const PolicyTrace = Schema.Struct({
   trace_id: Schema.String.pipe(Schema.brand("TraceId")),
   cycle_id: CycleId,
-  decision_type: Schema.Literal("pattern_detected", "proposal_generated", "negative_filter"),
+  decision_type: Schema.Literal("pattern_detected", "proposal_generated", "negative_filter", "pattern_approval", "proposal_validation"),
   matched_rules: Schema.Array(Schema.String),
-  score_breakdown: Schema.Array(Schema.Struct({
-    dimension: Schema.String,
-    score: Schema.Number,
-    weight: Schema.Number,
-  })),
+  score_breakdown: Schema.Record({ key: Schema.String, value: Schema.Number }),
   final_decision: Schema.String,
   rationale: Schema.String,
   created_at: Schema.Number,
@@ -119,3 +115,37 @@ export const NegativePattern = Schema.Struct({
   created_at: Schema.Number,
 })
 export type NegativePattern = typeof NegativePattern.Type
+
+export const SkillProposal = Schema.Struct({
+  skill_name: Schema.String,
+  skill_description: Schema.String,
+  rationale: Schema.String,
+  estimated_impact: Schema.Literal("low", "medium", "high"),
+})
+export type SkillProposal = typeof SkillProposal.Type
+
+export const ComparisonResult = Schema.Struct({
+  match: Schema.Boolean,
+  differences: Schema.Array(Schema.String),
+})
+export type ComparisonResult = typeof ComparisonResult.Type
+
+export const ReplayResult = Schema.Struct({
+  trajectory_id: TrajectoryId,
+  replay_success: Schema.Boolean,
+  original_outcome: Outcome,
+  replayed_outcome: Outcome,
+  comparison: ComparisonResult,
+  replayed_at: Schema.Number,
+})
+export type ReplayResult = typeof ReplayResult.Type
+
+export const AnchorDrift = Schema.Struct({
+  skillId: SkillId,
+  anchor: Schema.String,
+  originalContent: Schema.String,
+  proposedContent: Schema.String,
+  driftScore: Schema.Number.pipe(Schema.between(0, 1)),
+  detectedAt: Schema.Number,
+})
+export type AnchorDrift = typeof AnchorDrift.Type
