@@ -37,7 +37,7 @@ describe('toolToPresentationModel — read', () => {
     expect(tab!.model._kind).toBe('read')
     const model = tab!.model as Extract<FileModel, { _kind: 'read' }>
     expect(model.lines).toHaveLength(3)
-    expect(model.lines[0].lineNumber).toBe(5)
+    expect(model.lines[0].number).toBe(5)
     expect(model.lines[0].text).toBe('line1')
     expect(model.lines[0].id).toBeTruthy()
   })

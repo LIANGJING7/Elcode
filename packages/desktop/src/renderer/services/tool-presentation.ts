@@ -14,6 +14,7 @@
 import { markRaw } from 'vue'
 import type { ToolCall } from '../../types/ipc'
 import type { FileTab, FileTabStatus, ReadFileModel, DiffModel, ImageModel, UnknownToolModel } from '../types/presentation'
+import { detectLanguage } from '../utils/language'
 
 // Viewer components - markRaw 防止 Vue 响应式追踪
 import TextViewer from '../components/file-tabs/TextViewer.vue'
@@ -193,12 +194,18 @@ function buildReadTab(tool: ToolCall): FileTab {
     }
   }
 
-  // Build ReadFileModel
+  // Build ReadFileModel (FileRenderModel)
   const { content, offset, truncated } = extractReadContent(tool)
+  
+  // Import language detection
+  const lang = detectLanguage(filePath)
+  
+  // Create RenderLine[] (without tokens - will be highlighted in TextViewer)
   const lines = content.split('\n').map((text, i) => ({
     id: genId(),
-    lineNumber: offset + i,
+    number: offset + i,
     text,
+    tokens: undefined, // Will be filled by code-renderer
   }))
 
   const model: ReadFileModel = {
@@ -206,6 +213,7 @@ function buildReadTab(tool: ToolCall): FileTab {
     filePath,
     fileName,
     directory,
+    lang,
     lines,
     totalLines: lines.length,
     truncated,
