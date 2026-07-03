@@ -22,6 +22,7 @@
     "build:all": "npm run build:core && npm run build && electron-builder"
   },
   "dependencies": {
+    "@model-agent/core": "workspace:*",
     "@radix-icons/vue": "^1.0.0",
     "@tailwindcss/vite": "^4.3.1",
     "@tanstack/vue-virtual": "^3.13.31",
