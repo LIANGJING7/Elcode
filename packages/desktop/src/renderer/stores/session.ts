@@ -796,6 +796,9 @@ export const useSessionStore = defineStore('session', () => {
       }
     })
 
+    // Use sync watch to ensure finalMsg is added immediately when status becomes 'done'
+    // This prevents race condition where second message's resetStream() clears status
+    // before first message's watch handler executes
     watch(
       () => streamingStore.currentStream.value?.status,
       (status) => {
@@ -853,14 +856,14 @@ export const useSessionStore = defineStore('session', () => {
             console.log('[WATCH] Skipped - exists or no content')
           }
 
-          nextTick(() => {
-            if (currentSessionId.value) {
-              console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
-              streamingStore.resetStream(currentSessionId.value)
-            }
-          })
+          // Reset stream synchronously (no nextTick needed with sync watch)
+          if (currentSessionId.value) {
+            console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
+            streamingStore.resetStream(currentSessionId.value)
+          }
         }
-      }
+      },
+      { flush: 'sync' }  // Sync watch to prevent race condition with processQueue
     )
 
     return removeStream
