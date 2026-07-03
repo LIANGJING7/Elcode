@@ -1,17 +1,11 @@
 <script setup lang="ts">
 /**
- * ToolCallRow — compact single-line display for a tool call (collapsed state).
+ * ToolCallRow — compact single-line display for a tool call.
  *
- * Layout: [status icon] [meta.icon] [tool name (mono)] [summary (bold)] [→]
+ * NOTE: This component is now mostly superseded by ToolRenderer.vue
+ * which integrates header + expanded content in VS Code search panel style.
  *
- * Click signals:
- *   - @activate : whole-row click — parent decides behavior based on interaction
- *                 mode (inline expand vs panel open).
- *   - @expand   : explicit expand arrow click — always toggles inline detail
- *                 (lets panel-mode tools still be expanded inline if wanted).
- *
- * Accepts both ToolCall (history) and StreamingToolCall (live) since
- * StreamingToolCall extends ToolCall.
+ * Kept for backward compatibility and potential direct usage.
  */
 import { computed } from 'vue'
 import type { ToolCall } from '../../../types/ipc'
@@ -28,7 +22,7 @@ const emit = defineEmits<{
   expand: []
 }>()
 
-// Status icon derived from tool.status (works for both history + streaming)
+// Status icon
 const statusIcon = computed(() => {
   switch (props.tool.status) {
     case 'completed': return { char: '✓', class: 'text-success' }
@@ -39,7 +33,7 @@ const statusIcon = computed(() => {
   }
 })
 
-// Display name: strip duplicate underscore prefix (e.g. codegraph_codegraph_files)
+// Display name
 const displayName = computed(() => {
   const name = props.tool.name
   const parts = name.split('_')
@@ -49,10 +43,9 @@ const displayName = computed(() => {
   return name
 })
 
-// Summary: prefer meta.summary, fall back to generic extraction
+// Summary
 const summaryText = computed(() => {
   if (props.meta) return truncate(props.meta.summary(props.tool))
-  // Generic fallback: first string arg
   for (const val of Object.values(props.tool.args)) {
     if (typeof val === 'string' && val.length > 0) return truncate(val)
   }
@@ -66,32 +59,31 @@ const summaryText = computed(() => {
     @click="emit('activate')"
   >
     <!-- Status icon -->
-    <span
-      data-testid="status-dot"
-      :class="['status-icon text-sm shrink-0 w-5 text-center', statusIcon.class]"
-    >
+    <span :class="['text-sm shrink-0 w-5 text-center', statusIcon.class]">
       {{ statusIcon.char }}
     </span>
 
-    <!-- Tool icon (from meta) -->
-    <span v-if="meta" class="tool-meta-icon text-xs text-accent shrink-0 w-4 text-center">
+    <!-- Tool icon -->
+    <span v-if="meta" class="text-xs text-accent shrink-0 w-4 text-center">
       {{ meta.icon }}
     </span>
 
-    <!-- Tool name (mono, fixed width) -->
-    <span class="tool-name text-xs font-mono text-text-secondary w-20 shrink-0 truncate">
+    <!-- Tool name -->
+    <span class="text-xs font-mono text-text-secondary w-20 shrink-0 truncate">
       {{ displayName }}
     </span>
 
-    <!-- Summary (bold) -->
-    <span class="summary text-xs text-text-primary font-medium flex-1 truncate">
+    <!-- Summary -->
+    <span class="text-xs text-text-primary font-medium flex-1 truncate">
       {{ summaryText }}
     </span>
 
-    <!-- Expand arrow — explicit inline expand (always available) -->
+    <!-- Expand arrow (chevron-right) -->
     <svg
       class="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-pointer"
-      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
       @click.stop="emit('expand')"
     >
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

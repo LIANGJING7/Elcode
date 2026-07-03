@@ -1,26 +1,20 @@
 <script setup lang="ts">
 /**
- * ToolRenderer — the single entry point for tool call display.
+ * ToolRenderer — collapsible tool call display (VS Code search panel style).
  *
- * Used everywhere a tool call is shown: streaming timeline, history messages,
- * search results, artifact panel. It looks up the ToolMeta from the registry,
- * builds the ViewModel, and renders either the compact row (collapsed) or the
- * expanded detail panel.
+ * Layout:
+ *   [arrow] [icon] [tool name] [summary] [count/status]
+ *   ├── [expanded content with left border]
  *
- * Click behavior follows the tool's `defaultInteraction`:
- *   - 'inline' : clicking the row expands the detail inline (edit/write/bash/...)
- *   - 'panel'  : clicking the row opens the right-side ArtifactPanel (grep/glob/read/...)
- *   - 'none'   : no click response
- *
- * ToolCall is the single business model; StreamingToolCall extends it, so this
- * component accepts ToolCall and transparently handles live + historical data.
+ * Click behavior:
+ *   - Click header → toggle expand/collapse
+ *   - 'panel' mode tools → also emit openFile for right panel
  */
 import { ref, computed } from 'vue'
 import type { ToolCall } from '../../../types/ipc'
 import { getTool, type ToolViewModel } from '../../tool/registry'
 // Activating built-in rules on import (idempotent).
 import '../../tool/rules'
-import ToolCallRow from './ToolCallRow.vue'
 import ToolCallExpanded from './ToolCallExpanded.vue'
 
 const props = withDefaults(defineProps<{
@@ -38,42 +32,137 @@ const expanded = ref(props.defaultExpanded)
 const meta = computed(() => getTool(props.tool.name))
 const viewModel = computed(() => meta.value?.createViewModel(props.tool) as ToolViewModel | undefined)
 
-// Resolve interaction mode: meta.defaultInteraction, or 'inline' fallback.
+// Status icon
+const statusIcon = computed(() => {
+  switch (props.tool.status) {
+    case 'completed': return { char: '✓', class: 'text-success' }
+    case 'running': return { char: '●', class: 'text-warning' }
+    case 'error': return { char: '✗', class: 'text-error' }
+    case 'pending':
+    default: return { char: '○', class: 'text-text-muted' }
+  }
+})
+
+// Summary text
+const summaryText = computed(() => {
+  if (meta.value) return meta.value.summary(props.tool)
+  // Fallback: first string arg
+  for (const val of Object.values(props.tool.args)) {
+    if (typeof val === 'string' && val.length > 0) return val
+  }
+  return ''
+})
+
+// Display name
+const displayName = computed(() => {
+  const name = props.tool.name
+  const parts = name.split('_')
+  if (parts.length >= 2 && parts[0] === parts[1]) {
+    return parts.slice(1).join('_')
+  }
+  return name
+})
+
+// Duration
+const durationText = computed(() => {
+  if (props.tool.duration != null) {
+    const ms = props.tool.duration
+    if (ms < 1000) return `${ms}ms`
+    return `${Math.floor(ms / 1000)}s`
+  }
+  return null
+})
+
+// Interaction mode
 const interaction = computed(() => meta.value?.defaultInteraction ?? 'inline')
 
-function toggleExpanded() {
+// Toggle expand
+function toggleExpand() {
+  if (interaction.value === 'panel') {
+    emit('openFile', props.tool)
+  }
   expanded.value = !expanded.value
 }
 
-// Row click: 'inline' → toggle expand; 'panel' → emit openFile; 'none' → no action.
-function handleRowActivate() {
-  if (interaction.value === 'panel') {
-    emit('openFile', props.tool)
-  } else if (interaction.value === 'inline') {
-    toggleExpanded()
-  }
-  // 'none' - no response
+// Open in panel
+function openInPanel() {
+  emit('openFile', props.tool)
+  expanded.value = false
 }
 </script>
 
 <template>
   <div class="tool-renderer" :data-tool-name="tool.name">
-    <!-- Compact row (collapsed) -->
-    <ToolCallRow
-      v-if="!expanded"
-      :tool="tool"
-      :meta="meta"
-      @activate="handleRowActivate"
-      @expand="toggleExpanded"
-    />
+    <!-- Header row (collapsible) -->
+    <div
+      class="tool-header flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group hover:bg-bg-surface transition-colors"
+      @click="toggleExpand"
+    >
+      <!-- Chevron arrow (right when collapsed, down when expanded) -->
+      <svg
+        class="w-3 h-3 text-text-muted transition-transform duration-150"
+        :class="{ 'rotate-90': expanded }"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
 
-    <!-- Expanded detail -->
-    <ToolCallExpanded
-      v-else
-      :tool="tool"
-      :meta="meta"
-      :vm="viewModel"
-      @collapse="toggleExpanded"
-    />
+      <!-- Status icon -->
+      <span :class="['text-sm shrink-0 w-4 text-center', statusIcon.class]">
+        {{ statusIcon.char }}
+      </span>
+
+      <!-- Tool icon -->
+      <span v-if="meta" class="text-xs text-accent shrink-0 w-4 text-center">
+        {{ meta.icon }}
+      </span>
+
+      <!-- Tool name (mono) -->
+      <span class="text-xs font-mono text-text-secondary shrink-0">
+        {{ displayName }}
+      </span>
+
+      <!-- Summary (bold) -->
+      <span class="text-xs text-text-primary font-medium flex-1 truncate">
+        {{ summaryText }}
+      </span>
+
+      <!-- Duration / count -->
+      <span v-if="durationText" class="text-xs text-text-muted tabular-nums shrink-0">
+        {{ durationText }}
+      </span>
+
+      <!-- Panel button (for panel-mode tools) -->
+      <button
+        v-if="interaction === 'panel'"
+        class="text-xs text-text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+        @click.stop="openInPanel"
+        title="Open in side panel"
+      >
+        
+      </button>
+    </div>
+
+    <!-- Expanded content (with left border) -->
+    <div v-if="expanded" class="expanded-content ml-6 mt-1 mb-1 pl-4 border-l-2 border-border">
+      <ToolCallExpanded
+        :tool="tool"
+        :meta="meta"
+        :vm="viewModel"
+        @collapse="expanded = false"
+      />
+    </div>
   </div>
 </template>
+
+<style scoped>
+.tool-renderer {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.expanded-content {
+  /* Indent content with left border (VS Code style) */
+}
+</style>
