@@ -37,7 +37,7 @@ interface ResultP<T = unknown> {
   error?: string
 }
 
-async function invalidateModelsCache(): Promise<void> {
+async function invalidateModelsCache(directory?: string): Promise<void> {
   try {
     await fs.unlink(MODELS_CACHE_FILE)
     console.log('[LCodeConfig] Models disk cache invalidated')
@@ -46,8 +46,8 @@ async function invalidateModelsCache(): Promise<void> {
   }
   // Also invalidate memory cache via HTTP API
   try {
-    await backend.provider.refreshAll()
-    console.log('[LCodeConfig] Models memory cache refreshed')
+    await backend.provider.refreshAll(directory)
+    console.log('[LCodeConfig] Models memory cache refreshed for directory:', directory)
   } catch (e) {
     console.error('[LCodeConfig] Failed to refresh memory cache:', e)
   }

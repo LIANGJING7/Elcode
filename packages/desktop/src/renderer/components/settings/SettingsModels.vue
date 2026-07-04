@@ -556,6 +556,13 @@ async function handleAddModelSuccess(providerId: string, modelId: string) {
   console.log('[handleAddModelSuccess] called with', providerId, modelId)
   showAddModelModal.value = false
   editingModel.value = undefined
+  // Call refreshAll with correct directory before loadModels
+  try {
+    await window.desktop.provider.refreshAll(directory.value)
+    console.log('[handleAddModelSuccess] refreshAll done for directory:', directory.value)
+  } catch (e) {
+    console.error('[handleAddModelSuccess] refreshAll error:', e)
+  }
   console.log('[handleAddModelSuccess] calling loadModels')
   await modelsStore.loadModels(directory.value)
   console.log('[handleAddModelSuccess] loadModels completed')
