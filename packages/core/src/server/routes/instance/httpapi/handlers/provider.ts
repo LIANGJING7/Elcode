@@ -367,6 +367,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const result = yield* cfg.updateGlobal(updatedConfig)
       console.log('[DeleteModel] config updated, changed:', result.changed)
       
+      yield* modelsDev.refresh(true)
+      
       return { success: true, notInConfig: false }
     })
 
