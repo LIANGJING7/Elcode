@@ -169,35 +169,35 @@
                 v-if="modelEntries.length > 0"
                 class="border border-border rounded-lg divide-y divide-border"
               >
-                <div
+<div
                   v-for="model in modelEntries"
                   :key="model.id"
-                  class="flex items-center justify-between px-3 py-2.5"
+                  class="group flex items-center justify-between px-3 py-2.5 hover:bg-bg-hover transition-colors"
                 >
-<span class="text-sm text-text font-mono">{{ model.name }}</span>
+<span class="text-sm text-text font-mono truncate flex-1">{{ model.name }}</span>
                    <div class="flex items-center gap-1.5">
                      <button
-                       class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
+                       class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-bg-active text-text-muted hover:text-text transition-all cursor-pointer"
                        title="编辑模型"
                        @click="handleEditModel(model.id)"
                      >
-                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                        </svg>
                      </button>
                      <button
-                       class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
+                       class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-bg-active text-text-muted hover:text-text transition-all cursor-pointer"
                        title="删除模型"
                        @click="handleDeleteModel(model.id)"
                      >
-                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                         <polyline points="3 6 5 6 21 6"/>
-                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <line x1="18" y1="6" x2="6" y2="18"/>
+                         <line x1="6" y1="6" x2="18" y2="18"/>
                        </svg>
                      </button>
                    </div>
-                </div>
+                 </div>
               </div>
               <div v-else class="text-xs text-text-muted py-4 text-center border border-border rounded-lg">
                 暂无模型，请刷新模型列表
