@@ -1106,6 +1106,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly invalidate: () => Effect.Effect<void>
 }
 
 interface State {
@@ -1605,6 +1606,8 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
+    const invalidateState = Effect.fn("Provider.invalidate")(() => InstanceState.invalidate(state))
+
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
         const provider = s.providers[model.providerID]
@@ -1934,7 +1937,7 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, invalidate: invalidateState })
   }),
 )
 
