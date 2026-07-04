@@ -1607,10 +1607,15 @@ export const layer = Layer.effect(
       }),
     )
 
-    const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+    const list = Effect.fn("Provider.list")(function* () {
+      const dir = yield* InstanceState.directory
+      console.log('[Provider.list] Getting providers for directory:', dir)
+      return yield* InstanceState.use(state, (s) => s.providers)
+    })
 
     const invalidateState = Effect.fn("Provider.invalidate")(function* () {
-      console.log('[Provider] Invalidating InstanceState cache')
+      const dir = yield* InstanceState.directory
+      console.log('[Provider] Invalidating InstanceState cache for directory:', dir)
       yield* InstanceState.invalidate(state)
       console.log('[Provider] InstanceState cache invalidated')
     })
