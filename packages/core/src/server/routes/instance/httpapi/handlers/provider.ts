@@ -168,10 +168,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
-        Effect.tap(() => {
-          console.log('[ProviderHandler] ModelsDev cache refresh triggered after provider add')
-          return modelsDev.refresh(true)
-        }),
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider add')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -221,10 +219,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
-        Effect.tap(() => {
-          console.log('[ProviderHandler] ModelsDev cache refresh triggered after provider update')
-          return modelsDev.refresh(true)
-        }),
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider update')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -252,10 +248,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
-        Effect.tap(() => {
-          console.log('[ProviderHandler] ModelsDev cache refresh triggered after provider delete')
-          return modelsDev.refresh(true)
-        }),
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider delete')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -376,7 +370,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const result = yield* cfg.updateGlobal(updatedConfig)
       console.log('[DeleteModel] config updated, changed:', result.changed)
       
-      console.log('[ProviderHandler] ModelsDev cache refresh triggered after model delete')
+      yield* Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after model delete')
       yield* modelsDev.refresh(true)
       
       return { success: true, notInConfig: false }
