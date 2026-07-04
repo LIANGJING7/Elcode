@@ -155,19 +155,29 @@
                   :key="model.id"
                   class="flex items-center justify-between px-3 py-2.5"
                 >
-                  <span class="text-sm text-text font-mono">{{ model.name }}</span>
-                  <div class="flex items-center gap-1.5">
-                    <button
-                      class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
-                      title="删除模型"
-                      @click="handleDeleteModel(model.id)"
-                    >
-                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      </svg>
-                    </button>
-                  </div>
+<span class="text-sm text-text font-mono">{{ model.name }}</span>
+                   <div class="flex items-center gap-1.5">
+                     <button
+                       class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
+                       title="编辑模型"
+                       @click="handleEditModel(model.id)"
+                     >
+                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                       </svg>
+                     </button>
+                     <button
+                       class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
+                       title="删除模型"
+                       @click="handleDeleteModel(model.id)"
+                     >
+                       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <polyline points="3 6 5 6 21 6"/>
+                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                       </svg>
+                     </button>
+                   </div>
                 </div>
               </div>
               <div v-else class="text-xs text-text-muted py-4 text-center border border-border rounded-lg">
@@ -343,8 +353,9 @@
       :provider-id="selectedProviderId"
       :provider-name="selectedProvider?.name"
       :directory="directory"
+      :edit-model="editingModel"
       @success="handleAddModelSuccess"
-      @close="showAddModelModal = false"
+      @close="handleCloseAddModelModal"
     />
   </div>
 </template>
@@ -352,7 +363,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useWorkspaceStore } from '../../stores/workspace'
-import { useModelsStore, type ProviderInfo, type AuthMethod } from '../../stores/models'
+import { useModelsStore, type ProviderInfo, type ProviderModel, type AuthMethod } from '../../stores/models'
 import ConnectProviderDialog from './ConnectProviderDialog.vue'
 import ProviderAuthDialog from './ProviderAuthDialog.vue'
 import OAuthWaitingDialog from './OAuthWaitingDialog.vue'
@@ -390,6 +401,7 @@ const showAuthDialog = ref(false)
 const showOAuthWaiting = ref(false)
 const showModelSelect = ref(false)
 const showAddModelModal = ref(false)
+const editingModel = ref<{ modelId: string; model: ProviderModel } | undefined>(undefined)
 const selectedProviderId = ref<string>('')
 const selectedAuthMethod = ref<AuthMethod | undefined>(undefined)
 const oauthInputs = ref<Record<string, string>>({})
@@ -540,10 +552,15 @@ function handleModelSelect(providerId: string, modelId: string) {
   }
 }
 
-function handleAddModelSuccess(providerId: string, modelId: string) {
+async function handleAddModelSuccess(providerId: string, modelId: string) {
   showAddModelModal.value = false
-  // 刷新模型列表
-  modelsStore.loadModels(directory.value)
+  editingModel.value = undefined
+  await modelsStore.loadModels(directory.value)
+}
+
+function handleCloseAddModelModal() {
+  showAddModelModal.value = false
+  editingModel.value = undefined
 }
 
 function handleEdit(providerId: string) {
@@ -616,6 +633,16 @@ function handleDeleteModel(modelId: string) {
     deletingModelId.value = modelId
     deletingModelName.value = model.name
     showDeleteModelConfirm.value = true
+  }
+}
+
+function handleEditModel(modelId: string) {
+  if (!selectedProvider.value) return
+  const model = selectedProvider.value.models[modelId]
+  console.log('[SettingsModels] handleEditModel:', modelId, 'model:', JSON.stringify(model))
+  if (model) {
+    editingModel.value = { modelId, model }
+    showAddModelModal.value = true
   }
 }
 
