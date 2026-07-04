@@ -553,9 +553,12 @@ function handleModelSelect(providerId: string, modelId: string) {
 }
 
 async function handleAddModelSuccess(providerId: string, modelId: string) {
+  console.log('[handleAddModelSuccess] called with', providerId, modelId)
   showAddModelModal.value = false
   editingModel.value = undefined
+  console.log('[handleAddModelSuccess] calling loadModels')
   await modelsStore.loadModels(directory.value)
+  console.log('[handleAddModelSuccess] loadModels completed')
 }
 
 function handleCloseAddModelModal() {

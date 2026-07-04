@@ -319,8 +319,11 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
 
     // Refresh all models cache
     const refreshAll = Effect.fn("ProviderHttpApi.refreshAll")(function* () {
+      console.log('[refreshAll] Starting full refresh')
       yield* provider.invalidate()
+      console.log('[refreshAll] InstanceState invalidated')
       yield* modelsDev.refresh(true)
+      console.log('[refreshAll] ModelsDev refreshed')
       return { success: true }
     })
 

@@ -1606,7 +1606,11 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-    const invalidateState = Effect.fn("Provider.invalidate")(() => InstanceState.invalidate(state))
+    const invalidateState = Effect.fn("Provider.invalidate")(function* () {
+      console.log('[Provider] Invalidating InstanceState cache')
+      yield* InstanceState.invalidate(state)
+      console.log('[Provider] InstanceState cache invalidated')
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
