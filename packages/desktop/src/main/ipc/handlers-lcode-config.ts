@@ -6,6 +6,7 @@ import { parse, modify, applyEdits, JSONPath } from 'jsonc-parser'
 import { Mutex } from 'async-mutex'
 import { IPC_CHANNELS } from '../../types/ipc'
 import type { McpServerConfig } from '../../types/config'
+import { backend } from '../backend-client'
 
 const CONFIG_DIR = path.join(xdgConfig ?? '', 'lcode')
 const MODELS_CACHE_FILE = path.join(xdgCache ?? '', 'lcode', 'models.json')
@@ -39,9 +40,16 @@ interface ResultP<T = unknown> {
 async function invalidateModelsCache(): Promise<void> {
   try {
     await fs.unlink(MODELS_CACHE_FILE)
-    console.log('[LCodeConfig] Models cache invalidated')
+    console.log('[LCodeConfig] Models disk cache invalidated')
   } catch {
     // File doesn't exist or already deleted - ignore
+  }
+  // Also invalidate memory cache via HTTP API
+  try {
+    await backend.provider.refreshAll()
+    console.log('[LCodeConfig] Models memory cache refreshed')
+  } catch (e) {
+    console.error('[LCodeConfig] Failed to refresh memory cache:', e)
   }
 }
 

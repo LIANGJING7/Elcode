@@ -317,6 +317,12 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       )
     })
 
+    // Refresh all models cache
+    const refreshAll = Effect.fn("ProviderHttpApi.refreshAll")(function* () {
+      yield* modelsDev.refresh(true)
+      return { success: true }
+    })
+
     // Delete a model from provider config (writes to config file)
     const deleteModel = Effect.fn("ProviderHttpApi.deleteModel")(function* (ctx: {
       params: { providerID: ProviderV2.ID, modelID: string }
@@ -387,5 +393,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       .handle("test", test)
       .handle("refreshModels", refreshModels)
       .handle("deleteModel", deleteModel)
+      .handle("refreshAll", refreshAll)
   }),
 )

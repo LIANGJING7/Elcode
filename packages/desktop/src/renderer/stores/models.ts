@@ -6,6 +6,8 @@ import { registerSessionOption } from '../composer/sessionOptionsRegistry'
 export interface ProviderModel {
   id?: string
   name?: string
+  npm?: string
+  options?: Record<string, unknown>
 }
 
 export interface ProviderInfo {
@@ -13,7 +15,6 @@ export interface ProviderInfo {
   name: string
   source: string
   models: Record<string, ProviderModel>
-  npm?: string
   apiKey?: string
   baseUrl?: string
   errorMessage?: string
@@ -58,6 +59,7 @@ export interface AddModelPayload {
     textVerbosity?: string
     reasoningSummary?: string
   }>
+  _isEditing?: boolean // 内部标记，用于区分添加和编辑
 }
 
 // 模型操作结果类型
@@ -134,12 +136,27 @@ async function loadModels(directory?: string) {
       const connectedSet = new Set(result.connected || [])
       console.log('[loadModels] connectedSet:', connectedSet)
       
-      // 从后端返回的 key 和 options 中提取 apiKey 和 baseUrl
-      const mappedProviders = (result.all as any[]).map((p: any) => ({
-        ...p,
-        apiKey: p.key || undefined,
-        baseUrl: p.options?.baseURL || p.options?.baseUrl || undefined,
-      }))
+      // 从后端返回的数据中提取 apiKey, baseUrl
+      // npm 从每个 model.api.npm 获取，用于高级选项显示
+      const mappedProviders = (result.all as any[]).map((p: any) => {
+        // 从 provider 的 models 中提取 npm 和 options
+        const mappedModels: Record<string, ProviderModel> = {}
+        for (const [modelId, model] of Object.entries(p.models || {})) {
+          const m = model as any
+          mappedModels[modelId] = {
+            id: modelId,
+            name: m.name || modelId,
+            npm: m.api?.npm || undefined,
+            options: m.options || undefined,
+          }
+        }
+        return {
+          ...p,
+          models: mappedModels,
+          apiKey: p.key || undefined,
+          baseUrl: p.options?.baseURL || p.options?.baseUrl || undefined,
+        }
+      })
       
       providers.value = connectedSet.size > 0 
         ? mappedProviders.filter(p => connectedSet.has(p.id))
@@ -407,8 +424,9 @@ async function loadModels(directory?: string) {
         return { success: false, error: `供应商 '${providerId}' 不存在` }
       }
 
-      // 检查模型是否已存在
-      if (provider.models?.[payload.modelId]) {
+      // 检查模型是否已存在（仅添加时检查，编辑时允许更新）
+      const existingModel = provider.models?.[payload.modelId]
+      if (existingModel && !payload._isEditing) {
         console.log('[modelsStore.addModel] FAILED: model already exists')
         return { success: false, error: `模型 '${payload.modelId}' 已存在` }
       }
@@ -425,7 +443,7 @@ async function loadModels(directory?: string) {
 
       // 调用 IPC 添加模型
       console.log('[modelsStore.addModel] calling IPC model.add')
-      const result = await window.desktop.lcode.model.add(providerId, payload.modelId, modelConfig)
+      const result = await window.desktop.lcode.model.add(providerId, payload.modelId, JSON.parse(JSON.stringify(modelConfig)))
       console.log('[modelsStore.addModel] IPC result:', result)
 
       if (!result.success) {
@@ -435,10 +453,15 @@ async function loadModels(directory?: string) {
       // 更新本地状态
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
       if (providerIndex !== -1) {
+        // 获取 provider 的 npm 用于新模型（从已有模型推断）
+        const providerNpm = Object.values(providers.value[providerIndex].models).find(m => m.npm)?.npm
         const newModel: ProviderModel = {
           id: payload.modelId,
-          name: payload.name || payload.modelId
+          name: payload.name || payload.modelId,
+          npm: providerNpm,
+          options: payload.options,
         }
+        console.log('[modelsStore.addModel] updating local state, newModel:', JSON.stringify(newModel))
         providers.value[providerIndex].models[payload.modelId] = newModel
       }
 
