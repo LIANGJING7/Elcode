@@ -1363,6 +1363,7 @@ export const layer = Layer.effect(
 
         // extend database from config
         for (const [providerID, provider] of configProviders) {
+          console.log('[ProviderInit] Processing config provider:', providerID)
           const existing = database[providerID]
           const parsed: Info = {
             id: ProviderV2.ID.make(providerID),
@@ -1374,6 +1375,7 @@ export const layer = Layer.effect(
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+            console.log('[ProviderInit] Processing model:', modelID, 'config name:', model.name)
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
@@ -1387,6 +1389,7 @@ export const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            console.log('[ProviderInit] Model', modelID, 'final name:', name)
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
