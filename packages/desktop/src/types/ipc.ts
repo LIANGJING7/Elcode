@@ -288,6 +288,10 @@ export const IPC_CHANNELS = {
   // Global state (lcode.json - cross-project UI preferences)
   GLOBAL_STATE_GET: 'global-state:get',
   GLOBAL_STATE_SET: 'global-state:set',
+
+  // Subagent panel
+  SUBAGENT_WATCH: 'subagent:watch',
+  SUBAGENT_UNWATCH: 'subagent:unwatch',
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

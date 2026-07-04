@@ -1,66 +1,34 @@
 // packages/desktop/src/renderer/types/subagent.ts
 
 import type { Component } from 'vue'
+import type {
+  FooterSubagentTab,
+  FooterSubagentDetail,
+  StreamCommit,
+  TabsPatch,
+  DetailPatch,
+  TabsUpdatedEvent,
+  DetailUpdatedEvent,
+  ConnectionState,
+} from '../../types/subagent'
 
-// Re-export from core (TUI types)
-export interface FooterSubagentTab {
-  sessionID: string
-  partID: string
-  callID: string
-  label: string
-  description: string
-  status: 'running' | 'completed' | 'cancelled' | 'error'
-  background?: boolean
-  title?: string
-  toolCalls?: number
-  lastUpdatedAt: number
+// Re-export shared types for convenience
+export type {
+  FooterSubagentTab,
+  FooterSubagentDetail,
+  StreamCommit,
+  TabsPatch,
+  DetailPatch,
+  TabsUpdatedEvent,
+  DetailUpdatedEvent,
+  ConnectionState,
 }
 
-export interface FooterSubagentDetail {
-  sessionID: string
-  commits: StreamCommit[]
-}
-
-export interface StreamCommit {
-  kind: 'text' | 'tool' | 'error' | 'reasoning'
-  text: string
-  phase: 'start' | 'progress' | 'final'
-  source: 'assistant' | 'reasoning' | 'tool' | 'system'
-  tool?: string
-  toolState?: 'running' | 'completed' | 'error'
-  messageID?: string
-  partID?: string
-}
-
-// Patch types for incremental updates
-export interface TabsPatch {
-  added: FooterSubagentTab[]
-  updated: FooterSubagentTab[]
-  removed: string[]
-}
-
-export interface DetailPatch {
-  type: 'append' | 'replace'
-  commits?: StreamCommit[]
-  data?: Partial<FooterSubagentDetail>
-}
-
-// IPC event payloads
-export interface TabsUpdatedEvent {
-  sessionId: string
-  patch: TabsPatch
+// Snapshot returned by watch()
+export interface SubagentSnapshot {
+  tabs: FooterSubagentTab[]
   version: number
 }
-
-export interface DetailUpdatedEvent {
-  sessionId: string
-  targetSessionId: string
-  patches: DetailPatch[]
-  version: number
-}
-
-// Connection state
-export type ConnectionState = 'idle' | 'connecting' | 'watching' | 'error'
 
 // ViewModel types
 export interface SubagentHeaderVM {
