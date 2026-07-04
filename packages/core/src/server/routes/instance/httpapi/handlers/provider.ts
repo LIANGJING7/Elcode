@@ -168,6 +168,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
