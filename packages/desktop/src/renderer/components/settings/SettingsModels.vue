@@ -1,5 +1,24 @@
 <template>
   <div class="flex h-full flex-col p-5">
+    <!-- Toast notification -->
+    <div 
+      v-if="toastMessage" 
+      class="fixed top-12 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all duration-300"
+      :class="toastType === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'"
+    >
+      <div class="flex items-center gap-2">
+        <svg v-if="toastType === 'success'" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span class="text-sm font-medium">{{ toastMessage }}</span>
+      </div>
+    </div>
+
     <!-- Header -->
     <div class="flex-shrink-0 mb-6">
       <h2 class="text-2xl font-bold text-text mb-2">模型设置</h2>
@@ -403,6 +422,18 @@ const showModelSelect = ref(false)
 const showAddModelModal = ref(false)
 const editingModel = ref<{ modelId: string; model: ProviderModel } | undefined>(undefined)
 const selectedProviderId = ref<string>('')
+
+// Toast notification state
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 3000)
+}
 const selectedAuthMethod = ref<AuthMethod | undefined>(undefined)
 const oauthInputs = ref<Record<string, string>>({})
 const authorizationResult = ref<AuthorizationResult | undefined>(undefined)
@@ -566,6 +597,7 @@ async function handleAddModelSuccess(providerId: string, modelId: string) {
   console.log('[handleAddModelSuccess] calling loadModels')
   await modelsStore.loadModels(directory.value)
   console.log('[handleAddModelSuccess] loadModels completed')
+  showToast('模型配置已更新', 'success')
 }
 
 function handleCloseAddModelModal() {
