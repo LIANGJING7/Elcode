@@ -270,6 +270,7 @@ export const IPC_CHANNELS = {
   PROVIDER_TEST: 'provider:test',
   PROVIDER_REFRESH_MODELS: 'provider:refresh-models',
   PROVIDER_DELETE_MODEL: 'provider:delete-model',
+  PROVIDER_REFRESH_ALL: 'provider:refresh-all',
 
   CONSOLE_GET: 'console:get',
   

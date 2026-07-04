@@ -423,6 +423,20 @@ export function registerSessionHandlers() {
       return { success: false, error }
     }
   })
+
+  // Refresh all models cache (invalidate InstanceState + ModelsDev)
+  ipcMain.handle(CHANNELS.PROVIDER_REFRESH_ALL, async (_event, directory?: string) => {
+    console.log('[RefreshAll] directory:', directory)
+    try {
+      const result = await backend.provider.refreshAll(directory)
+      console.log('[RefreshAll] result:', result)
+      return result
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      console.log('[RefreshAll] ERROR:', error)
+      return { success: false, error }
+    }
+  })
 }
 
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
