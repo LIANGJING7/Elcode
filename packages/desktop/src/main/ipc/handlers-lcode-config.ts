@@ -1,13 +1,14 @@
 import { ipcMain } from 'electron'
 import * as fs from 'fs/promises'
 import * as path from 'path'
-import { xdgConfig } from 'xdg-basedir'
+import { xdgConfig, xdgCache } from 'xdg-basedir'
 import { parse, modify, applyEdits, JSONPath } from 'jsonc-parser'
 import { Mutex } from 'async-mutex'
 import { IPC_CHANNELS } from '../../types/ipc'
 import type { McpServerConfig } from '../../types/config'
 
 const CONFIG_DIR = path.join(xdgConfig ?? '', 'lcode')
+const MODELS_CACHE_FILE = path.join(xdgCache ?? '', 'lcode', 'models.json')
 const CONFIG_FILE = path.join(CONFIG_DIR, 'lcode.jsonc')
 
 console.log('[LCodeConfig] Config file path:', CONFIG_FILE)
@@ -33,6 +34,15 @@ interface ResultP<T = unknown> {
   success: boolean
   data?: T
   error?: string
+}
+
+async function invalidateModelsCache(): Promise<void> {
+  try {
+    await fs.unlink(MODELS_CACHE_FILE)
+    console.log('[LCodeConfig] Models cache invalidated')
+  } catch {
+    // File doesn't exist or already deleted - ignore
+  }
 }
 
 function validateWhitelist(config: unknown): void {
@@ -379,6 +389,7 @@ export function registerLcodeConfigHandlers(): void {
           })
 
           await writeFile(content)
+          await invalidateModelsCache()
           console.log('[LCodeConfig] ADD model success:', providerId, '/', modelId)
           return { success: true, data: parsed }
         } catch (e) {
@@ -418,6 +429,7 @@ export function registerLcodeConfigHandlers(): void {
           })
 
           await writeFile(content)
+          await invalidateModelsCache()
           console.log('[LCodeConfig] DELETE model success:', providerId, '/', modelId)
           return { success: true, data: parsed }
         } catch (e) {
