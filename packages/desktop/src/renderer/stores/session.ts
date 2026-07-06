@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem } from '../../types/ipc'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
@@ -783,7 +783,7 @@ export const useSessionStore = defineStore('session', () => {
       if (eventSessionId) {
         const rawEvent = data.event as { type?: string }
         if (rawEvent.type === 'todo.updated') {
-          sessionTodoStore.handleTodoUpdated(data.event as { type: 'todo.updated'; sessionID: string; todos: unknown[] })
+          sessionTodoStore.handleTodoUpdated(data.event as { type: 'todo.updated'; sessionID: string; todos: TodoItem[] })
         } else {
           streamingStore.handleEvent(eventSessionId, data.event)
         }
