@@ -30,13 +30,14 @@ const sessionStore = useSessionStore()
 async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
-const promptOptions: PromptOptions = { agent }
-sessionStore.sendMessage(content, promptOptions)
+  const promptOptions: PromptOptions = { agent }
+  sessionStore.sendMessage(content, promptOptions)
 
-// 用户发送消息时平滑滚动到底部
-await nextTick()
+  // 用户发送消息时平滑滚动到底部
+  await nextTick()
   requestAnimationFrame(() => {
     timelineRef.value?.scrollToBottom({ behavior: 'smooth' })
+    needInitialScroll.value = false
   })
 }
 
@@ -71,8 +72,9 @@ watch(
 // 监听消息变化，在标志为 true 时执行滚动
 watch(
   () => sessionStore.currentMessages.length,
-  async () => {
+  async (length) => {
     if (!needInitialScroll.value) return
+    if (length === 0) return
     
     await nextTick()
     requestAnimationFrame(() => {
