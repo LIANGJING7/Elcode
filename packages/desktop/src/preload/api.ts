@@ -61,7 +61,10 @@ export const desktopAPI = {
       }
       ipcRenderer.on(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
-    }
+    },
+
+    todo: (sessionID: string, directory?: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
   },
 
   file: {
