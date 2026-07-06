@@ -5,6 +5,7 @@ import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
+import { useSessionTodoStore } from './sessionTodo'
 import { mapLifecycleToStatus, parseToolArgs } from './streaming/types'
 
 // Default time filter: last 30 days
@@ -36,6 +37,7 @@ export const useSessionStore = defineStore('session', () => {
   const workspaceStore = useWorkspaceStore()
   const streamingStore = useStreamingStore()
   const ui = useUiStore()
+  const sessionTodoStore = useSessionTodoStore()
 
   // ========================================
   // Query Layer - 查询参数
@@ -779,7 +781,12 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       if (eventSessionId) {
-        streamingStore.handleEvent(eventSessionId, data.event)
+        const rawEvent = data.event as { type?: string }
+        if (rawEvent.type === 'todo.updated') {
+          sessionTodoStore.handleTodoUpdated(data.event as { type: 'todo.updated'; sessionID: string; todos: unknown[] })
+        } else {
+          streamingStore.handleEvent(eventSessionId, data.event)
+        }
         
         // STREAM_DONE: trigger processQueue (event-driven)
         // stream.ended: SSE connection closed (backend normal completion or error)
