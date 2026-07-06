@@ -70,7 +70,7 @@ const collapsed = ref(false)
   border-top: 1px solid rgba(39, 39, 42, 0.6);
   border-left: 1px solid rgba(39, 39, 42, 0.6);
   border-right: 1px solid rgba(39, 39, 42, 0.6);
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
   padding: 12px 16px;
 }
 .todo-header {
