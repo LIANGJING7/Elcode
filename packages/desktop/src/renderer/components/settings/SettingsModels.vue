@@ -305,7 +305,7 @@
       :console-state="modelsStore.consoleState"
       :connected="modelsStore.connectedProviders"
       @select="handleProviderSelect"
-      @custom="handleCustomProvider"
+      @customSubmit="handleCustomProviderSubmit"
       @close="showConnectDialog = false"
     />
 
@@ -391,6 +391,7 @@ import AddProviderModal from './AddProviderModal.vue'
 import EditProviderModal from './EditProviderModal.vue'
 import AddModelModal from './AddModelModal.vue'
 import type { AuthorizationResult } from '../../types/ipc'
+import type { CustomProviderConfig } from '../../types/custom-provider'
 
 const workspaceStore = useWorkspaceStore()
 const modelsStore = useModelsStore()
@@ -538,6 +539,25 @@ function handleCustomProvider(providerId: string) {
   selectedProviderId.value = providerId
   selectedAuthMethod.value = { type: 'api', label: 'API Key' }
   showAuthDialog.value = true
+}
+
+const handleCustomProviderSubmit = async (config: CustomProviderConfig) => {
+  console.log('[SettingsModels] Custom provider submit:', JSON.stringify(config))
+  
+  try {
+    const result = await window.desktop.lcode.customProvider.add(config)
+    
+    if (result.success) {
+      console.log('[SettingsModels] Custom provider added successfully')
+      showConnectDialog.value = false
+      await modelsStore.refreshProviders()
+      console.log('[SettingsModels] Provider saved to lcode.jsonc')
+    } else {
+      console.error('[SettingsModels] Failed to add custom provider:', result.error)
+    }
+  } catch (err) {
+    console.error('[SettingsModels] Error adding custom provider:', err)
+  }
 }
 
 async function startOAuth(providerId: string, methodIndex: number, inputs: Record<string, string>) {
