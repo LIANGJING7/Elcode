@@ -83,6 +83,6 @@ const expanded = ref(true)
   transition: max-height 0.2s;
 }
 .todo-list.collapsed {
-  max-height: 3lh;
+  max-height: 0;
 }
 </style>
