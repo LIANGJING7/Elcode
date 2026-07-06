@@ -54,3 +54,15 @@ export interface McpServerStatus {
 
 // Re-export for convenience
 export type { ConfigPatch, ResultP }
+
+export type { 
+  CustomProviderConfig, 
+  ProviderType
+} from './custom-provider'
+export { 
+  PROVIDER_TYPE_TO_NPM,
+  PROVIDER_TYPE_LABELS,
+  generateDisplayNameFromId,
+  validateProviderId,
+  validateBaseUrl 
+} from './custom-provider'

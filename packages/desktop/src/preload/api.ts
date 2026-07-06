@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef, McpServerConfig, ConfigPatch, LCodeGlobalConfig } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef, McpServerConfig, ConfigPatch, LCodeGlobalConfig, CustomProviderConfig } from '../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../types/session'
 
 type ResultP<T = unknown> = Promise<{ success: boolean; data?: T; error?: string }>
@@ -297,6 +297,19 @@ deleteModel: (providerId: string, modelId: string, directory?: string): Promise<
           return result
         }).catch((err) => {
           console.error('[PRELOAD_LCODE] model.delete error:', err)
+          throw err
+        })
+      }
+    },
+    customProvider: {
+      add: (config: CustomProviderConfig): ResultP => {
+        console.log('[PRELOAD_LCODE] customProvider.add invoked:', JSON.stringify(config))
+        const serializedConfig = JSON.parse(JSON.stringify(config))
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_ADD, serializedConfig).then((result) => {
+          console.log('[PRELOAD_LCODE] customProvider.add result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] customProvider.add error:', err)
           throw err
         })
       }

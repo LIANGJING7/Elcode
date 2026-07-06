@@ -222,7 +222,7 @@ export interface ConsoleState {
 }
 
 // Re-export config types
-export type { LCodeGlobalConfig, McpServerConfig, ConfigPatch, ResultP } from './config'
+export type { LCodeGlobalConfig, McpServerConfig, ConfigPatch, ResultP, CustomProviderConfig } from './config'
 
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
