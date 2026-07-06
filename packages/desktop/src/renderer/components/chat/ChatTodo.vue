@@ -44,9 +44,9 @@ const collapsed = ref(false)
             <ChevronDown v-else class="w-3.5 h-3.5" />
             <span class="todo-count">Tasks</span>
           </Button>
-          <Badge variant="success" class="todo-badge">
+          <span class="todo-badge">
             {{ completedCount }}/{{ totalCount }} completed
-          </Badge>
+          </span>
         </div>
 
         <!-- Todo list (collapsed controls visibility) -->
@@ -90,7 +90,7 @@ const collapsed = ref(false)
 }
 
 :deep(.todo-card > div[data-slot="card"]) {
-  padding: 12px 16px;
+  padding: 12px 16px 0 16px;
   gap: 0;
 }
 
