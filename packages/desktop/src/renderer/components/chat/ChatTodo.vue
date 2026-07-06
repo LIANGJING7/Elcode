@@ -101,7 +101,7 @@ const collapsed = ref(false)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   font-size: 13px;
   color: #71717a;
   cursor: pointer;
