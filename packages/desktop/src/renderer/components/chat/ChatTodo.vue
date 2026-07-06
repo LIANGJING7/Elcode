@@ -51,20 +51,22 @@ const collapsed = ref(false)
 
         <!-- Todo list (collapsed controls visibility) -->
         <div class="todo-list" :class="{ collapsed }">
-          <!-- Single v-for loop preserving order -->
-          <div
-            v-for="(item, i) in showItems"
-            :key="i"
-            class="todo-item"
-          >
-            <!-- Status dot (8px colored circle) -->
-            <div class="todo-dot" :class="item.status"></div>
-            <!-- Task content with conditional styling for completed -->
+          <div class="todo-list-inner">
+            <!-- Single v-for loop preserving order -->
             <div
-              class="todo-content"
-              :class="{ completed: item.status === 'completed' }"
+              v-for="(item, i) in showItems"
+              :key="i"
+              class="todo-item"
             >
-              {{ item.content }}
+              <!-- Status dot (8px colored circle) -->
+              <div class="todo-dot" :class="item.status"></div>
+              <!-- Task content with conditional styling for completed -->
+              <div
+                class="todo-content"
+                :class="{ completed: item.status === 'completed' }"
+              >
+                {{ item.content }}
+              </div>
             </div>
           </div>
         </div>
@@ -140,17 +142,21 @@ const collapsed = ref(false)
 }
 
 .todo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 500px;
-  overflow: hidden;
-  transition: max-height 0.5s ease, opacity 0.5s ease;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.4s ease-in-out, opacity 0.4s ease-in-out;
 }
 
 .todo-list.collapsed {
-  max-height: 0;
+  grid-template-rows: 0fr;
   opacity: 0;
+}
+
+.todo-list-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .todo-item {
@@ -197,21 +203,28 @@ const collapsed = ref(false)
   color: #a1a1aa;
 }
 
-.todo-list::-webkit-scrollbar {
+.todo-list-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-list-inner::-webkit-scrollbar {
   width: 4px;
 }
 
-.todo-list::-webkit-scrollbar-track {
+.todo-list-inner::-webkit-scrollbar-track {
   background: rgba(39, 39, 42, 0.3);
   border-radius: 2px;
 }
 
-.todo-list::-webkit-scrollbar-thumb {
+.todo-list-inner::-webkit-scrollbar-thumb {
   background: rgba(113, 113, 122, 0.5);
   border-radius: 2px;
 }
 
-.todo-list::-webkit-scrollbar-thumb:hover {
+.todo-list-inner::-webkit-scrollbar-thumb:hover {
   background: rgba(113, 113, 122, 0.8);
 }
 </style>
