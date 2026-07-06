@@ -1,41 +1,53 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useUiStore } from '../../stores/ui'
+import type { FileTab } from '../../types/presentation'
 import FileTabsHeader from './FileTabsHeader.vue'
 
 const ui = useUiStore()
 
 const activeTab = computed(() =>
-  ui.fileTabs.find((t) => t.id === ui.activeFileTabId),
+  ui.panelTabs.find((t) => t.id === ui.activePanelTabId),
+)
+
+const activeFileTab = computed(() =>
+  activeTab.value?.type === 'file' ? (activeTab.value as FileTab) : null,
 )
 
 function handleViewerScroll(scrollTop: number) {
-  if (activeTab.value) {
-    ui.updateFileTabViewerState(activeTab.value.id, { scrollTop })
+  if (activeFileTab.value) {
+    ui.updateFileTabViewerState(activeFileTab.value.id, { scrollTop })
   }
 }
 </script>
 
 <template>
   <div
-    v-if="ui.fileTabs.length > 0"
+    v-if="ui.panelTabs.length > 0"
     class="file-tabs-panel w-96 flex flex-col min-h-0 border-l border-border bg-bg-surface"
   >
     <FileTabsHeader
-      :tabs="ui.fileTabs"
-      :active-id="ui.activeFileTabId"
-      @select="ui.selectFileTab"
-      @close="ui.closeFileTab"
-      @close-all="ui.closeAllFileTabs"
+      :tabs="ui.panelTabs"
+      :active-id="ui.activePanelTabId"
+      @select="ui.selectPanelTab"
+      @close="ui.closePanel"
+      @close-all="() => ui.panelTabs.forEach(t => ui.closePanel(t.id))"
     />
 
-    <!-- 直接渲染 tab.component，无需 VIEWER_MAP -->
+    <!-- FileTab: pass model and status -->
     <component
-      v-if="activeTab"
-      :is="activeTab.component"
-      :model="activeTab.model"
-      :status="activeTab.status"
+      v-if="activeFileTab"
+      :is="activeFileTab.component"
+      :model="activeFileTab.model"
+      :status="activeFileTab.status"
       @scroll="handleViewerScroll"
+    />
+
+    <!-- SubagentTab: pass only status -->
+    <component
+      v-else-if="activeTab"
+      :is="activeTab.component"
+      :status="activeTab.status"
     />
   </div>
 </template>

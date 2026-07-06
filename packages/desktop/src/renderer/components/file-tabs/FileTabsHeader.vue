@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { FileTab } from '../../types/presentation'
+import type { PanelTab } from '../../types/presentation'
 
 defineProps<{
-  tabs: FileTab[]
+  tabs: PanelTab[]
   activeId: string | null
 }>()
 
