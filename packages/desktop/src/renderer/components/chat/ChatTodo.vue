@@ -106,9 +106,6 @@ const collapsed = ref(false)
   font-size: 10px;
   color: #71717a;
 }
-.collapse-btn:hover {
-  color: #a1a1aa;
-}
 .todo-list {
   display: flex;
   flex-direction: column;
