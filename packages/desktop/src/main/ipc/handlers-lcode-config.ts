@@ -9,7 +9,9 @@ import type { McpServerConfig } from '../../types/config'
 import { 
   CustomProviderConfig, 
   PROVIDER_TYPE_TO_NPM, 
-  generateDisplayNameFromId 
+  generateDisplayNameFromId,
+  validateProviderId,
+  validateBaseUrl
 } from '../../types/custom-provider'
 import { backend } from '../backend-client'
 
@@ -421,6 +423,14 @@ export function registerLcodeConfigHandlers(): void {
       config: CustomProviderConfig
     ): Promise<ResultP<unknown>> => {
       console.log('[LCodeConfig] ADD custom provider:', config.providerId, 'config:', JSON.stringify(config))
+      const idValidation = validateProviderId(config.providerId)
+      if (!idValidation.valid) {
+        return { success: false, error: idValidation.error }
+      }
+      const urlValidation = validateBaseUrl(config.baseUrl)
+      if (!urlValidation.valid) {
+        return { success: false, error: urlValidation.error }
+      }
       return configMutex.runExclusive(async () => {
         try {
           let content = await readFileOrDefault()
@@ -438,23 +448,25 @@ export function registerLcodeConfigHandlers(): void {
           
           const npmPackage = PROVIDER_TYPE_TO_NPM[config.providerType]
           
+          const providerOptions: Record<string, unknown> = {
+            baseURL: config.baseUrl,
+            apiKey: config.authType === 'apiKey' 
+              ? config.authValue 
+              : `{env:${config.authValue}}`
+          }
+          
+          if (config.headers && Object.keys(config.headers).length > 0) {
+            providerOptions.headers = config.headers
+          }
+          
           const providerConfig: Record<string, unknown> = {
             npm: npmPackage,
             name: config.displayName || generateDisplayNameFromId(config.providerId),
-            options: {
-              baseURL: config.baseUrl,
-              apiKey: config.authType === 'apiKey' 
-                ? config.authValue 
-                : `{env:${config.authValue}}`
-            }
+            options: providerOptions
           }
           
           if (config.authType === 'envVar') {
             providerConfig.env = [config.authValue]
-          }
-          
-          if (config.headers && Object.keys(config.headers).length > 0) {
-            providerConfig.options.headers = config.headers
           }
           
           const formattingOptions = { insertSpaces: true, tabSize: 2, eol: '\n' }
