@@ -12,7 +12,10 @@ const props = defineProps<{
   error?: string
 }>()
 
-const emit = defineEmits<{ navigate: [sessionId: string] }>()
+const emit = defineEmits<{ 
+  navigate: [sessionId: string]
+  openPanel: []  // New: request to open panel
+}>()
 
 const icon = computed(() => {
   switch (props.status) {
@@ -42,7 +45,12 @@ const progressText = computed(() => {
   return ''
 })
 
-const handleClick = () => { if (props.sessionId) emit('navigate', props.sessionId) }
+const handleClick = () => {
+  if (props.sessionId) {
+    emit('navigate', props.sessionId)
+    emit('openPanel')
+  }
+}
 </script>
 
 <template>

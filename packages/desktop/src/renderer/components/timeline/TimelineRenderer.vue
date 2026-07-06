@@ -20,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 
   openFile: [tool: ToolCall]
   navigateSession: [sessionId: string]
+  openSubagentPanel: [sessionId: string]  // New
 }>()
 
 const handleNavigateSession = (sessionId: string) => {
@@ -62,6 +63,7 @@ function getQueryGroupTools(node: TimelineNode): StreamingToolCall[] {
         :is-streaming="isStreaming"
         @open-file="emit('openFile', $event)"
         @navigate-session="handleNavigateSession($event)"
+        @open-subagent-panel="emit('openSubagentPanel', $event)"
       />
       
       <SearchFoldGroup

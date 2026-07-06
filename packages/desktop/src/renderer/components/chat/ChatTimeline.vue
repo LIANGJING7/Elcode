@@ -4,6 +4,10 @@ import type { Message, ToolCall } from '../../../types/ipc'
 import MessageUser from './MessageUser.vue'
 import MessageAssistant from './MessageAssistant.vue'
 import StreamingMessage from '../streaming/StreamingMessage.vue'
+import SubagentViewer from '../subagent/SubagentViewer.vue'
+import { useSubagentStore } from '../../stores/subagent'
+import { useSessionStore } from '../../stores/session'
+import { useUiStore } from '../../stores/ui'
 
 const props = defineProps<{
   messages: Message[]
@@ -76,6 +80,34 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
   flush()
   return items
 })
+
+// Handle subagent panel open
+function handleOpenSubagentPanel(sessionId: string) {
+  const subagentStore = useSubagentStore()
+  const sessionStore = useSessionStore()
+  const uiStore = useUiStore()
+  
+  // Ensure we're watching the current session
+  if (!subagentStore.watching) {
+    subagentStore.watch(sessionStore.currentSessionId!)
+  }
+  
+  // Find the tab and open panel
+  const tab = subagentStore.tabs.get(sessionId)
+  if (tab) {
+    uiStore.openPanel({
+      id: sessionId,
+      type: 'subagent',
+      title: tab.label,
+      subtitle: tab.description,
+      status: tab.status,
+      component: SubagentViewer,
+    })
+    
+    // Select the tab
+    subagentStore.selectTab(sessionId)
+  }
+}
 </script>
 
 <template>
@@ -89,13 +121,13 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
     <!-- 消息列表（连续 assistant 已按 user turn 聚合） -->
     <div v-for="item in aggregatedItems" :key="item.key">
       <MessageUser v-if="item.role === 'user'" :message="item.message" />
-      <MessageAssistant v-else :message="item.message" @open-file="emit('openFile', $event)" />
+      <MessageAssistant v-else :message="item.message" @open-file="emit('openFile', $event)" @open-subagent-panel="handleOpenSubagentPanel" />
     </div>
 
     <!-- 流式消息 - DEBUG: always render when streamingMessage exists -->
     <div v-if="streamingMessage" class="streaming-container">
       {{ console.log('[DEBUG ChatTimeline] Rendering StreamingMessage, streamingMessage:', streamingMessage) }}
-      <StreamingMessage @open-file="emit('openFile', $event)" />
+      <StreamingMessage @open-file="emit('openFile', $event)" @open-subagent-panel="handleOpenSubagentPanel" />
     </div>
     </div>
   </div>

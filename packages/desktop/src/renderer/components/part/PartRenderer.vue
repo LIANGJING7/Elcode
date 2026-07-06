@@ -18,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
   navigateSession: [sessionId: string]
+  openSubagentPanel: [sessionId: string]  // New
 }>()
 
 const textPayload = computed(() => props.node.payload as { content: string })
@@ -33,6 +34,7 @@ const reasoningPayload = computed(() => props.node.payload as { content: string;
       :tool="toolPayload"
       @open-file="emit('openFile', $event)"
       @navigate-session="emit('navigateSession', $event)"
+      @open-subagent-panel="emit('openSubagentPanel', $event)"
     />
     <ReasoningBlock
       v-else-if="node.type === 'reasoning'"

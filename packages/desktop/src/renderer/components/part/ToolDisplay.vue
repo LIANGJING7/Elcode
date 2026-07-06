@@ -16,9 +16,10 @@ const props = defineProps<{ tool: ToolCall }>()
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
   navigateSession: [sessionId: string]
+  openSubagentPanel: [sessionId: string]  // New
 }>()
 
-const meta = computed(() => getToolMeta(props.tool.name))
+const meta = computed(() => getToolMeta(props.tool?.name ?? ''))
 
 const inlineProps = computed(() => ({
   icon: meta.value.icon,
@@ -49,11 +50,29 @@ const subagentProps = computed(() => {
 })
 
 const genericProps = computed(() => ({ tool: props.tool }))
+
+// Handle SubagentTool events
+function handleNavigate(sessionId: string) {
+  emit('navigateSession', sessionId)
+}
+
+function handleOpenPanel() {
+  if (subagentProps.value.sessionId) {
+    emit('openSubagentPanel', subagentProps.value.sessionId)
+  }
+}
 </script>
 
 <template>
-  <InlineTool v-if="meta.display === 'inline'" v-bind="inlineProps" @click="emit('openFile', tool)" />
-  <BlockTool v-else-if="meta.display === 'block'" v-bind="blockProps" @click="emit('openFile', tool)" />
-  <SubagentTool v-else-if="meta.display === 'subagent'" v-bind="subagentProps" @navigate="emit('navigateSession', $event)" />
-  <GenericTool v-else v-bind="genericProps" />
+  <template v-if="tool && meta">
+    <InlineTool v-if="meta.display === 'inline'" v-bind="inlineProps" />
+    <BlockTool v-else-if="meta.display === 'block'" v-bind="blockProps" />
+    <SubagentTool 
+      v-else-if="meta.display === 'subagent'" 
+      v-bind="subagentProps" 
+      @navigate="handleNavigate"
+      @open-panel="handleOpenPanel"
+    />
+    <GenericTool v-else v-bind="genericProps" />
+  </template>
 </template>
