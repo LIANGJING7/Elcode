@@ -6,6 +6,11 @@ import { parse, modify, applyEdits, JSONPath } from 'jsonc-parser'
 import { Mutex } from 'async-mutex'
 import { IPC_CHANNELS } from '../../types/ipc'
 import type { McpServerConfig } from '../../types/config'
+import { 
+  CustomProviderConfig, 
+  PROVIDER_TYPE_TO_NPM, 
+  generateDisplayNameFromId 
+} from '../../types/custom-provider'
 import { backend } from '../backend-client'
 
 const CONFIG_DIR = path.join(xdgConfig ?? '', 'lcode')
@@ -403,6 +408,72 @@ export function registerLcodeConfigHandlers(): void {
         } catch (e) {
           const error = e instanceof Error ? e.message : String(e)
           console.error('[LCodeConfig] ADD model error:', error)
+          return { success: false, error }
+        }
+      })
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_ADD,
+    async (
+      _event,
+      config: CustomProviderConfig
+    ): Promise<ResultP<unknown>> => {
+      console.log('[LCodeConfig] ADD custom provider:', config.providerId, 'config:', JSON.stringify(config))
+      return configMutex.runExclusive(async () => {
+        try {
+          let content = await readFileOrDefault()
+          const parsed = parse(content, [], {
+            allowTrailingComma: true,
+            disallowComments: false,
+          })
+          
+          if (parsed.provider && parsed.provider[config.providerId]) {
+            return { 
+              success: false, 
+              error: `Provider '${config.providerId}' already exists` 
+            }
+          }
+          
+          const npmPackage = PROVIDER_TYPE_TO_NPM[config.providerType]
+          
+          const providerConfig: Record<string, unknown> = {
+            npm: npmPackage,
+            name: config.displayName || generateDisplayNameFromId(config.providerId),
+            options: {
+              baseURL: config.baseUrl,
+              apiKey: config.authType === 'apiKey' 
+                ? config.authValue 
+                : `{env:${config.authValue}}`
+            }
+          }
+          
+          if (config.authType === 'envVar') {
+            providerConfig.env = [config.authValue]
+          }
+          
+          if (config.headers && Object.keys(config.headers).length > 0) {
+            providerConfig.options.headers = config.headers
+          }
+          
+          const formattingOptions = { insertSpaces: true, tabSize: 2, eol: '\n' }
+          const edits = modify(content, ['provider', config.providerId], providerConfig, { formattingOptions })
+          content = applyEdits(content, edits)
+          
+          const finalParsed = parse(content, [], {
+            allowTrailingComma: true,
+            disallowComments: false,
+          })
+          
+          await writeFile(content)
+          await invalidateModelsCache()
+          
+          console.log('[LCodeConfig] ADD custom provider success:', config.providerId)
+          return { success: true, data: finalParsed }
+        } catch (e) {
+          const error = e instanceof Error ? e.message : String(e)
+          console.error('[LCodeConfig] ADD custom provider error:', error)
           return { success: false, error }
         }
       })
