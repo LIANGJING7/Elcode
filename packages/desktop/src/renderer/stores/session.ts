@@ -789,6 +789,7 @@ export const useSessionStore = defineStore('session', () => {
       if (eventSessionId) {
         const rawEvent = data.event as { type?: string }
         if (rawEvent.type === 'todo.updated') {
+          console.log('[SSE] todo.updated event received, eventSessionId:', eventSessionId, 'currentSessionId:', currentSessionId.value)
           sessionTodoStore.handleTodoUpdated(data.event as { type: 'todo.updated'; sessionID: string; todos: TodoItem[] })
         } else {
           streamingStore.handleEvent(eventSessionId, data.event)

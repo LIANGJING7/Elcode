@@ -4,6 +4,7 @@ import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
 import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
+import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore } from '../../stores/session'
@@ -94,6 +95,9 @@ watch(
       :streaming-message="streamingMessage"
       @open-file="emit('openFile', $event)"
     />
+
+    <!-- Todo 面板: 输入框上方 -->
+    <ChatTodo class="flex-shrink-0" />
 
     <!-- 输入区 -->
     <Composer
