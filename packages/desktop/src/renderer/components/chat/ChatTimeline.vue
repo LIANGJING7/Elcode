@@ -68,11 +68,19 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
     groupKeys = []
   }
 
+  // Filter out streaming assistant messages to avoid duplication with streamingMessage
+  const streamingMessageId = props.streamingMessage?.id
+  
   for (const msg of props.messages) {
     if (msg.role === 'user') {
       flush()
       items.push({ key: msg.id, role: 'user', message: msg })
     } else {
+      // Skip assistant messages that match the streaming message (avoid duplication)
+      if (streamingMessageId && msg.id === streamingMessageId) {
+        console.log('[ChatTimeline] Skipping streaming message from history:', msg.id)
+        continue
+      }
       group.push(msg)
       groupKeys.push(msg.id)
     }
