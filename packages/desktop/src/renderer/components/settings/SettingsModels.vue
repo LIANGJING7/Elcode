@@ -535,7 +535,7 @@ function handleMethodSelect(methodIndex: number) {
 }
 
 const handleCustomProviderSubmit = async (config: CustomProviderConfig) => {
-  console.log('[SettingsModels] Custom provider submit:', JSON.stringify(config))
+  console.log('[SettingsModels] Custom provider submit:', config.providerId, 'type:', config.providerType)
   
   try {
     const result = await window.desktop.lcode.customProvider.add(config)

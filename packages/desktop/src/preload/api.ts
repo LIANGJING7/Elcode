@@ -303,7 +303,7 @@ deleteModel: (providerId: string, modelId: string, directory?: string): Promise<
     },
     customProvider: {
       add: (config: CustomProviderConfig): ResultP => {
-        console.log('[PRELOAD_LCODE] customProvider.add invoked:', JSON.stringify(config))
+        console.log('[PRELOAD_LCODE] customProvider.add invoked')
         const serializedConfig = JSON.parse(JSON.stringify(config))
         return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_ADD, serializedConfig).then((result) => {
           console.log('[PRELOAD_LCODE] customProvider.add result:', result)

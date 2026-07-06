@@ -422,7 +422,7 @@ export function registerLcodeConfigHandlers(): void {
       _event,
       config: CustomProviderConfig
     ): Promise<ResultP<unknown>> => {
-      console.log('[LCodeConfig] ADD custom provider:', config.providerId, 'config:', JSON.stringify(config))
+      console.log('[LCodeConfig] ADD custom provider:', config.providerId, 'type:', config.providerType, 'authType:', config.authType)
       const idValidation = validateProviderId(config.providerId)
       if (!idValidation.valid) {
         return { success: false, error: idValidation.error }
