@@ -9,8 +9,10 @@
         @select-nav="handleSelectNav"
         @enter-settings="handleEnterSettings"
       />
-
       <SidebarTabs />
+
+      <SidebarTodo />
+
     </template>
 
     <SidebarFooter
@@ -25,6 +27,7 @@ import { computed } from 'vue'
 import SidebarHeader from './sidebar/SidebarHeader.vue'
 import SidebarFooter from './sidebar/SidebarFooter.vue'
 import SidebarTabs from './sidebar/SidebarTabs.vue'
+import SidebarTodo from './sidebar/SidebarTodo.vue'
 import SettingsNav from './sidebar/SettingsNav.vue'
 import { useUiStore, type View } from '../stores/ui'
 
