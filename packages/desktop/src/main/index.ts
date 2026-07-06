@@ -1,5 +1,5 @@
 import { app, ipcMain, Menu, nativeImage } from 'electron'
-import { createWindow, getMainWindow } from './window'
+import { createWindow, getMainWindow, switchToApp } from './window'
 import { registerIPCHandlers, initBackend } from './ipc/handlers'
 import { stopBackend } from './backend-client'
 import { join } from 'path'
@@ -25,9 +25,12 @@ function setAppIcon(): void {
 app.whenReady().then(async () => {
   try {
     setAppIcon()
+    createWindow()              // Shows loading.html immediately
+    
     await initBackend()
     registerIPCHandlers()
-    createWindow()
+    
+    await switchToApp()         // Transition to Vue app
   } catch (err) {
     console.error('Failed to initialize:', err)
     app.quit()
