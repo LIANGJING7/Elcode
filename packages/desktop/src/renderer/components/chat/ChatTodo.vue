@@ -1,24 +1,34 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { ChevronRight, ChevronDown } from 'lucide-vue-next'
 import { useSessionTodoStore } from '../../stores/sessionTodo'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+
 const sessionTodoStore = useSessionTodoStore()
 const { currentTodos } = storeToRefs(sessionTodoStore)
+
 // Filter out cancelled tasks
 const showItems = computed(() =>
   currentTodos.value.filter(t => t.status !== 'cancelled')
 )
+
 // Count statistics
 const completedCount = computed(() =>
   showItems.value.filter(t => t.status === 'completed').length
 )
 const totalCount = computed(() => showItems.value.length)
+
 // Has active (non-completed) tasks
 const hasActive = computed(() =>
   showItems.value.some(t => t.status !== 'completed')
 )
+
 // Show panel only when there are active tasks
 const show = computed(() => hasActive.value && totalCount.value > 0)
+
 // Collapse state (not persisted)
 const collapsed = ref(false)
 </script>
@@ -26,14 +36,17 @@ const collapsed = ref(false)
 <template>
   <div v-if="show" class="todo-panel-container">
     <div class="max-w-chat-max mx-auto px-6">
-      <div class="todo-panel">
+      <Card class="todo-card">
         <!-- Header with count and collapse button -->
         <div class="todo-header" @click="collapsed = !collapsed">
-          <div class="collapse-btn">
-            <span class="collapse-arrow">{{ collapsed ? '▶' : '▼' }}</span>
+          <Button variant="ghost" size="sm" class="collapse-btn">
+            <ChevronRight v-if="collapsed" class="w-3.5 h-3.5" />
+            <ChevronDown v-else class="w-3.5 h-3.5" />
             <span class="todo-count">Tasks</span>
-          </div>
-          <span class="todo-progress">{{ completedCount }}/{{ totalCount }} completed</span>
+          </Button>
+          <Badge variant="success" class="todo-badge">
+            {{ completedCount }}/{{ totalCount }} completed
+          </Badge>
         </div>
 
         <!-- Todo list (collapsed controls visibility) -->
@@ -55,23 +68,30 @@ const collapsed = ref(false)
             </div>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   </div>
 </template>
+
 <style scoped>
 .todo-panel-container {
   margin-bottom: -16px;
   position: relative;
   z-index: 1;
 }
-.todo-panel {
+
+.todo-card {
+  padding: 0;
+  margin-bottom: 0;
   background: rgba(31, 31, 35, 0.5);
-  border: 1px solid rgba(39, 39, 42, 0.6);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: -16px;
+  border-color: rgba(39, 39, 42, 0.6);
 }
+
+:deep(.todo-card > div[data-slot="card"]) {
+  padding: 12px 16px;
+  gap: 0;
+}
+
 .todo-header {
   display: flex;
   align-items: center;
@@ -81,27 +101,44 @@ const collapsed = ref(false)
   color: #71717a;
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease;
 }
-.todo-header:hover {
-  color: #a1a1aa;
+
+.todo-header:hover .todo-count {
+  color: #e4e4e7;
 }
+
 .todo-count {
   color: #a1a1aa;
+  margin-left: 4px;
 }
-.todo-progress {
+
+.todo-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.12);
   color: #22c55e;
+  border: none;
 }
+
 .collapse-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 0 6px;
+  height: 24px;
+  color: #a1a1aa;
 }
-.collapse-arrow {
-  font-size: 10px;
+
+.collapse-btn :deep(svg) {
   color: #71717a;
-  transition: transform 0.2s ease;
 }
+
+.collapse-btn:hover {
+  background: rgba(39, 39, 42, 0.3);
+}
+
+.collapse-btn:hover :deep(svg) {
+  color: #e4e4e7;
+}
+
 .todo-list {
   display: flex;
   flex-direction: column;
@@ -110,10 +147,12 @@ const collapsed = ref(false)
   overflow: hidden;
   transition: max-height 0.5s ease, opacity 0.5s ease;
 }
+
 .todo-list.collapsed {
   max-height: 0;
   opacity: 0;
 }
+
 .todo-item {
   display: flex;
   align-items: center;
@@ -123,44 +162,55 @@ const collapsed = ref(false)
   border-radius: 4px;
   transition: background 0.15s ease;
 }
+
 .todo-item:hover {
   background: rgba(39, 39, 42, 0.3);
 }
+
 .todo-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
+
 .todo-dot.completed {
   background: #22c55e;
 }
+
 .todo-dot.in-progress {
   background: #6366f1;
 }
+
 .todo-dot.pending {
   background: #71717a;
 }
+
 .todo-content {
   color: #e4e4e7;
   line-height: 1.4;
   word-wrap: break-word;
 }
+
 .todo-content.completed {
   opacity: 0.5;
   color: #a1a1aa;
 }
+
 .todo-list::-webkit-scrollbar {
   width: 4px;
 }
+
 .todo-list::-webkit-scrollbar-track {
   background: rgba(39, 39, 42, 0.3);
   border-radius: 2px;
 }
+
 .todo-list::-webkit-scrollbar-thumb {
   background: rgba(113, 113, 122, 0.5);
   border-radius: 2px;
 }
+
 .todo-list::-webkit-scrollbar-thumb:hover {
   background: rgba(113, 113, 122, 0.8);
 }
