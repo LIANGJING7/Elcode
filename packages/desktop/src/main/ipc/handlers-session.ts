@@ -357,6 +357,10 @@ export function registerSessionHandlers() {
     return await backend.session.update(sessionID, patch, directory)
   })
 
+  ipcMain.handle(CHANNELS.SESSION_TODO, async (_event, sessionID: string, directory?: string) => {
+    return await backend.session.todo(sessionID, directory)
+  })
+
   // Provider handlers
   ipcMain.handle(CHANNELS.PROVIDER_AUTH_METHODS, async (_event, directory?: string) => {
     return await backend.provider.authMethods(directory)
