@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, ref } from 'vue'
 import type { Message, ToolCall } from '../../../types/ipc'
 import MessageUser from './MessageUser.vue'
 import MessageAssistant from './MessageAssistant.vue'
 import StreamingMessage from '../streaming/StreamingMessage.vue'
+
+const timelineContainerRef = ref<HTMLDivElement | null>(null)
 
 const props = defineProps<{
   messages: Message[]
@@ -11,6 +13,27 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
+
+interface ScrollOptions {
+  behavior?: ScrollBehavior
+}
+
+export interface ChatTimelineExpose {
+  scrollToBottom(options?: ScrollOptions): boolean
+}
+
+function scrollToBottom(options?: ScrollOptions): boolean {
+  if (!timelineContainerRef.value) return false
+  
+  const behavior = options?.behavior ?? 'auto'
+  
+  timelineContainerRef.value.scrollTo({
+    top: timelineContainerRef.value.scrollHeight,
+    behavior,
+  })
+  
+  return true
+}
 
 // Debug logging
 watch(() => props.messages, (msgs) => {
@@ -76,10 +99,12 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
   flush()
   return items
 })
+
+defineExpose<ChatTimelineExpose>({ scrollToBottom })
 </script>
 
 <template>
-  <div class="chat-timeline flex-1 min-h-0 h-0 overflow-y-auto py-4 mt-6 mb-2">
+  <div ref="timelineContainerRef" class="chat-timeline flex-1 min-h-0 h-0 overflow-y-auto py-4 mt-6 mb-2">
     <div class="max-w-chat-max mx-auto px-6">
     <!-- 空态 placeholder -->
     <div v-if="messages.length === 0 && !streamingMessage" class="empty-state text-center py-8 text-accent-muted">
