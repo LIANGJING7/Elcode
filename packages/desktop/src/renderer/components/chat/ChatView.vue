@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref, watch, nextTick } from 'vue'
 import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
+import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
 import Composer from '../Composer.vue'
 import { useStreamingStore } from '../../stores/streaming'
@@ -17,15 +19,23 @@ const emit = defineEmits<{
   openFile: [tool: ToolCall]
 }>()
 
+const timelineRef = ref<ChatTimelineExpose>()
+
+const needInitialScroll = ref(false)
+
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
 
-function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
-  // Convert mode to agent (plan/build)
+async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
   sessionStore.sendMessage(content, promptOptions)
+  
+  await nextTick()
+  requestAnimationFrame(() => {
+    timelineRef.value?.scrollToBottom({ behavior: 'smooth' })
+  })
 }
 
 function handleInterrupt() {
@@ -46,12 +56,34 @@ function handleEditQueued(pending: PendingMessage) {
 function handleRemoveQueued(pendingId: string) {
   sessionStore.removeMessage(pendingId)
 }
+
+watch(
+  () => sessionStore.currentSession,
+  () => {
+    needInitialScroll.value = true
+  },
+  { immediate: true }
+)
+
+watch(
+  () => sessionStore.currentMessages.length,
+  async () => {
+    if (!needInitialScroll.value) return
+    
+    await nextTick()
+    requestAnimationFrame(() => {
+      timelineRef.value?.scrollToBottom({ behavior: 'auto' })
+      needInitialScroll.value = false
+    })
+  }
+)
 </script>
 
 <template>
   <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg overflow-hidden">
     <!-- 时间线 -->
     <ChatTimeline
+      ref="timelineRef"
       :messages="messages"
       :streaming-message="streamingMessage"
       @open-file="emit('openFile', $event)"
