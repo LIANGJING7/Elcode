@@ -261,6 +261,9 @@ export const IPC_CHANNELS = {
   LCODE_MODEL_ADD: 'lcode:model:add',
   LCODE_MODEL_DELETE: 'lcode:model:delete',
 
+  // Custom Provider - semantic operations
+  LCODE_CUSTOM_PROVIDER_ADD: 'lcode:custom-provider:add',
+
   PROVIDER_AUTH_METHODS: 'provider:auth-methods',
   PROVIDER_AUTHORIZE: 'provider:authorize',
   PROVIDER_AUTH_CALLBACK: 'provider:auth-callback',
