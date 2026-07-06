@@ -534,13 +534,6 @@ function handleMethodSelect(methodIndex: number) {
   }
 }
 
-function handleCustomProvider(providerId: string) {
-  showConnectDialog.value = false
-  selectedProviderId.value = providerId
-  selectedAuthMethod.value = { type: 'api', label: 'API Key' }
-  showAuthDialog.value = true
-}
-
 const handleCustomProviderSubmit = async (config: CustomProviderConfig) => {
   console.log('[SettingsModels] Custom provider submit:', JSON.stringify(config))
   
@@ -550,13 +543,15 @@ const handleCustomProviderSubmit = async (config: CustomProviderConfig) => {
     if (result.success) {
       console.log('[SettingsModels] Custom provider added successfully')
       showConnectDialog.value = false
-      await modelsStore.refreshProviders()
-      console.log('[SettingsModels] Provider saved to lcode.jsonc')
+      await modelsStore.loadModels(directory.value)
+      showToast('Provider saved successfully', 'success')
     } else {
       console.error('[SettingsModels] Failed to add custom provider:', result.error)
+      showToast(result.error || 'Failed to add provider', 'error')
     }
   } catch (err) {
     console.error('[SettingsModels] Error adding custom provider:', err)
+    showToast('Failed to add custom provider', 'error')
   }
 }
 
