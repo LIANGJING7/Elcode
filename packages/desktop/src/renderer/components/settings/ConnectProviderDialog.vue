@@ -272,7 +272,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [providerId: string, authMethods: AuthMethod[]]
-  custom: [providerId: string]
   customSubmit: [config: CustomProviderConfig]
   close: []
 }>()
@@ -315,7 +314,6 @@ const PROVIDER_INFO: Record<string, { description: string; keyUrl?: string }> = 
 }
 
 const showCustomInput = ref(false)
-const customProviderId = ref('')
 const selectedProvider = ref<ProviderOption | null>(null)
 
 const customForm = ref<{
@@ -357,11 +355,6 @@ const isCustomFormValid = computed(() => {
          !providerIdExists.value
 })
 
-const isValidCustomId = computed(() => {
-  const id = customProviderId.value.trim()
-  // 必须以小写字母或数字开头，只包含小写字母、数字、连线和下划线
-  return /^[a-z0-9][a-z0-9-_]*$/.test(id)
-})
 
 const popularOptions = computed<ProviderOption[]>(() => {
   const consoleManagedSet = new Set(props.consoleState.consoleManagedProviders)
@@ -432,7 +425,7 @@ function handleSelect(option: ProviderOption) {
   emit('select', option.id, methods.length > 0 ? methods : [{ type: 'api' as const, label: 'API Key' }])
 }
 
-const handleCustomSubmit = async () => {
+const handleCustomSubmit = () => {
   const cleanHeaders = customForm.value.headers
     .filter(h => h.key.trim() && h.value.trim())
     .reduce((acc, h) => {
@@ -475,7 +468,6 @@ watch(() => props.isOpen, (newVal) => {
   if (!newVal) {
     selectedProvider.value = null
     showCustomInput.value = false
-    customProviderId.value = ''
   }
 })
 </script>
