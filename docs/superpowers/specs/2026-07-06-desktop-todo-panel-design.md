@@ -129,9 +129,8 @@ export const useSessionTodoStore = defineStore('sessionTodo', () => {
     }
   }
 
-  // 处理 SSE todo.updated（全量替换，忽略非当前 session）
+  // 处理 SSE todo.updated（全量替换，所有 session 的 cache 实时更新）
   function handleTodoUpdated(event: TodoUpdatedEvent) {
-    if (event.sessionID !== sessionStore.currentSessionId) return
     cache[event.sessionID] = {
       items: event.todos,
       loading: false,
