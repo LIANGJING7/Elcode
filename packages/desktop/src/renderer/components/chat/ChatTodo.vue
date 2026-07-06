@@ -24,44 +24,50 @@ const collapsed = ref(false)
 </script>
 
 <template>
-  <div v-if="show" class="todo-panel">
-    <!-- Header with count and collapse button -->
-    <div class="todo-header">
-      <span class="todo-count">Tasks</span>
-      <span class="todo-progress">{{ completedCount }}/{{ totalCount }}</span>
-      <button class="collapse-btn" @click="collapsed = !collapsed">
-        {{ collapsed ? '展开' : '收起' }}
-      </button>
-    </div>
+  <div v-if="show" class="todo-panel-container">
+    <div class="max-w-chat-max mx-auto px-6">
+      <div class="todo-panel">
+        <!-- Header with count and collapse button -->
+        <div class="todo-header">
+          <button class="collapse-btn" @click="collapsed = !collapsed">
+            <span class="collapse-arrow">{{ collapsed ? '▶' : '▼' }}</span>
+            <span class="todo-count">Tasks</span>
+          </button>
+          <span class="todo-progress">{{ completedCount }}/{{ totalCount }} completed</span>
+        </div>
 
-    <!-- Todo list (collapsed controls visibility) -->
-    <div class="todo-list" :class="{ collapsed }">
-      <!-- Single v-for loop preserving order -->
-      <div
-        v-for="(item, i) in showItems"
-        :key="i"
-        class="todo-item"
-      >
-        <!-- Status dot (8px colored circle) -->
-        <div class="todo-dot" :class="item.status"></div>
-        <!-- Task content with conditional styling for completed -->
-        <div
-          class="todo-content"
-          :class="{ completed: item.status === 'completed' }"
-        >
-          {{ item.content }}
+        <!-- Todo list (collapsed controls visibility) -->
+        <div class="todo-list" :class="{ collapsed }">
+          <!-- Single v-for loop preserving order -->
+          <div
+            v-for="(item, i) in showItems"
+            :key="i"
+            class="todo-item"
+          >
+            <!-- Status dot (8px colored circle) -->
+            <div class="todo-dot" :class="item.status"></div>
+            <!-- Task content with conditional styling for completed -->
+            <div
+              class="todo-content"
+              :class="{ completed: item.status === 'completed' }"
+            >
+              {{ item.content }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
 <style scoped>
+.todo-panel-container {
+  margin-bottom: 0;
+}
 .todo-panel {
   background: rgba(31, 31, 35, 0.5);
-  border: 1px solid rgba(39, 39, 42, 0.6);
-  border-radius: 8px;
+  border-top: 1px solid rgba(39, 39, 42, 0.6);
+  border-radius: 0;
   padding: 12px 16px;
-  margin-bottom: 16px;
 }
 .todo-header {
   display: flex;
@@ -78,13 +84,23 @@ const collapsed = ref(false)
   color: #22c55e;
 }
 .collapse-btn {
-  font-size: 11px;
-  color: #71717a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #a1a1aa;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 0;
   background: transparent;
   border: none;
   transition: color 0.15s ease;
+}
+.collapse-btn:hover {
+  color: #e4e4e7;
+}
+.collapse-arrow {
+  font-size: 10px;
+  color: #71717a;
 }
 .collapse-btn:hover {
   color: #a1a1aa;
