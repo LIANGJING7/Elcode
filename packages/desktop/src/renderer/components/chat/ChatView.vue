@@ -21,6 +21,7 @@ const emit = defineEmits<{
 
 const timelineRef = ref<ChatTimelineExpose>()
 
+// 一次性滚动标志：只在首次打开或切换会话时滚动
 const needInitialScroll = ref(false)
 
 const streamingStore = useStreamingStore()
@@ -29,10 +30,11 @@ const sessionStore = useSessionStore()
 async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
-  const promptOptions: PromptOptions = { agent }
-  sessionStore.sendMessage(content, promptOptions)
-  
-  await nextTick()
+const promptOptions: PromptOptions = { agent }
+sessionStore.sendMessage(content, promptOptions)
+
+// 用户发送消息时平滑滚动到底部
+await nextTick()
   requestAnimationFrame(() => {
     timelineRef.value?.scrollToBottom({ behavior: 'smooth' })
   })
@@ -57,6 +59,7 @@ function handleRemoveQueued(pendingId: string) {
   sessionStore.removeMessage(pendingId)
 }
 
+// 监听会话切换，设置一次性滚动标志
 watch(
   () => sessionStore.currentSession,
   () => {
@@ -65,6 +68,7 @@ watch(
   { immediate: true }
 )
 
+// 监听消息变化，在标志为 true 时执行滚动
 watch(
   () => sessionStore.currentMessages.length,
   async () => {
