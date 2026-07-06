@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useUiStore } from '../../stores/ui'
+import { useSubagentStore } from '../../stores/subagent'
 import type { FileTab } from '../../types/presentation'
 import FileTabsHeader from './FileTabsHeader.vue'
 
 const ui = useUiStore()
+const subagentStore = useSubagentStore()
 
 const activeTab = computed(() =>
   ui.panelTabs.find((t) => t.id === ui.activePanelTabId),
@@ -13,6 +15,17 @@ const activeTab = computed(() =>
 const activeFileTab = computed(() =>
   activeTab.value?.type === 'file' ? (activeTab.value as FileTab) : null,
 )
+
+const activeSubagentTab = computed(() =>
+  activeTab.value?.type === 'subagent' ? activeTab.value : null,
+)
+
+const subagentData = computed(() => {
+  if (!activeSubagentTab.value) return null
+  const tab = subagentStore.tabs.get(activeSubagentTab.value.id)
+  const detail = subagentStore.details.get(activeSubagentTab.value.id)
+  return tab && detail ? { tab, detail } : null
+})
 
 function handleViewerScroll(scrollTop: number) {
   if (activeFileTab.value) {
@@ -43,11 +56,20 @@ function handleViewerScroll(scrollTop: number) {
       @scroll="handleViewerScroll"
     />
 
-    <!-- SubagentTab: pass only status -->
+    <!-- SubagentTab: pass tab and detail from SubagentStore -->
     <component
-      v-else-if="activeTab"
-      :is="activeTab.component"
-      :status="activeTab.status"
+      v-else-if="activeSubagentTab && subagentData"
+      :is="activeSubagentTab.component"
+      :tab="subagentData.tab"
+      :detail="subagentData.detail"
     />
+
+    <!-- Fallback: SubagentTab without data (loading state) -->
+    <div
+      v-else-if="activeSubagentTab && !subagentData"
+      class="flex-1 flex items-center justify-center text-text-muted text-xs"
+    >
+      Loading subagent data...
+    </div>
   </div>
 </template>
