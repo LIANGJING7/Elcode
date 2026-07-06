@@ -45,26 +45,28 @@ const expanded = ref(true)
 </script>
 
 <template>
-  <div v-if="show" class="todo-panel py-2 border-t border-border/60">
+  <div v-if="show" class="todo-panel py-2">
     <div class="max-w-chat-max mx-auto px-6">
-      <div
-        class="flex items-center gap-1 cursor-pointer text-sm text-text-muted select-none"
-        @click="expanded = !expanded"
-      >
-        <span class="w-4 text-center">{{ expanded ? '\u25BC' : '\u25B6' }}</span>
-        <span class="font-semibold text-text-primary">Todo</span>
-      </div>
-      <div
-        class="todo-list mt-1"
-        :class="{ collapsed: !expanded }"
-      >
+      <div class="border-t border-border/60">
         <div
-          v-for="(item, i) in items"
-          :key="i"
-          class="flex items-center gap-1.5 text-xs py-0.5"
+          class="flex items-center gap-1 cursor-pointer text-sm text-text-muted select-none"
+          @click="expanded = !expanded"
         >
-          <span :class="item.cls" class="shrink-0 w-4 text-center">{{ item.icon }}</span>
-          <span :class="item.cls" class="truncate">{{ item.content }}</span>
+          <span class="w-4 text-center">{{ expanded ? '\u25BC' : '\u25B6' }}</span>
+          <span class="font-semibold text-text-primary">Todo</span>
+        </div>
+        <div
+          class="todo-list mt-1"
+          :class="{ collapsed: !expanded }"
+        >
+          <div
+            v-for="(item, i) in items"
+            :key="i"
+            class="flex items-center gap-1.5 text-xs py-0.5"
+          >
+            <span :class="item.cls" class="shrink-0 w-4 text-center">{{ item.icon }}</span>
+            <span :class="item.cls" class="truncate">{{ item.content }}</span>
+          </div>
         </div>
       </div>
     </div>
