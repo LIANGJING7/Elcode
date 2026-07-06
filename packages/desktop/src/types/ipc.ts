@@ -22,6 +22,11 @@ export interface PromptOptions {
   variant?: string
 }
 
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+}
+
 export interface Session {
   id: string
   workspacePath: string
@@ -232,6 +237,7 @@ export const IPC_CHANNELS = {
   SESSION_STREAM_EVENT: 'session:stream:event',
   SESSION_DELETE: 'session:delete',
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
+  SESSION_TODO: 'session:todo',
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
