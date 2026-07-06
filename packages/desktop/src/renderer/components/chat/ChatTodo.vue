@@ -67,11 +67,10 @@ const collapsed = ref(false)
 }
 .todo-panel {
   background: rgba(31, 31, 35, 0.5);
-  border-top: 1px solid rgba(39, 39, 42, 0.6);
-  border-left: 1px solid rgba(39, 39, 42, 0.6);
-  border-right: 1px solid rgba(39, 39, 42, 0.6);
-  border-radius: 8px 8px 0 0;
+  border: 1px solid rgba(39, 39, 42, 0.6);
+  border-radius: 8px;
   padding: 12px 16px;
+  margin-bottom: 16px;
 }
 .todo-header {
   display: flex;
