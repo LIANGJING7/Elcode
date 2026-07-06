@@ -38,18 +38,17 @@ export function createBashViewModel(tool: ToolCall): BashViewModel {
   const bashStructured =
     structured && structured.type === 'bash' ? structured : undefined
 
-  // stdout: prefer content[], fall back to result.output / result
   const fromContent = joinTextContent(tool.output?.content)
   const resultObj = tool.output?.result as { output?: string; stdout?: string; stderr?: string; exitCode?: number } | undefined
   const stdout = fromContent || resultObj?.output || resultObj?.stdout || ''
-  const stderr = resultObj?.stderr ?? null
+  const stderr = resultObj?.stderr ?? (tool.error || null)
 
   return {
     _kind: 'bash',
     command: String(tool.args.command ?? tool.args.cmd ?? ''),
     stdout,
     stderr,
-    exitCode: bashStructured?.exitCode ?? resultObj?.exitCode ?? null,
+    exitCode: bashStructured?.exitCode ?? resultObj?.exitCode ?? (tool.error ? 1 : null),
     duration: bashStructured?.duration ?? tool.duration ?? null,
     truncated: bashStructured?.truncated ?? false,
     timedOut: bashStructured?.timedOut ?? false,

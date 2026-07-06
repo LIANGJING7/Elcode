@@ -265,6 +265,7 @@ export function createNormalizer(ctx: NormalizerContext) {
     // Tool execution events
     switch (type) {
       case 'session.next.tool.called':
+        console.log('[Stream] Tool called:', props.callID, props.name, props.input)
         return {
           type: 'TOOL_CALLED',
           callId: props.callID as string,
@@ -282,15 +283,24 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.tool.success':
+        console.log('[Stream] Tool success:', props.callID)
+        console.log('[Stream]   result:', typeof props.result === 'string' ? props.result.slice(0, 300) : JSON.stringify(props.result).slice(0, 300))
+        console.log('[Stream]   structured:', typeof props.structured === 'string' ? props.structured.slice(0, 300) : JSON.stringify(props.structured).slice(0, 300))
+        console.log('[Stream]   content:', props.content ? (Array.isArray(props.content) ? props.content.length + ' items' : typeof props.content) : 'undefined')
         return {
           type: 'TOOL_SUCCESS',
           callId: props.callID as string,
-          output: props.result ?? props.content,
+          output: {
+            structured: props.structured,
+            result: props.result,
+            content: props.content
+          },
           version
         }
 
       case 'session.next.tool.failed':
         const error = props.error as { type?: string; message?: string } | undefined
+        console.log('[Stream] Tool failed:', props.callID, 'error:', error, 'full props:', props)
         return {
           type: 'TOOL_FAILED',
           callId: props.callID as string,

@@ -14,13 +14,15 @@ import { firstArgString, truncate } from '../summary'
 export interface SimpleViewModel extends ToolViewModel {
   _kind: 'simple'
   summary: string
+  error: string | null
 }
 
-/** Build a SimpleViewModel carrying just the summary text. */
+/** Build a SimpleViewModel carrying just the summary text and error if present. */
 function makeSimpleVm(summaryFn: (tool: ToolCall) => string) {
   return (tool: ToolCall): SimpleViewModel => ({
     _kind: 'simple',
     summary: summaryFn(tool),
+    error: tool.error ?? null,
   })
 }
 
