@@ -77,7 +77,7 @@ const collapsed = ref(false)
 
 <style scoped>
 .todo-panel-container {
-  margin-bottom: -4px;
+  margin-bottom: -24px;
   position: relative;
   z-index: 1;
 }
@@ -89,6 +89,7 @@ const collapsed = ref(false)
   border-color: rgba(39, 39, 42, 0.6);
   border-radius: 8px 8px 0 0;
   border-bottom-width: 0;
+  box-shadow: none;
 }
 
 :deep(.todo-card > div[data-slot="card"]) {
