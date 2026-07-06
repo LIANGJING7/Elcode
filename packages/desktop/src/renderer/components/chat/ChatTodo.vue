@@ -45,7 +45,7 @@ const expanded = ref(true)
 </script>
 
 <template>
-  <div v-if="show" class="todo-panel py-2">
+  <div v-if="show" class="todo-panel py-2 border-t border-border/60">
     <div class="max-w-chat-max mx-auto px-6">
       <div
         class="flex items-center gap-1 cursor-pointer text-sm text-text-muted select-none"
