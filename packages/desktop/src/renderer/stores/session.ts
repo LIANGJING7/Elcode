@@ -252,6 +252,7 @@ export const useSessionStore = defineStore('session', () => {
       const result = await window.desktop.session.list({
         ...query,
         cursor: pagination.nextCursor,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       if (currentGen !== generation) return
