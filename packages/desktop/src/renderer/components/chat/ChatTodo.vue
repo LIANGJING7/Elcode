@@ -61,12 +61,16 @@ const collapsed = ref(false)
 </template>
 <style scoped>
 .todo-panel-container {
-  margin-bottom: 0;
+  margin-bottom: -16px;
+  position: relative;
+  z-index: 1;
 }
 .todo-panel {
   background: rgba(31, 31, 35, 0.5);
   border-top: 1px solid rgba(39, 39, 42, 0.6);
-  border-radius: 0;
+  border-left: 1px solid rgba(39, 39, 42, 0.6);
+  border-right: 1px solid rgba(39, 39, 42, 0.6);
+  border-radius: 8px;
   padding: 12px 16px;
 }
 .todo-header {
