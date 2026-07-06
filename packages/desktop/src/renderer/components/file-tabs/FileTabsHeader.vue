@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { PanelTab } from '../../types/presentation'
+import { X } from 'lucide-vue-next'
 
-defineProps<{
+const props = defineProps<{
   tabs: PanelTab[]
   activeId: string | null
 }>()
@@ -11,47 +12,67 @@ const emit = defineEmits<{
   close: [id: string]
   closeAll: []
 }>()
+
+// Tab icon based on type
+function getTabIcon(tab: PanelTab): string {
+  if (tab.type === 'subagent') {
+    switch (tab.status) {
+      case 'completed': return '✓'
+      case 'error': return '✗'
+      case 'cancelled': return '○'
+      default: return '●'
+    }
+  }
+  // File tab - use file icon
+  return '📄'
+}
+
+// Tab status class
+function getTabStatusClass(tab: PanelTab): string {
+  if (tab.type !== 'subagent') return ''
+  switch (tab.status) {
+    case 'completed': return 'text-success'
+    case 'error': return 'text-error'
+    case 'cancelled': return 'text-text-muted'
+    default: return 'text-warning'
+  }
+}
 </script>
 
 <template>
-  <div class="file-tabs-header flex items-center bg-bg-elevated border-b border-border shrink-0">
-    <!-- 标签列表 -->
-    <div class="tabs-scroll flex-1 flex overflow-x-auto">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        :data-tab-id="tab.id"
-        :class="[
-          'tab-item flex items-center gap-1 px-3 py-2 text-xs border-r border-border',
-          'hover:bg-bg-surface transition-colors whitespace-nowrap',
-          tab.id === activeId ? 'bg-bg-surface font-medium' : ''
-        ]"
-        @click="emit('select', tab.id)"
+  <div class="file-tabs-header flex items-center gap-1 px-2 py-1 bg-bg-elevated border-b border-border">
+    <div 
+      v-for="tab in tabs" 
+      :key="tab.id"
+      class="tab group flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-bg-surface text-xs"
+      :class="{ 'bg-bg-surface': tab.id === activeId }"
+      @click="emit('select', tab.id)"
+    >
+      <!-- Icon -->
+      <span :class="['shrink-0', getTabStatusClass(tab)]">{{ getTabIcon(tab) }}</span>
+      
+      <!-- Title -->
+      <span class="truncate flex-1">{{ tab.title }}</span>
+      
+      <!-- Subtitle (for subagent) -->
+      <span v-if="tab.subtitle" class="text-text-muted truncate max-w-[100px]">{{ tab.subtitle }}</span>
+      
+      <!-- Close button -->
+      <button 
+        class="close-btn opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-bg-active shrink-0"
+        @click.stop="emit('close', tab.id)"
       >
-        <span :class="tab.id === activeId ? 'text-text' : 'text-text-muted'">
-          {{ tab.title }}
-        </span>
-        <span v-if="tab.subtitle" class="text-text-muted text-[10px]">
-          {{ tab.subtitle }}
-        </span>
-        <span
-          :data-close-id="tab.id"
-          class="close-btn text-text-muted hover:text-error ml-1 px-0.5"
-          @click.stop="emit('close', tab.id)"
-        >
-          ✕
-        </span>
+        <X class="w-3 h-3" />
       </button>
     </div>
-
-    <!-- 关闭全部 -->
-    <button
+    
+    <!-- Close all -->
+    <button 
       v-if="tabs.length > 1"
-      data-testid="close-all"
-      class="close-all px-3 py-2 text-xs text-text-muted hover:text-text border-l border-border shrink-0"
+      class="text-xs text-text-muted px-2 hover:text-text"
       @click="emit('closeAll')"
     >
-      关闭全部
+      Close all
     </button>
   </div>
 </template>
