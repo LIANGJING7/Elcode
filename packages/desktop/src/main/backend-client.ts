@@ -311,6 +311,11 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("PATCH", `/session/${sessionID}?${params}`, patch)
     },
+
+    todo: async (sessionID: string, directory?: string): Promise<unknown[]> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/session/${sessionID}/todo?${params}`) as Promise<unknown[]>
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
