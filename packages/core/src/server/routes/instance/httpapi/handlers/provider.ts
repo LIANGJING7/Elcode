@@ -54,6 +54,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
       }
       const connected = yield* provider.list()
+      console.log('[ProviderHttpApi.list] connected keys:', Object.keys(connected))
+      console.log('[ProviderHttpApi.list] connected providers:', JSON.stringify(Object.keys(connected).map(k => ({ id: k, source: connected[k].source }))))
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,
@@ -324,8 +326,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       console.log('[refreshAll] Config invalidated')
       yield* provider.invalidate()
       console.log('[refreshAll] InstanceState invalidated')
-      yield* modelsDev.refresh(true)
-      console.log('[refreshAll] ModelsDev refreshed')
       return { success: true }
     })
 

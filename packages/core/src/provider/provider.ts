@@ -1460,11 +1460,13 @@ export const layer = Layer.effect(
 
         // load env
         const envs = yield* env.all()
+        console.log('[ProviderInit] envs:', Object.keys(envs).filter(k => envs[k]))
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
+          console.log('[ProviderInit] Found env key for provider:', providerID, 'env:', provider.env)
           mergeProvider(providerID, {
             source: "env",
             key: provider.env.length === 1 ? apiKey : undefined,
@@ -1473,10 +1475,12 @@ export const layer = Layer.effect(
 
         // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
+        console.log('[ProviderInit] auths keys:', Object.keys(auths))
         for (const [id, provider] of Object.entries(auths)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
+            console.log('[ProviderInit] Found auth for provider:', providerID)
             mergeProvider(providerID, {
               source: "api",
               key: provider.key,
@@ -1505,6 +1509,10 @@ export const layer = Layer.effect(
           mergeProvider(providerID, patch)
         }
 
+        /*
+        // DISABLED: 内置 custom providers 加载
+        // 这些 provider (anthropic, opencode, openai, xai, github-copilot, azure 等) 
+        // 现在需要通过配置文件或环境变量来启用，而不是自动加载
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
@@ -1522,6 +1530,7 @@ export const layer = Layer.effect(
             mergeProvider(providerID, patch)
           }
         }
+        */
 
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
@@ -1610,7 +1619,12 @@ export const layer = Layer.effect(
     const list = Effect.fn("Provider.list")(function* () {
       const dir = yield* InstanceState.directory
       console.log('[Provider.list] Getting providers for directory:', dir)
-      return yield* InstanceState.use(state, (s) => s.providers)
+      const providers = yield* InstanceState.use(state, (s) => s.providers)
+      console.log('[Provider.list] Final providers count:', Object.keys(providers).length)
+      for (const [id, p] of Object.entries(providers)) {
+        console.log('[Provider.list] Provider:', id, 'source:', p.source, 'name:', p.name, 'hasKey:', !!p.key)
+      }
+      return providers
     })
 
     const invalidateState = Effect.fn("Provider.invalidate")(function* () {
