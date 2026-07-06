@@ -28,11 +28,11 @@ const collapsed = ref(false)
     <div class="max-w-chat-max mx-auto px-6">
       <div class="todo-panel">
         <!-- Header with count and collapse button -->
-        <div class="todo-header">
-          <button class="collapse-btn" @click="collapsed = !collapsed">
+        <div class="todo-header" @click="collapsed = !collapsed">
+          <div class="collapse-btn">
             <span class="collapse-arrow">{{ collapsed ? '▶' : '▼' }}</span>
             <span class="todo-count">Tasks</span>
-          </button>
+          </div>
           <span class="todo-progress">{{ completedCount }}/{{ totalCount }} completed</span>
         </div>
 
@@ -79,6 +79,12 @@ const collapsed = ref(false)
   margin-bottom: 8px;
   font-size: 13px;
   color: #71717a;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+.todo-header:hover {
+  color: #a1a1aa;
 }
 .todo-count {
   color: #a1a1aa;
@@ -90,33 +96,23 @@ const collapsed = ref(false)
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #a1a1aa;
-  cursor: pointer;
-  padding: 0;
-  background: transparent;
-  border: none;
-  transition: color 0.15s ease;
-}
-.collapse-btn:hover {
-  color: #e4e4e7;
 }
 .collapse-arrow {
   font-size: 10px;
   color: #71717a;
+  transition: transform 0.2s ease;
 }
 .todo-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 300px;
-  overflow-y: auto;
-  transition: opacity 0.15s ease;
+  max-height: 500px;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
 }
 .todo-list.collapsed {
-  opacity: 0;
   max-height: 0;
-  overflow: hidden;
+  opacity: 0;
 }
 .todo-item {
   display: flex;
