@@ -93,7 +93,7 @@ const collapsed = ref(false)
 }
 
 :deep(.todo-card > div[data-slot="card"]) {
-  padding: 0 16px;
+  padding: 0 16px 12px 16px;
   gap: 0;
 }
 
