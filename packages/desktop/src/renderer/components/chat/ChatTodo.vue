@@ -1,88 +1,155 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSessionTodoStore } from '../../stores/sessionTodo'
-
-type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
-
-const STATUS_META: Record<TodoStatus, { icon: string; cls: string }> = {
-  pending:      { icon: '☐', cls: 'text-text-muted' },
-  in_progress:  { icon: '☐', cls: 'text-text-muted' },
-  completed:    { icon: '☑', cls: 'text-text-muted' },
-  cancelled:    { icon: '☐', cls: 'text-text-muted' },
-}
-
 const sessionTodoStore = useSessionTodoStore()
 const { currentTodos } = storeToRefs(sessionTodoStore)
-
-watch(currentTodos, (todos) => {
-  console.log('[ChatTodo] currentTodos changed:', todos.length, 'items')
-  todos.forEach(t => {
-    console.log('  - status:', JSON.stringify(t.status), 'type:', typeof t.status, 'content:', t.content.substring(0, 50))
-    console.log('    t.status !== "completed":', t.status !== 'completed')
-  })
-}, { immediate: true })
-
-const items = computed(() =>
-  currentTodos.value.map(t => ({
-    ...t,
-    icon: STATUS_META[t.status as TodoStatus]?.icon ?? '\u25CB',
-    cls: STATUS_META[t.status as TodoStatus]?.cls ?? 'text-text-muted',
-  }))
+// Filter out cancelled tasks
+const showItems = computed(() =>
+  currentTodos.value.filter(t => t.status !== 'cancelled')
 )
-
-const show = computed(() => {
-  console.log('[ChatTodo] show computed - currentTodos.value:', JSON.stringify(currentTodos.value.map(t => t.status)))
-  const hasItems = currentTodos.value.length > 0
-  const hasIncomplete = currentTodos.value.some(t => t.status !== 'completed')
-  console.log('[ChatTodo] hasItems:', hasItems, 'hasIncomplete:', hasIncomplete)
-  const result = hasItems && hasIncomplete
-  console.log('[ChatTodo] show result:', result)
-  return result
-})
-
-const expanded = ref(true)
+// Count statistics
+const completedCount = computed(() =>
+  showItems.value.filter(t => t.status === 'completed').length
+)
+const totalCount = computed(() => showItems.value.length)
+// Has active (non-completed) tasks
+const hasActive = computed(() =>
+  showItems.value.some(t => t.status !== 'completed')
+)
+// Show panel only when there are active tasks
+const show = computed(() => hasActive.value && totalCount.value > 0)
+// Collapse state (not persisted)
+const collapsed = ref(false)
 </script>
 
 <template>
-  <div v-if="show" class="todo-panel py-2">
-    <div class="max-w-chat-max mx-auto px-6">
-      <div class="border-t border-border/60">
+  <div v-if="show" class="todo-panel">
+    <!-- Header with count and collapse button -->
+    <div class="todo-header">
+      <span class="todo-count">Tasks</span>
+      <span class="todo-progress">{{ completedCount }}/{{ totalCount }}</span>
+      <button class="collapse-btn" @click="collapsed = !collapsed">
+        {{ collapsed ? '展开' : '收起' }}
+      </button>
+    </div>
+
+    <!-- Todo list (collapsed controls visibility) -->
+    <div class="todo-list" :class="{ collapsed }">
+      <!-- Single v-for loop preserving order -->
+      <div
+        v-for="(item, i) in showItems"
+        :key="i"
+        class="todo-item"
+      >
+        <!-- Status dot (8px colored circle) -->
+        <div class="todo-dot" :class="item.status"></div>
+        <!-- Task content with conditional styling for completed -->
         <div
-          class="flex items-center gap-1 cursor-pointer text-sm text-text-muted select-none"
-          @click="expanded = !expanded"
+          class="todo-content"
+          :class="{ completed: item.status === 'completed' }"
         >
-          <span class="w-4 text-center">{{ expanded ? '\u25BC' : '\u25B6' }}</span>
-          <span class="font-semibold text-text-primary">Todo</span>
-        </div>
-        <div
-          class="todo-list mt-1"
-          :class="{ collapsed: !expanded }"
-        >
-          <div
-            v-for="(item, i) in items"
-            :key="i"
-            class="flex items-center gap-1.5 text-xs py-0.5"
-          >
-            <span :class="item.cls" class="shrink-0 w-4 text-center">{{ item.icon }}</span>
-            <span :class="item.cls" class="truncate">{{ item.content }}</span>
-          </div>
+          {{ item.content }}
         </div>
       </div>
     </div>
   </div>
 </template>
-
 <style scoped>
 .todo-panel {
-  flex-shrink: 0;
+  background: rgba(31, 31, 35, 0.5);
+  border: 1px solid rgba(39, 39, 42, 0.6);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.todo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #71717a;
+}
+.todo-count {
+  color: #a1a1aa;
+}
+.todo-progress {
+  color: #22c55e;
+}
+.collapse-btn {
+  font-size: 11px;
+  color: #71717a;
+  cursor: pointer;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  transition: color 0.15s ease;
+}
+.collapse-btn:hover {
+  color: #a1a1aa;
 }
 .todo-list {
-  max-height: none;
-  overflow: hidden;
-  transition: max-height 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  transition: opacity 0.15s ease;
 }
 .todo-list.collapsed {
+  opacity: 0;
   max-height: 0;
+  overflow: hidden;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.todo-item:hover {
+  background: rgba(39, 39, 42, 0.3);
+}
+.todo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.todo-dot.completed {
+  background: #22c55e;
+}
+.todo-dot.in-progress {
+  background: #6366f1;
+}
+.todo-dot.pending {
+  background: #71717a;
+}
+.todo-content {
+  color: #e4e4e7;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+.todo-content.completed {
+  opacity: 0.5;
+  color: #a1a1aa;
+}
+.todo-list::-webkit-scrollbar {
+  width: 4px;
+}
+.todo-list::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.3);
+  border-radius: 2px;
+}
+.todo-list::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.5);
+  border-radius: 2px;
+}
+.todo-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.8);
 }
 </style>
