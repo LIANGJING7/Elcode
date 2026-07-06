@@ -62,7 +62,7 @@ function handleRemoveQueued(pendingId: string) {
 
 // 监听会话切换，设置一次性滚动标志
 watch(
-  () => sessionStore.currentSession,
+  () => sessionStore.currentSessionId,
   () => {
     needInitialScroll.value = true
   },
