@@ -36,7 +36,7 @@ const collapsed = ref(false)
 <template>
   <div v-if="show" class="todo-panel-container">
     <div class="max-w-chat-max mx-auto px-6">
-      <Card class="todo-card">
+      <Card class="todo-card rounded-b-none border-b-0">
         <!-- Header with count and collapse button -->
         <div class="todo-header" @click="collapsed = !collapsed">
           <Button variant="ghost" size="sm" class="collapse-btn">
@@ -77,7 +77,7 @@ const collapsed = ref(false)
 
 <style scoped>
 .todo-panel-container {
-  margin-bottom: -16px;
+  margin-bottom: -4px;
   position: relative;
   z-index: 1;
 }
@@ -87,6 +87,8 @@ const collapsed = ref(false)
   margin-bottom: 0;
   background: rgba(31, 31, 35, 0.5);
   border-color: rgba(39, 39, 42, 0.6);
+  border-radius: 8px 8px 0 0;
+  border-bottom-width: 0;
 }
 
 :deep(.todo-card > div[data-slot="card"]) {
