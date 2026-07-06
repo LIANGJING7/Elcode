@@ -10,7 +10,7 @@ interface SessionTodoCache {
   error?: Error
 }
 
-interface TodoUpdatedEvent {
+export interface TodoUpdatedEvent {
   type: 'todo.updated'
   sessionID: string
   todos: TodoItem[]
@@ -71,5 +71,9 @@ export const useSessionTodoStore = defineStore('sessionTodo', () => {
     { immediate: true }
   )
 
-  return { currentTodos, loading, error, ensureLoaded, handleTodoUpdated }
+  function clear() {
+    Object.keys(cache).forEach(k => delete cache[k])
+  }
+
+  return { currentTodos, loading, error, ensureLoaded, handleTodoUpdated, clear }
 })
