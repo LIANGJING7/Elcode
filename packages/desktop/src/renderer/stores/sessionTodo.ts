@@ -63,13 +63,19 @@ export const useSessionTodoStore = defineStore('sessionTodo', () => {
 
   function handleTodoUpdated(event: TodoUpdatedEvent) {
     console.log('[SessionTodo] handleTodoUpdated called:', JSON.stringify(event))
+    console.log('[SessionTodo] handleTodoUpdated - event.sessionID:', event.sessionID)
+    console.log('[SessionTodo] handleTodoUpdated - sessionStore.currentSessionId:', sessionStore.currentSessionId)
+    console.log('[SessionTodo] handleTodoUpdated - event.todos count:', event.todos?.length)
+    console.log('[SessionTodo] handleTodoUpdated - event.todos:', JSON.stringify(event.todos))
     cache[event.sessionID] = {
       items: event.todos,
       loading: false,
       loaded: true,
       error: undefined,
     }
+    console.log('[SessionTodo] cache after update:', JSON.stringify(cache[event.sessionID]))
     console.log('[SessionTodo] cache updated, currentTodos will be:', event.sessionID === sessionStore.currentSessionId ? 'visible' : 'hidden (different session)')
+    console.log('[SessionTodo] full cache keys:', Object.keys(cache))
   }
 
   watch(
