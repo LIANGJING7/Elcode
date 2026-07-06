@@ -108,7 +108,7 @@ const collapsed = ref(false)
   gap: 2px;
   max-height: 500px;
   overflow: hidden;
-  transition: max-height 0.3s ease, opacity 0.3s ease;
+  transition: max-height 0.5s ease, opacity 0.5s ease;
 }
 .todo-list.collapsed {
   max-height: 0;
