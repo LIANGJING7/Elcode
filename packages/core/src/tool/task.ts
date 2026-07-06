@@ -356,6 +356,17 @@ export const TaskTool = Tool.define(
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
+      toStructuredOutput: (output) => {
+        if (typeof output === 'string') {
+          try {
+            const parsed = JSON.parse(output)
+            return parsed?.structured ?? { type: 'unknown' }
+          } catch {
+            return { type: 'unknown' }
+          }
+        }
+        return output
+      },
     }
   }),
 )

@@ -46,9 +46,13 @@ const progressText = computed(() => {
 })
 
 const handleClick = () => {
+  console.log('[SubagentTool] handleClick triggered, sessionId:', props.sessionId)
   if (props.sessionId) {
+    console.log('[SubagentTool] Emitting navigate and openPanel events')
     emit('navigate', props.sessionId)
     emit('openPanel')
+  } else {
+    console.log('[SubagentTool] No sessionId, cannot emit events')
   }
 }
 </script>

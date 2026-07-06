@@ -1,7 +1,7 @@
 // packages/desktop/src/renderer/stores/subagent.ts
 
 import { defineStore } from 'pinia'
-import { ref, computed, shallowReactive } from 'vue'
+import { ref, computed, shallowReactive, watch as vueWatch } from 'vue'
 import type { Message, ToolCall } from '../types/ipc'
 import type {
   FooterSubagentTab,
@@ -9,6 +9,7 @@ import type {
   TabsPatch,
   DetailPatch,
   ConnectionState,
+  StreamCommit,
 } from '../types/subagent'
 
 /**
@@ -18,9 +19,36 @@ import type {
 function extractSubagentTab(tool: ToolCall): FooterSubagentTab | null {
   if (tool.name !== 'task') return null
   
-  const structured = tool.output?.structured as any
+  console.log('[DEBUG extractSubagentTab] tool.name:', tool.name, 'tool.id:', tool.id)
+  
+  // Try structured field first
+  let structured = tool.output?.structured as any
+  console.log('[DEBUG extractSubagentTab] tool.output?.structured:', structured ? JSON.stringify(structured).slice(0, 200) : 'undefined')
+  
+  // If structured is undefined, try parsing output.result
+  if (!structured && tool.output?.result) {
+    try {
+      const result = tool.output.result
+      console.log('[DEBUG extractSubagentTab] tool.output.result:', typeof result === 'string' ? result.slice(0, 100) : JSON.stringify(result).slice(0, 100))
+      if (typeof result === 'string') {
+        const parsed = JSON.parse(result)
+        structured = parsed?.structured
+        console.log('[DEBUG extractSubagentTab] parsed.result.structured:', structured ? JSON.stringify(structured).slice(0, 100) : 'undefined')
+      } else if (typeof result === 'object') {
+        structured = result?.structured
+        console.log('[DEBUG extractSubagentTab] result.structured:', structured ? JSON.stringify(structured).slice(0, 100) : 'undefined')
+      }
+    } catch (e) {
+      console.warn('[extractSubagentTab] Failed to parse output.result:', e)
+    }
+  }
+  
   const sessionId = structured?.sessionId ?? structured?.sessionID
-  if (!sessionId) return null
+  console.log('[DEBUG extractSubagentTab] sessionId:', sessionId)
+  if (!sessionId) {
+    console.warn('[extractSubagentTab] No sessionId in structured:', structured)
+    return null
+  }
   
   const args = tool.args as Record<string, unknown>
   const label = args.subagent_type ?? args.subagentType ?? 'General'
@@ -62,6 +90,71 @@ function bootstrapFromMessages(messages: Message[]): FooterSubagentTab[] {
   return tabs
 }
 
+function buildCommitsFromMessages(messages: Message[]): StreamCommit[] {
+  const commits: StreamCommit[] = []
+  
+  for (const msg of messages) {
+    if (msg.role === 'user' && msg.content) {
+      commits.push({
+        kind: 'text',
+        text: msg.content,
+        phase: 'final',
+        source: 'user',
+      })
+      continue
+    }
+    
+    if (msg.role !== 'assistant') continue
+
+    if (msg.reasoning) {
+      commits.push({
+        kind: 'reasoning',
+        text: msg.reasoning,
+        phase: 'final',
+        source: 'reasoning',
+      })
+    }
+
+    if (msg.toolCalls) {
+      for (const tc of msg.toolCalls) {
+        const status: StreamCommit['toolState'] =
+          tc.status === 'completed' ? 'completed'
+          : tc.status === 'error' ? 'error'
+          : 'running'
+
+        let summary = tc.name
+        if (tc.output?.structured) {
+          const s = tc.output.structured as Record<string, unknown>
+          if (typeof s.summary === 'string') summary = s.summary
+          else if (s.type === 'bash' && s.exitCode !== undefined) summary = `${tc.name}: exit ${s.exitCode}`
+          else if (s.type === 'read') summary = `${tc.name}: ${(s as any).path ?? ''}`
+          else if (s.type === 'task') summary = `${tc.name}: ${(s as any).subagentType ?? 'subagent'}`
+        }
+
+        commits.push({
+          kind: 'tool',
+          text: summary,
+          phase: status === 'running' ? 'progress' : 'final',
+          source: 'tool',
+          tool: tc.name,
+          toolState: status,
+        })
+      }
+    }
+
+    if (msg.content && msg.content.trim()) {
+      commits.push({
+        kind: 'text',
+        text: msg.content,
+        phase: 'final',
+        source: 'assistant',
+      })
+    }
+  }
+  
+  return commits
+}
+
 export const useSubagentStore = defineStore('subagent', () => {
   // Session binding
   const currentSessionId = ref<string | null>(null)
@@ -73,6 +166,14 @@ export const useSubagentStore = defineStore('subagent', () => {
   const tabs = shallowReactive(new Map<string, FooterSubagentTab>())
   const details = shallowReactive(new Map<string, FooterSubagentDetail>())
   const activeTabId = ref<string | null>(null)
+  
+  // Debug: log tabs changes
+  vueWatch(() => [...tabs.entries()], (entries) => {
+    console.log('[DEBUG SubagentStore] tabs updated:', entries.length, 'entries')
+    entries.forEach(([id, tab]) => {
+      console.log('[DEBUG SubagentStore]   tab:', id.slice(0, 12), 'label:', tab.label, 'status:', tab.status)
+    })
+  }, { deep: true })
   
   // Computed (single source of truth)
   const orderedTabs = computed(() =>
@@ -90,12 +191,12 @@ export const useSubagentStore = defineStore('subagent', () => {
   const watching = computed(() => currentSessionId.value !== null)
   
 // Actions
-  async function watch(sessionId: string, messages?: Message[]) {
-    // Prevent duplicate watch
-    if (currentSessionId.value === sessionId) return
+  async function watch(sessionId: string, messages?: Message[], forceBootstrap?: boolean) {
+    // Prevent duplicate watch unless forceBootstrap is true
+    if (currentSessionId.value === sessionId && !forceBootstrap) return
     
-    // Unwatch previous session
-    if (currentSessionId.value) {
+    // Unwatch previous session if different
+    if (currentSessionId.value && currentSessionId.value !== sessionId) {
       await window.desktop.subagent.unwatch(currentSessionId.value)
     }
     
@@ -106,23 +207,50 @@ export const useSubagentStore = defineStore('subagent', () => {
     
     try {
       // Bootstrap from history messages (TUI-style data extraction)
-      if (messages && messages.length > 0) {
-        const historyTabs = bootstrapFromMessages(messages)
+      // Clear and bootstrap if messages provided OR forceBootstrap is true
+      if ((messages && messages.length > 0) || forceBootstrap) {
         tabs.clear()
-        for (const tab of historyTabs) {
+        details.clear()
+        if (messages && messages.length > 0) {
+          const historyTabs = bootstrapFromMessages(messages)
+          for (const tab of historyTabs) {
+            tabs.set(tab.sessionID, tab)
+          }
+          console.log('[SubagentStore] Bootstrapped from history:', historyTabs.length, 'tabs')
+        }
+      }
+      
+      // Also try IPC watch (for future realtime sync)
+      // NOTE: IPC may return objects that need serialization
+      try {
+        const snapshot = await window.desktop.subagent.watch(sessionId)
+        
+        // Ensure snapshot is plain object (not Proxy)
+        const plainSnapshot = JSON.parse(JSON.stringify(snapshot))
+        
+        // Merge IPC data if available
+        for (const tab of plainSnapshot.tabs ?? []) {
           tabs.set(tab.sessionID, tab)
         }
-        console.log('[SubagentStore] Bootstrapped from history:', historyTabs.length, 'tabs')
+        version.value = plainSnapshot.version ?? 0
+      } catch (ipcError) {
+        console.warn('[SubagentStore] IPC watch failed (non-critical):', ipcError)
+        // Continue without IPC data - history bootstrap is sufficient
       }
       
-      // Also try IPC watch (for future real-time sync)
-      const snapshot = await window.desktop.subagent.watch(sessionId)
-      
-      // Merge IPC data if available
-      for (const tab of snapshot.tabs ?? []) {
-        tabs.set(tab.sessionID, tab)
+      // Ensure every tab has a detail entry (even if empty) so the panel renders
+      for (const sessionID of tabs.keys()) {
+        if (!details.has(sessionID)) {
+          details.set(sessionID, {
+            sessionID,
+            // Child messages are not loaded yet - starts empty, will be populated
+            // by future real-time events or on-demand load
+            commits: [
+              { kind: 'text', text: 'Subagent session data not loaded. Click to navigate.', phase: 'final', source: 'system' },
+            ],
+          })
+        }
       }
-      version.value = snapshot.version ?? 0
       
       connectionState.value = 'watching'
       loading.value = false
@@ -155,6 +283,42 @@ export const useSubagentStore = defineStore('subagent', () => {
   
   function selectTab(sessionId: string) {
     activeTabId.value = sessionId
+  }
+  
+  async function loadDetail(sessionId: string, directory?: string) {
+    const existing = details.get(sessionId)
+    if (existing && existing.commits.length > 0 && existing.commits[0].text !== 'Subagent session data not loaded. Click to navigate.') return existing
+    
+    try {
+      const msgs = await window.desktop.session.messages(sessionId, 200, directory)
+      console.log('[SubagentStore] Loaded', msgs.length, 'messages for', sessionId.slice(0, 12))
+      msgs.forEach((m, i) => console.log(`[SubagentStore]   msg[${i}] role=${m.role} content=${m.content?.slice(0, 60) || ''} toolCalls=${m.toolCalls?.length || 0}`))
+      
+      const commits = buildCommitsFromMessages(msgs)
+      
+      // If first item isn't a user message, prepend the tab description as context
+      if (commits.length === 0 || (commits[0].kind === 'reasoning' || commits[0].kind === 'tool')) {
+        const tab = tabs.get(sessionId)
+        const context = tab?.description || tab?.title || tab?.label || ''
+        if (context) {
+          commits.unshift({ kind: 'text', text: context, phase: 'final', source: 'assistant' })
+        }
+      }
+      
+      details.set(sessionId, {
+        sessionID: sessionId,
+        commits: commits.length > 0 ? commits : [{ kind: 'text', text: 'No activity recorded.', phase: 'final', source: 'system' }],
+      })
+      console.log('[SubagentStore] Loaded detail with', commits.length, 'commits')
+      return details.get(sessionId)
+    } catch (e) {
+      console.error('[SubagentStore] Failed to load detail for', sessionId.slice(0, 12), ':', e)
+      details.set(sessionId, {
+        sessionID: sessionId,
+        commits: [{ kind: 'error', text: 'Failed to load subagent session data.', phase: 'final', source: 'system' }],
+      })
+      return details.get(sessionId)
+    }
   }
   
   function removeDetail(sessionId: string) {
@@ -222,6 +386,7 @@ export const useSubagentStore = defineStore('subagent', () => {
     watch,
     unwatch,
     selectTab,
+    loadDetail,
     removeDetail,
     updateTabs,
     updateDetail,

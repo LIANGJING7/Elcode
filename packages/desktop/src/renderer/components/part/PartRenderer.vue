@@ -21,6 +21,11 @@ const emit = defineEmits<{
   openSubagentPanel: [sessionId: string]  // New
 }>()
 
+function handleOpenSubagentPanel(sessionId: string) {
+  console.log('[PartRenderer] handleOpenSubagentPanel:', sessionId)
+  emit('openSubagentPanel', sessionId)
+}
+
 const textPayload = computed(() => props.node.payload as { content: string })
 const toolPayload = computed(() => props.node.payload as ToolCall)
 const reasoningPayload = computed(() => props.node.payload as { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null })
@@ -34,7 +39,7 @@ const reasoningPayload = computed(() => props.node.payload as { content: string;
       :tool="toolPayload"
       @open-file="emit('openFile', $event)"
       @navigate-session="emit('navigateSession', $event)"
-      @open-subagent-panel="emit('openSubagentPanel', $event)"
+      @open-subagent-panel="handleOpenSubagentPanel($event)"
     />
     <ReasoningBlock
       v-else-if="node.type === 'reasoning'"

@@ -24,8 +24,8 @@ function makeState(tools: StreamingToolCall[]): StreamingState {
   return {
     version: 1,
     status: 'streaming',
-    message: { id: 'm1', content: '', pending: [] },
-    reasoning: { id: null, status: 'idle', content: '', pending: [], startedAt: null, endedAt: null },
+    message: { id: 'm1', content: '' },
+    reasoning: { id: null, status: 'idle', content: '', startedAt: null, endedAt: null },
     tools: { entities },
     pendingDeltas: new Map(),
     reasoningHistory: [],

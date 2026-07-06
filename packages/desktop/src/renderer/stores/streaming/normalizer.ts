@@ -283,11 +283,18 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.tool.success':
-        console.log('[Stream] Tool success:', props.callID, 'result:', props.result, 'content:', props.content)
+        console.log('[Stream] Tool success:', props.callID)
+        console.log('[Stream]   result:', typeof props.result === 'string' ? props.result.slice(0, 300) : JSON.stringify(props.result).slice(0, 300))
+        console.log('[Stream]   structured:', typeof props.structured === 'string' ? props.structured.slice(0, 300) : JSON.stringify(props.structured).slice(0, 300))
+        console.log('[Stream]   content:', props.content ? (Array.isArray(props.content) ? props.content.length + ' items' : typeof props.content) : 'undefined')
         return {
           type: 'TOOL_SUCCESS',
           callId: props.callID as string,
-          output: props.result ?? props.content,
+          output: {
+            structured: props.structured,
+            result: props.result,
+            content: props.content
+          },
           version
         }
 

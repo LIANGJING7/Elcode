@@ -510,6 +510,17 @@ export const useSessionStore = defineStore('session', () => {
     if (!workspaceStore.currentWorkspace?.path) return
     try {
       const msgs = await window.desktop.session.messages(sessionId, 100, workspaceStore.currentWorkspace?.path)
+      console.log('[DEBUG loadMessages] received msgs count:', msgs.length)
+      // Log tool calls structured data
+      msgs.forEach((msg, idx) => {
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          msg.toolCalls.forEach((tc, tcIdx) => {
+            console.log(`[DEBUG loadMessages] msg[${idx}] toolCall[${tcIdx}] name:`, tc.name)
+            console.log(`[DEBUG loadMessages]   tc.output keys:`, tc.output ? Object.keys(tc.output) : 'undefined')
+            console.log(`[DEBUG loadMessages]   tc.output.structured:`, tc.output?.structured ? JSON.stringify(tc.output.structured).slice(0, 200) : 'undefined')
+          })
+        }
+      })
       const conv = state.conversations.find(c => c.id === sessionId)
       if (conv) {
         const existingMap = new Map(conv.messages.map(m => [m.id, m]))

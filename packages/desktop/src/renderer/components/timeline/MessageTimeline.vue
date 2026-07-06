@@ -21,6 +21,11 @@ const emit = defineEmits<{
 
 const REASONING_THRESHOLD_MS = 3000
 
+function handleOpenSubagentPanel(sessionId: string) {
+  console.log('[MessageTimeline] handleOpenSubagentPanel:', sessionId)
+  emit('openSubagentPanel', sessionId)
+}
+
 const formattedDuration = computed(() => {
   if (!props.message.duration) return null
   const ms = props.message.duration
@@ -140,7 +145,7 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
     <TimelineRenderer
       :nodes="timelineNodes"
       @open-file="emit('openFile', $event)"
-      @open-subagent-panel="emit('openSubagentPanel', $event)"
+      @open-subagent-panel="handleOpenSubagentPanel($event)"
     />
 
     <div v-if="codeBlocks.length" class="mt-2">

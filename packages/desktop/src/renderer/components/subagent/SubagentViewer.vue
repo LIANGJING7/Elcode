@@ -3,7 +3,6 @@
 import { computed } from 'vue'
 import type { FooterSubagentDetail, FooterSubagentTab } from '../../types/subagent'
 import { useSubagentViewer } from './composables/useSubagentViewer'
-import SubagentHeader from './SubagentHeader.vue'
 import SubagentActivityLog from './SubagentActivityLog.vue'
 
 const props = defineProps<{
@@ -16,7 +15,6 @@ const vm = useSubagentViewer(computed(() => props.detail), computed(() => props.
 
 <template>
   <div class="subagent-viewer flex flex-col h-full bg-bg-surface">
-    <SubagentHeader :vm="vm.header.value" />
     <SubagentActivityLog 
       :items="vm.timeline.value" 
       :auto-scroll="vm.autoScroll.value"

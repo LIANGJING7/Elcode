@@ -1,11 +1,11 @@
 /**
  * Render Scheduler
  * 
- * Uses requestAnimationFrame to batch consume pending deltas,
- * preventing excessive Vue re-renders from high-frequency events.
+ * Uses requestAnimationFrame to batch Vue re-renders,
+ * preventing excessive re-renders from high-frequency events.
  */
 
-import { streamingReducer, consumePendingDeltas } from './reducer'
+import { streamingReducer } from './reducer'
 import type { StreamingState, StreamAction } from './types'
 
 // ============================================
@@ -108,42 +108,6 @@ interface SchedulerWithStateOptions {
   getState: () => StreamingState
   /** Trigger Vue render */
   triggerRender: () => void
-}
-
-/**
- * Create scheduler that automatically consumes pending deltas
- */
-export function createSchedulerWithState(options: SchedulerWithStateOptions): Scheduler {
-  const { getState, triggerRender } = options
-  
-  return createRenderScheduler({
-    onRender() {
-      // Consume pending deltas into content - directly mutate state
-      const state = getState()
-      
-      // Consume message pending deltas
-      const messagePending = state.message.pending
-      if (messagePending.length > 0) {
-        // Append deltas directly - Vue tracks this on reactive arrays
-        state.message.content += messagePending.join('')
-        // Clear by setting length instead of creating new array
-        messagePending.length = 0
-      }
-      
-      // Consume reasoning pending deltas
-      const reasoningPending = state.reasoning.pending
-      if (reasoningPending.length > 0) {
-        // Append deltas directly - Vue tracks this on reactive arrays
-        state.reasoning.content += reasoningPending.join('')
-        // Clear by setting length instead of creating new array
-        reasoningPending.length = 0
-      }
-      
-      // Trigger Vue render
-      triggerRender()
-    },
-    minInterval: 16  // ~60fps max
-  })
 }
 
 // ============================================

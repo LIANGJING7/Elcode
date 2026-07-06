@@ -16,21 +16,18 @@ function formatDuration(tab?: FooterSubagentTab): string | undefined {
 }
 
 function toDisplayPart(commit: StreamCommit): DisplayPart {
-  // Map StreamCommit to component-specific payloads
-  
   if (commit.kind === 'text') {
-    // TextBlock expects: { content: string, isStreaming?: boolean }
     return {
       type: 'text',
       payload: {
         content: commit.text,
-        isStreaming: commit.phase !== 'final'
+        isStreaming: commit.phase !== 'final',
+        source: commit.source,
       }
     }
   }
   
   if (commit.kind === 'tool') {
-    // InlineTool expects: { icon, summary, pending, status, error? }
     return {
       type: 'tool',
       payload: {
@@ -44,20 +41,16 @@ function toDisplayPart(commit: StreamCommit): DisplayPart {
   }
   
   if (commit.kind === 'reasoning') {
-    // ReasoningBlock expects: { content: string, status: 'idle' | 'thinking' | 'done', duration? }
-    // Map: running → thinking, completed/error → done
-    const statusMap = commit.toolState === 'running' ? 'thinking' : 'done'
     return {
       type: 'reasoning',
       payload: {
         content: commit.text,
-        status: statusMap,
-        duration: undefined  // TODO: calculate from phase timestamps when available
+        status: commit.toolState === 'running' ? 'thinking' : 'done',
+        duration: undefined
       }
     }
   }
   
-  // Error and unknown cases
   if (commit.kind === 'error') {
     return {
       type: 'error',
@@ -67,9 +60,8 @@ function toDisplayPart(commit: StreamCommit): DisplayPart {
     }
   }
   
-  // Default fallback for unknown types
   return {
-    type: commit.kind,
+    type: commit.kind as DisplayPart['type'],
     payload: { content: commit.text }
   }
 }
@@ -79,7 +71,7 @@ export function useSubagentViewer(detailRef: MaybeRef<FooterSubagentDetail | und
     const tab = unref(tabRef)
     const detail = unref(detailRef)
     return {
-      title: tab?.label ?? 'Unknown',
+      title: tab?.title || tab?.label || 'Subagent',
       icon: statusIcon(tab?.status ?? 'running'),
       duration: formatDuration(tab),
       status: tab?.status ?? 'running',

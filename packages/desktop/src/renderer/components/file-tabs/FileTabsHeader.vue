@@ -15,27 +15,14 @@ const emit = defineEmits<{
 
 // Tab icon based on type
 function getTabIcon(tab: PanelTab): string {
-  if (tab.type === 'subagent') {
-    switch (tab.status) {
-      case 'completed': return '✓'
-      case 'error': return '✗'
-      case 'cancelled': return '○'
-      default: return '●'
-    }
-  }
-  // File tab - use file icon
+  if (tab.type === 'subagent') return ''
   return '📄'
 }
 
 // Tab status class
 function getTabStatusClass(tab: PanelTab): string {
   if (tab.type !== 'subagent') return ''
-  switch (tab.status) {
-    case 'completed': return 'text-success'
-    case 'error': return 'text-error'
-    case 'cancelled': return 'text-text-muted'
-    default: return 'text-warning'
-  }
+  return ''
 }
 </script>
 
@@ -49,7 +36,7 @@ function getTabStatusClass(tab: PanelTab): string {
       @click="emit('select', tab.id)"
     >
       <!-- Icon -->
-      <span :class="['shrink-0', getTabStatusClass(tab)]">{{ getTabIcon(tab) }}</span>
+      <span v-if="getTabIcon(tab)" :class="['shrink-0', getTabStatusClass(tab)]">{{ getTabIcon(tab) }}</span>
       
       <!-- Title -->
       <span class="truncate flex-1">{{ tab.title }}</span>

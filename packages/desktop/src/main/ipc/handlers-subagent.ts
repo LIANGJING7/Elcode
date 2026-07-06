@@ -37,8 +37,13 @@ export function registerSubagentHandlers() {
       // TODO: Start actual backend watch
     }
     
-    // Return snapshot
-    return getFooterSnapshot(sessionId)
+    // Return snapshot - must be serializable (no Set, Map, Proxy, etc.)
+    const snapshot = await getFooterSnapshot(sessionId)
+    // Ensure plain object structure for IPC serialization
+    return {
+      tabs: Array.isArray(snapshot.tabs) ? [...snapshot.tabs] : [],
+      version: typeof snapshot.version === 'number' ? snapshot.version : 0
+    }
   })
   
   ipcMain.handle(IPC_CHANNELS.SUBAGENT_UNWATCH, async (event, sessionId: string) => {

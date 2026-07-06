@@ -8,6 +8,7 @@ import SubagentViewer from '../subagent/SubagentViewer.vue'
 import { useSubagentStore } from '../../stores/subagent'
 import { useSessionStore } from '../../stores/session'
 import { useUiStore } from '../../stores/ui'
+import { useWorkspaceStore } from '../../stores/workspace'
 
 const props = defineProps<{
   messages: Message[]
@@ -90,20 +91,40 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
 })
 
 // Handle subagent panel open
-function handleOpenSubagentPanel(sessionId: string) {
+async function handleOpenSubagentPanel(sessionId: string) {
+  console.log('[ChatTimeline] handleOpenSubagentPanel START:', sessionId)
   const subagentStore = useSubagentStore()
   const sessionStore = useSessionStore()
   const uiStore = useUiStore()
   
-  // Ensure we're watching the current session
+  console.log('[ChatTimeline] subagentStore.watching:', subagentStore.watching)
+  console.log('[ChatTimeline] subagentStore.currentSessionId:', subagentStore.currentSessionId)
+  console.log('[ChatTimeline] sessionStore.currentSessionId:', sessionStore.currentSessionId)
+  console.log('[ChatTimeline] subagentStore.tabs.size:', subagentStore.tabs.size)
+  
+  // Ensure we're watching the current session with messages loaded
+  const watchingSessionId = subagentStore.currentSessionId
   if (!subagentStore.watching) {
-    // Pass current messages for bootstrap
-    subagentStore.watch(sessionStore.currentSessionId!, sessionStore.currentMessages)
+    console.log('[ChatTimeline] Starting watch on current session')
+    await subagentStore.watch(sessionStore.currentSessionId!, sessionStore.currentMessages)
+  } else if (watchingSessionId !== sessionStore.currentSessionId) {
+    // Watching wrong session, need to switch
+    console.log('[ChatTimeline] Watching wrong session, switching from', watchingSessionId, 'to', sessionStore.currentSessionId)
+    await subagentStore.watch(sessionStore.currentSessionId!, sessionStore.currentMessages)
+  } else if (subagentStore.tabs.size === 0) {
+    // Already watching but tabs empty - force bootstrap
+    console.log('[ChatTimeline] Tabs empty, forcing bootstrap')
+    await subagentStore.watch(sessionStore.currentSessionId!, sessionStore.currentMessages, true)
   }
+  
+  console.log('[ChatTimeline] After watch check, tabs.size:', subagentStore.tabs.size)
   
   // Find the tab and open panel
   const tab = subagentStore.tabs.get(sessionId)
+  console.log('[ChatTimeline] Found tab for sessionId', sessionId.slice(0, 12), ':', tab ? { label: tab.label, status: tab.status } : 'undefined')
+  
   if (tab) {
+    console.log('[ChatTimeline] Opening panel with tab data')
     uiStore.openPanel({
       id: sessionId,
       type: 'subagent',
@@ -113,8 +134,11 @@ function handleOpenSubagentPanel(sessionId: string) {
       component: SubagentViewer,
     })
     
-    // Select the tab
     subagentStore.selectTab(sessionId)
+    // Load child session messages and build detail commits
+    const wsStore = useWorkspaceStore()
+    subagentStore.loadDetail(sessionId, wsStore.currentWorkspace?.path)
+    console.log('[ChatTimeline] Panel opened, tab selected, loading detail')
   } else {
     // Fallback: open panel even without tab data (use sessionId as title)
     console.log('[ChatTimeline] No tab found, opening panel with fallback title')
@@ -128,6 +152,9 @@ function handleOpenSubagentPanel(sessionId: string) {
     })
     
     subagentStore.selectTab(sessionId)
+    const wsStore = useWorkspaceStore()
+    subagentStore.loadDetail(sessionId, wsStore.currentWorkspace?.path)
+    console.log('[ChatTimeline] Fallback panel opened, loading detail')
   }
 }
 </script>

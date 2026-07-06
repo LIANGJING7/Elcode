@@ -23,7 +23,7 @@ export interface StreamCommit {
   kind: 'text' | 'tool' | 'error' | 'reasoning'
   text: string
   phase: 'start' | 'progress' | 'final'
-  source: 'assistant' | 'reasoning' | 'tool' | 'system'
+  source: 'assistant' | 'user' | 'reasoning' | 'tool' | 'system'
   tool?: string
   toolState?: 'running' | 'completed' | 'error'
   messageID?: string

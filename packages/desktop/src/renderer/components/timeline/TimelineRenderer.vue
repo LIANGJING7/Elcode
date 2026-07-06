@@ -28,6 +28,11 @@ const handleNavigateSession = (sessionId: string) => {
   // TODO: implement session navigation
 }
 
+function handleOpenSubagentPanel(sessionId: string) {
+  console.log('[TimelineRenderer] handleOpenSubagentPanel:', sessionId)
+  emit('openSubagentPanel', sessionId)
+}
+
 function getReasoningPayload(node: TimelineNode) {
   return node.payload as { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null }
 }
@@ -63,7 +68,7 @@ function getQueryGroupTools(node: TimelineNode): StreamingToolCall[] {
         :is-streaming="isStreaming"
         @open-file="emit('openFile', $event)"
         @navigate-session="handleNavigateSession($event)"
-        @open-subagent-panel="emit('openSubagentPanel', $event)"
+        @open-subagent-panel="handleOpenSubagentPanel($event)"
       />
       
       <SearchFoldGroup

@@ -29,7 +29,15 @@ async function readWorkspacesFile(): Promise<WorkspacePersistence> {
 
 async function writeWorkspacesFile(data: WorkspacePersistence): Promise<void> {
   const filePath = getWorkspacesFilePath()
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+  // Convert Date objects to ISO strings for JSON serialization
+  const serializedData = {
+    workspaces: data.workspaces.map(w => ({
+      ...w,
+      lastAccessed: w.lastAccessed instanceof Date ? w.lastAccessed.toISOString() : w.lastAccessed,
+    })),
+    currentWorkspacePath: data.currentWorkspacePath,
+  }
+  await fs.writeFile(filePath, JSON.stringify(serializedData, null, 2), 'utf-8')
 }
 
 /**

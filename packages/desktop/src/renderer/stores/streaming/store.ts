@@ -220,29 +220,28 @@ export function useStreamingStore(): StreamingStore {
       console.log('[flushPendingDeltas] Reasoning status set to thinking for partId:', partId)
     }
     
-    // Dispatch each pending delta as the correct type
-    for (const delta of pending) {
-      if (partType === 'reasoning') {
-        streamingReducer(state, {
-          type: 'REASONING_DELTA',
-          delta,
-          messageId: partId,
-          version: state.version
-        })
-      } else {
-        streamingReducer(state, {
-          type: 'TEXT_DELTA',
-          delta,
-          messageId: partId,
-          version: state.version
-        })
-      }
-    }
+    // Merge all pending deltas into one string
+    const mergedDelta = pending.join('')
     
-    // For reasoning, mark as done after all deltas are dispatched
+    console.log('[flushPendingDeltas] Merged delta length:', mergedDelta.length)
+    
+    // For reasoning type, set content directly (avoid multiple dispatches)
     if (partType === 'reasoning') {
+      state.reasoning.status = 'thinking'
+      state.reasoning.id = partId
+      if (!state.reasoning.startedAt) {
+        state.reasoning.startedAt = Date.now()
+      }
+      // Directly append to content, skip pending array to avoid race condition
+      state.reasoning.content = state.reasoning.content + mergedDelta
+      // Mark as done
       state.reasoning.status = 'done'
       state.reasoning.endedAt = Date.now()
+      console.log('[flushPendingDeltas] Reasoning content directly set, status: done')
+    } else {
+      // For text type, also set content directly
+      state.message.content = state.message.content + mergedDelta
+      console.log('[flushPendingDeltas] Text content directly set')
     }
     
     console.log('[flushPendingDeltas] After flush - reasoning.status:', state.reasoning.status, 'reasoning.content length:', state.reasoning.content.length)
@@ -279,18 +278,16 @@ export function useStreamingStore(): StreamingStore {
       const newVersion = state.version + 1
       // Clear the tools Map
       state.tools.entities.clear()
-      // Clear pending deltas
+      // Clear pending deltas map
       state.pendingDeltas.clear()
       // Reset state
       state.version = newVersion
       state.status = 'idle'
       state.message.id = null
       state.message.content = ''
-      state.message.pending.length = 0
       state.reasoning.id = null
       state.reasoning.status = 'idle'
       state.reasoning.content = ''
-      state.reasoning.pending.length = 0
       state.reasoning.startedAt = null
       state.reasoning.endedAt = null
       state.reasoningHistory.length = 0
@@ -304,18 +301,16 @@ export function useStreamingStore(): StreamingStore {
     const state = ensureStream(sessionId)
     // Clear the tools Map
     state.tools.entities.clear()
-    // Clear pending deltas
+    // Clear pending deltas map
     state.pendingDeltas.clear()
     // Set streaming status
     state.status = 'streaming'
     state.startedAt = Date.now()
     state.message.id = null
     state.message.content = ''
-    state.message.pending.length = 0
     state.reasoning.id = null
     state.reasoning.status = 'idle'
     state.reasoning.content = ''
-    state.reasoning.pending.length = 0
     state.reasoning.startedAt = null
     state.reasoning.endedAt = null
     state.reasoningHistory.length = 0
@@ -334,7 +329,7 @@ export function useStreamingStore(): StreamingStore {
   const hasContent = computed(() => {
     const stream = currentStream.value
     if (!stream) return false
-    return stream.message.content.length > 0 || stream.message.pending.length > 0
+    return stream.message.content.length > 0
   })
 
   // Computed: is current session streaming
@@ -343,21 +338,19 @@ export function useStreamingStore(): StreamingStore {
     return stream?.status === 'streaming'
   })
 
-  // Computed: displayed content for current session
+  // Computed: displayed content for current session (no pending - direct append)
   const displayedContent = computed(() => {
     const stream = currentStream.value
     if (!stream) return ''
-    return stream.message.content + stream.message.pending.join('')
+    return stream.message.content
   })
 
-  // Computed: displayed reasoning for current session
+  // Computed: displayed reasoning for current session (no pending - direct append)
   const displayedReasoning = computed(() => {
     const stream = currentStream.value
     if (!stream) return ''
-    // Include reasoningHistory + current reasoning content
     const historyContent = stream.reasoningHistory.map(r => r.content).join('')
-    const currentContent = stream.reasoning.content + stream.reasoning.pending.join('')
-    return historyContent + currentContent
+    return historyContent + stream.reasoning.content
   })
 
   // Toggle tool expansion in current session
@@ -370,55 +363,10 @@ export function useStreamingStore(): StreamingStore {
     }
   }
 
-  // Scheduler: consume pending deltas for current stream
-  function startScheduler() {
-    if (schedulerRunning) return
-    schedulerRunning = true
+  // Scheduler removed - no pending array to flush
+  // Component layer (useStreamingMarkdown) handles batching via requestAnimationFrame
 
-    function tick() {
-      if (!schedulerRunning) return
-
-      const stream = currentStream.value
-      if (stream) {
-        // Consume pending deltas
-        const messagePending = stream.message.pending
-        if (messagePending.length > 0) {
-          stream.message.content += messagePending.join('')
-          messagePending.length = 0
-        }
-
-        const reasoningPending = stream.reasoning.pending
-        if (reasoningPending.length > 0) {
-          stream.reasoning.content += reasoningPending.join('')
-          reasoningPending.length = 0
-        }
-      }
-
-      schedulerRAF = requestAnimationFrame(tick)
-    }
-
-    schedulerRAF = requestAnimationFrame(tick)
-  }
-
-  function stopScheduler() {
-    schedulerRunning = false
-    if (schedulerRAF !== null) {
-      cancelAnimationFrame(schedulerRAF)
-      schedulerRAF = null
-    }
-  }
-
-  // Watch currentStream status to start/stop scheduler
-  watch(
-    () => currentStream.value?.status,
-    (status) => {
-      if (status === 'streaming') {
-        startScheduler()
-      } else if (status === 'done' || status === 'error' || status === 'idle') {
-        stopScheduler()
-      }
-    }
-  )
+  // Scheduler removed - component layer handles batching
 
   _store = {
     streams,

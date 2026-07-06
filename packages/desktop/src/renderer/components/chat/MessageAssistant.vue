@@ -3,7 +3,15 @@ import type { Message, ToolCall } from '../../../types/ipc'
 import MessageTimeline from '../timeline/MessageTimeline.vue'
 
 const props = defineProps<{ message: Message }>()
-const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
+const emit = defineEmits<{ 
+  openFile: [tool: ToolCall]
+  openSubagentPanel: [sessionId: string]
+}>()
+
+function handleOpenSubagentPanel(sessionId: string) {
+  console.log('[MessageAssistant] handleOpenSubagentPanel:', sessionId)
+  emit('openSubagentPanel', sessionId)
+}
 </script>
 
 <template>
@@ -15,6 +23,7 @@ const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
       <MessageTimeline
         :message="message"
         @open-file="emit('openFile', $event)"
+        @open-subagent-panel="handleOpenSubagentPanel($event)"
       />
     </div>
   </div>

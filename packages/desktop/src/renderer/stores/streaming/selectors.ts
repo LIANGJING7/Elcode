@@ -166,7 +166,7 @@ export function reasoningDuration(state: StreamingState): ComputedRef<string | n
  */
 export function reasoningExpandable(state: StreamingState): ComputedRef<boolean> {
   return computed(() => {
-    return state.reasoning.content.length > 100 || state.reasoning.pending.length > 0
+    return state.reasoning.content.length > 100
   })
 }
 
@@ -175,30 +175,31 @@ export function reasoningExpandable(state: StreamingState): ComputedRef<boolean>
 // ============================================
 
 /**
- * Check if message has content (content or pending)
+ * Check if message has content
  */
 export function hasMessageContent(state: StreamingState): ComputedRef<boolean> {
   return computed(() => {
-    return state.message.content.length > 0 || state.message.pending.length > 0
+    return state.message.content.length > 0
   })
 }
 
 /**
- * Get displayed message content (content + pending deltas)
- * Note: This is for display only, state.message.content is updated by scheduler
+ * Get displayed message content
+ * Note: Directly appended to content, no pending buffer
  */
 export function displayedMessageContent(state: StreamingState): ComputedRef<string> {
   return computed(() => {
-    return state.message.content + state.message.pending.join('')
+    return state.message.content
   })
 }
 
 /**
  * Get displayed reasoning content
+ * Note: Directly appended to content, no pending buffer
  */
 export function displayedReasoningContent(state: StreamingState): ComputedRef<string> {
   return computed(() => {
-    return state.reasoning.content + state.reasoning.pending.join('')
+    return state.reasoning.content
   })
 }
 
@@ -245,7 +246,7 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     if (state.reasoning.status !== 'idle') {
       allReasoning.push({
         id: state.reasoning.id ?? 'current-reasoning',
-        content: state.reasoning.content + state.reasoning.pending.join(''),
+        content: state.reasoning.content,
         status: state.reasoning.status,
         startedAt: state.reasoning.startedAt ?? Date.now(),
         endedAt: state.reasoning.endedAt
@@ -298,13 +299,13 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     }
 
     // Add text if has content
-    if (state.message.content || state.message.pending.length > 0) {
+    if (state.message.content) {
       nodes.push({
         id: state.message.id ?? 'text',
         type: 'text',
         order: order++,
         payload: {
-          content: state.message.content + state.message.pending.join('')
+          content: state.message.content
         }
       })
     }
@@ -372,13 +373,13 @@ export function groupedToolNodes(state: StreamingState): ComputedRef<TimelineNod
  */
 export function textNode(state: StreamingState): ComputedRef<TimelineNode | null> {
   return computed(() => {
-    if (!state.message.content && state.message.pending.length === 0) return null
+    if (!state.message.content) return null
     return {
       id: state.message.id ?? 'text',
       type: 'text',
       order: 0,
       payload: {
-        content: state.message.content + state.message.pending.join('')
+        content: state.message.content
       }
     }
   })
@@ -410,7 +411,7 @@ export function reasoningNode(state: StreamingState): ComputedRef<TimelineNode |
     if (state.reasoning.status !== 'idle') {
       allReasoning.push({
         id: state.reasoning.id ?? 'current-reasoning',
-        content: state.reasoning.content + state.reasoning.pending.join(''),
+        content: state.reasoning.content,
         status: state.reasoning.status,
         startedAt: state.reasoning.startedAt ?? Date.now(),
         endedAt: state.reasoning.endedAt

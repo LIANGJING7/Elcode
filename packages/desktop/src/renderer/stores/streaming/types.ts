@@ -42,10 +42,8 @@ export type StreamingStatus = 'idle' | 'streaming' | 'done' | 'error'
 export interface MessageState {
   /** Message ID from backend */
   id: string | null
-  /** Rendered content */
+  /** Rendered content - direct append from deltas */
   content: string
-  /** Delta buffer - consumed by RAF scheduler */
-  pending: string[]
 }
 
 export interface ReasoningState {
@@ -53,10 +51,8 @@ export interface ReasoningState {
   id: string | null
   /** Reasoning status */
   status: 'idle' | 'thinking' | 'done'
-  /** Raw reasoning content */
+  /** Raw reasoning content - direct append from deltas */
   content: string
-  /** Delta buffer for reasoning */
-  pending: string[]
   /** Start timestamp */
   startedAt: number | null
   /** End timestamp */
@@ -168,13 +164,11 @@ export function createInitialState(version: number = 0): StreamingState {
     message: {
       id: null,
       content: '',
-      pending: []
     },
     reasoning: {
       id: null,
       status: 'idle',
       content: '',
-      pending: [],
       startedAt: null,
       endedAt: null
     },
@@ -183,7 +177,7 @@ export function createInitialState(version: number = 0): StreamingState {
       // It will be wrapped in reactive() in the store
       entities: new Map()
     },
-    // Pending deltas for message.part events - also wrapped in reactive() in the store
+    // Pending deltas for V1 message.part events - still needed
     pendingDeltas: new Map(),
     // Completed reasoning blocks from previous steps
     reasoningHistory: []
@@ -234,6 +228,8 @@ export function streamingToolToToolCall(tool: StreamingToolCall): ToolCall {
   if (tool.rawOutput) {
     try {
       const parsedOutput = JSON.parse(tool.rawOutput)
+      console.log('[streamingToolToToolCall] tool:', tool.name, 'rawOutput parsed:', JSON.stringify(parsedOutput).slice(0, 500))
+      console.log('[streamingToolToToolCall] parsedOutput.structured:', JSON.stringify(parsedOutput?.structured).slice(0, 300))
       output.result = parsedOutput
       output.structured = parsedOutput?.structured ?? { type: 'unknown' }
       output.content = parsedOutput?.content ?? undefined
