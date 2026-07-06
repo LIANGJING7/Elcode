@@ -391,7 +391,7 @@ import AddProviderModal from './AddProviderModal.vue'
 import EditProviderModal from './EditProviderModal.vue'
 import AddModelModal from './AddModelModal.vue'
 import type { AuthorizationResult } from '../../types/ipc'
-import type { CustomProviderConfig } from '../../types/custom-provider'
+import type { CustomProviderConfig } from '../../../types/custom-provider'
 
 const workspaceStore = useWorkspaceStore()
 const modelsStore = useModelsStore()
