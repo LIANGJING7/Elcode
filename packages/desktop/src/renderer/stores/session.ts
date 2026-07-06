@@ -182,6 +182,7 @@ export const useSessionStore = defineStore('session', () => {
         start: query.start,
         search: query.search,
         limit: query.limit,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       console.log('[SESSION_STORE_RELOAD] Result received:', JSON.stringify(result).slice(0, 500))
