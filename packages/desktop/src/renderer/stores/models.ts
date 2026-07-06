@@ -352,6 +352,19 @@ async function loadModels(directory?: string) {
     deleting.value = true
     error.value = null
     try {
+      const provider = providers.value.find(p => p.id === providerId)
+
+      // Custom providers from lcode.jsonc (source === 'config') → delete from config file directly
+      if (provider?.source === 'config') {
+        const result = await window.desktop.lcode.customProvider.delete(providerId)
+        if (result.success) {
+          providers.value = providers.value.filter(p => p.id !== providerId)
+          connectedProviders.value = connectedProviders.value.filter(id => id !== providerId)
+        }
+        return { success: result.success, error: result.error }
+      }
+
+      // Built-in / API providers → delete via HTTP API
       const result = await window.desktop.provider.delete(providerId, directory)
       if (result.success) {
         providers.value = providers.value.filter(p => p.id !== providerId)

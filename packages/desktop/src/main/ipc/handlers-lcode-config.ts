@@ -531,4 +531,35 @@ export function registerLcodeConfigHandlers(): void {
       })
     }
   )
+
+  ipcMain.handle(
+    IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_DELETE,
+    async (_event, providerId: string): Promise<ResultP<unknown>> => {
+      console.log('[LCodeConfig] DELETE custom provider:', providerId)
+      return configMutex.runExclusive(async () => {
+        try {
+          let content = await readFileOrDefault()
+          const config = parse(content, [], { allowTrailingComma: true, disallowComments: false })
+          const formattingOptions = { insertSpaces: true, tabSize: 2, eol: '\n' }
+
+          const provider = (config as Record<string, unknown>).provider as Record<string, unknown> | undefined
+          if (!provider || !(providerId in provider)) {
+            throw new Error(`Provider not found in config: ${providerId}`)
+          }
+
+          const edits = modify(content, ['provider', providerId], undefined, { formattingOptions })
+          content = applyEdits(content, edits)
+
+          await writeFile(content)
+          await invalidateModelsCache()
+          console.log('[LCodeConfig] DELETE custom provider success:', providerId)
+          return { success: true }
+        } catch (e) {
+          const error = e instanceof Error ? e.message : String(e)
+          console.error('[LCodeConfig] DELETE custom provider error:', error)
+          return { success: false, error }
+        }
+      })
+    }
+  )
 }

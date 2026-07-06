@@ -312,6 +312,16 @@ deleteModel: (providerId: string, modelId: string, directory?: string): Promise<
           console.error('[PRELOAD_LCODE] customProvider.add error:', err)
           throw err
         })
+      },
+      delete: (providerId: string): ResultP => {
+        console.log('[PRELOAD_LCODE] customProvider.delete invoked:', providerId)
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_DELETE, providerId).then((result) => {
+          console.log('[PRELOAD_LCODE] customProvider.delete result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] customProvider.delete error:', err)
+          throw err
+        })
       }
     }
   }
