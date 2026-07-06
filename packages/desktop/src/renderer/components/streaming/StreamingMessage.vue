@@ -2,17 +2,14 @@
 /**
  * StreamingMessage - Timeline-based streaming content
  *
- * Renders reasoning, tool calls, and text in chronological order,
- * similar to Claude Code's interleaved display.
+ * Renders reasoning, tool calls (grouped), and text in chronological order,
+ * using the new groupedTimelineNodes selector for tool aggregation.
  */
 import { computed } from 'vue'
 import { useStreamingStore } from '../../stores/streaming'
-import { timelineNodes, type TimelineNode } from '../../stores/streaming/selectors'
-import type { StreamingToolCall } from '../../stores/streaming/types'
+import { groupedTimelineNodes, type TimelineNode } from '../../stores/streaming/selectors'
 import type { ToolCall } from '../../../types/ipc'
-import StreamingReasoning from './StreamingReasoning.vue'
-import StreamingText from './StreamingText.vue'
-import ToolRenderer from '../tool/ToolRenderer.vue'
+import TimelineRenderer from '../timeline/TimelineRenderer.vue'
 
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
@@ -20,64 +17,25 @@ const emit = defineEmits<{
 
 const streamingStore = useStreamingStore()
 
-// Current stream state
 const stream = computed(() => streamingStore.currentStream.value)
 
-// Timeline nodes (ordered by occurrence)
 const nodes = computed(() => {
   if (!stream.value) return []
-  return timelineNodes(stream.value).value
+  return groupedTimelineNodes(stream.value).value
 })
 
-// Is still streaming
 const isStreaming = computed(() => streamingStore.isCurrentStreaming.value)
-
-// Helper: get reasoning payload from a node
-function getReasoningPayload(node: TimelineNode) {
-  return node.payload as { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null }
-}
-
-// Helper: get text payload from a node
-function getTextPayload(node: TimelineNode) {
-  return node.payload as { content: string }
-}
-
-// Helper: get tool payload from a node
-function getToolPayload(node: TimelineNode) {
-  return node.payload as StreamingToolCall
-}
 </script>
 
 <template>
   <div class="streaming-message animate-fade-in">
-    <!-- Content area - timeline ordered -->
     <div class="message-content flex-1 min-w-0">
-      <!-- Timeline nodes in chronological order -->
-      <template v-for="node in nodes" :key="node.id">
-        <!-- Reasoning node -->
-        <StreamingReasoning
-          v-if="node.type === 'reasoning'"
-          :content="getReasoningPayload(node).content"
-          :status="getReasoningPayload(node).status"
-          :duration="getReasoningPayload(node).duration"
-        />
+      <TimelineRenderer
+        :nodes="nodes"
+        :is-streaming="isStreaming"
+        @open-file="emit('openFile', $event)"
+      />
 
-        <!-- Tool node -->
-        <ToolRenderer
-          v-else-if="node.type === 'tool'"
-          :tool="getToolPayload(node)"
-          @open-file="emit('openFile', $event)"
-        />
-
-        <!-- Text node -->
-        <StreamingText
-          v-else-if="node.type === 'text'"
-          :content="getTextPayload(node).content"
-          :is-streaming="isStreaming"
-        />
-      </template>
-
-      <!-- Loading indicator when no content yet -->
       <div v-if="nodes.length === 0" class="flex items-center gap-3">
         <div class="flex items-center gap-1">
           <span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />

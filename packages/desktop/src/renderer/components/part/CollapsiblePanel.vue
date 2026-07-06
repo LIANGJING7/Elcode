@@ -18,8 +18,8 @@ const toggleExpand = () => {
 
 <template>
   <div class="collapsible-panel border-l-2 border-border ml-2 pl-4">
-    <div class="panel-header flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="toggleExpand">
-      <svg class="w-3 h-3 text-text-muted transition-transform" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="panel-header flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="toggleExpand">
+      <svg class="w-4 h-4 shrink-0 text-text-muted transition-transform mt-0.5" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
       </svg>
       <span v-if="spinner" class="animate-pulse text-warning">●</span>

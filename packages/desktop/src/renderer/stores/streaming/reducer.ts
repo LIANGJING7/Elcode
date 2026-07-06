@@ -204,7 +204,11 @@ export function streamingReducer(
     case 'TOOL_SUCCESS':
       // Tool completed successfully
       const toolForSuccess = state.tools.entities.get(action.callId)
-      if (!toolForSuccess) return state
+      if (!toolForSuccess) {
+        console.log('[Reducer] TOOL_SUCCESS - tool not found:', action.callId)
+        return state
+      }
+      console.log('[Reducer] TOOL_SUCCESS:', action.callId, 'tool name:', toolForSuccess.name, 'output:', action.output)
 
       const output = action.output
       const rawOutput = typeof output === 'string' 
@@ -219,7 +223,11 @@ export function streamingReducer(
     case 'TOOL_FAILED':
       // Tool failed
       const toolForFailed = state.tools.entities.get(action.callId)
-      if (!toolForFailed) return state
+      if (!toolForFailed) {
+        console.log('[Reducer] TOOL_FAILED - tool not found:', action.callId)
+        return state
+      }
+      console.log('[Reducer] TOOL_FAILED:', action.callId, 'tool name:', toolForFailed.name, 'error:', action.error)
 
       toolForFailed.lifecycle = 'failed'
       toolForFailed.error = action.error.message

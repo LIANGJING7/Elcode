@@ -220,16 +220,17 @@ watch(
 
 // Bind subagent watch to Session lifecycle
 watch(
-  () => sessionStore.currentSessionId,
-  (newId) => {
-    if (newId) {
-      subagentStore.watch(newId)
-    } else {
-      subagentStore.unwatch()
-    }
-  },
-  { immediate: true }
-)
+    () => sessionStore.currentSessionId,
+    (newId, oldId) => {
+      if (newId) {
+        // Pass current messages for bootstrap (extract subagent tabs from history)
+        subagentStore.watch(newId, sessionStore.currentMessages)
+      } else {
+        subagentStore.unwatch()
+      }
+    },
+    { immediate: true }
+  )
 
 let cleanupListeners: (() => void) | null = null
 let cleanupSubagentListeners: (() => void) | null = null

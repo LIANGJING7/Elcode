@@ -4,6 +4,8 @@
  * Based on design doc: docs/superpowers/specs/2026-06-29-desktop-chat-streaming-design.md
  */
 
+import type { ToolCall, ToolOutput } from '../../../types/ipc'
+
 // ============================================
 // Core State Types
 // ============================================
@@ -222,4 +224,44 @@ export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+}
+
+/** Convert StreamingToolCall to ToolCall (for compatibility with presentation layer) */
+export function streamingToolToToolCall(tool: StreamingToolCall): ToolCall {
+  const args = parseToolArgs(tool.rawInput)
+  const output: ToolOutput = {}
+  
+  if (tool.rawOutput) {
+    try {
+      const parsedOutput = JSON.parse(tool.rawOutput)
+      output.result = parsedOutput
+      output.structured = parsedOutput?.structured ?? { type: 'unknown' }
+      output.content = parsedOutput?.content ?? undefined
+    } catch {
+      output.result = tool.rawOutput
+    }
+  }
+  
+  if (tool.progress && tool.progress.length > 0) {
+    const content = tool.progress
+      .filter(p => p.type === 'text')
+      .map(p => ({ type: 'text' as const, text: p.message }))
+    if (content.length > 0) {
+      output.content = content
+    }
+  }
+  
+  if (tool.error && !output.result) {
+    output.result = { error: tool.error }
+  }
+  
+  return {
+    id: tool.id,
+    name: tool.name,
+    status: mapLifecycleToStatus(tool.lifecycle),
+    args,
+    output: output.result || output.content || output.structured ? output : undefined,
+    error: tool.error ?? undefined,
+    duration: tool.endedAt && tool.startedAt ? tool.endedAt - tool.startedAt : undefined,
+  }
 }

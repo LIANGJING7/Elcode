@@ -97,7 +97,8 @@ function handleOpenSubagentPanel(sessionId: string) {
   
   // Ensure we're watching the current session
   if (!subagentStore.watching) {
-    subagentStore.watch(sessionStore.currentSessionId!)
+    // Pass current messages for bootstrap
+    subagentStore.watch(sessionStore.currentSessionId!, sessionStore.currentMessages)
   }
   
   // Find the tab and open panel
@@ -113,6 +114,19 @@ function handleOpenSubagentPanel(sessionId: string) {
     })
     
     // Select the tab
+    subagentStore.selectTab(sessionId)
+  } else {
+    // Fallback: open panel even without tab data (use sessionId as title)
+    console.log('[ChatTimeline] No tab found, opening panel with fallback title')
+    uiStore.openPanel({
+      id: sessionId,
+      type: 'subagent',
+      title: 'Subagent',
+      subtitle: sessionId.slice(0, 8),
+      status: 'running',
+      component: SubagentViewer,
+    })
+    
     subagentStore.selectTab(sessionId)
   }
 }

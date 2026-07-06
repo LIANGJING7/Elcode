@@ -2,6 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, shallowReactive } from 'vue'
+import type { Message, ToolCall } from '../types/ipc'
 import type {
   FooterSubagentTab,
   FooterSubagentDetail,
@@ -9,6 +10,57 @@ import type {
   DetailPatch,
   ConnectionState,
 } from '../types/subagent'
+
+/**
+ * Extract subagent tab data from a task tool call.
+ * Matches TUI's taskTab function in subagent-data.ts.
+ */
+function extractSubagentTab(tool: ToolCall): FooterSubagentTab | null {
+  if (tool.name !== 'task') return null
+  
+  const structured = tool.output?.structured as any
+  const sessionId = structured?.sessionId ?? structured?.sessionID
+  if (!sessionId) return null
+  
+  const args = tool.args as Record<string, unknown>
+  const label = args.subagent_type ?? args.subagentType ?? 'General'
+  const description = args.description ?? structured?.summary ?? ''
+  
+  return {
+    sessionID: sessionId,
+    partID: tool.id,
+    callID: tool.id,
+    label: String(label).charAt(0).toUpperCase() + String(label).slice(1),
+    description: String(description),
+    status: structured?.state ?? (tool.status === 'completed' ? 'completed' : tool.status === 'error' ? 'error' : 'running'),
+    background: false,
+    title: structured?.summary,
+    toolCalls: structured?.toolCalls,
+    lastUpdatedAt: Date.now(),
+  }
+}
+
+/**
+ * Bootstrap subagent tabs from history messages.
+ * Matches TUI's bootstrapSubagentData logic.
+ */
+function bootstrapFromMessages(messages: Message[]): FooterSubagentTab[] {
+  const tabs: FooterSubagentTab[] = []
+  
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    if (!message.toolCalls) continue
+    
+    for (const tool of message.toolCalls) {
+      const tab = extractSubagentTab(tool)
+      if (tab) {
+        tabs.push(tab)
+      }
+    }
+  }
+  
+  return tabs
+}
 
 export const useSubagentStore = defineStore('subagent', () => {
   // Session binding
@@ -37,14 +89,14 @@ export const useSubagentStore = defineStore('subagent', () => {
   
   const watching = computed(() => currentSessionId.value !== null)
   
-  // Actions
-  async function watch(sessionId: string) {
+// Actions
+  async function watch(sessionId: string, messages?: Message[]) {
     // Prevent duplicate watch
     if (currentSessionId.value === sessionId) return
     
     // Unwatch previous session
     if (currentSessionId.value) {
-await window.desktop.subagent.unwatch(currentSessionId.value)
+      await window.desktop.subagent.unwatch(currentSessionId.value)
     }
     
     currentSessionId.value = sessionId
@@ -53,11 +105,21 @@ await window.desktop.subagent.unwatch(currentSessionId.value)
     activeTabId.value = null
     
     try {
+      // Bootstrap from history messages (TUI-style data extraction)
+      if (messages && messages.length > 0) {
+        const historyTabs = bootstrapFromMessages(messages)
+        tabs.clear()
+        for (const tab of historyTabs) {
+          tabs.set(tab.sessionID, tab)
+        }
+        console.log('[SubagentStore] Bootstrapped from history:', historyTabs.length, 'tabs')
+      }
+      
+      // Also try IPC watch (for future real-time sync)
       const snapshot = await window.desktop.subagent.watch(sessionId)
       
-      // Replace tabs (not clear first)
-      tabs.clear()
-      for (const tab of snapshot.tabs) {
+      // Merge IPC data if available
+      for (const tab of snapshot.tabs ?? []) {
         tabs.set(tab.sessionID, tab)
       }
       version.value = snapshot.version ?? 0
@@ -66,8 +128,8 @@ await window.desktop.subagent.unwatch(currentSessionId.value)
       loading.value = false
       
       // Select first tab by default
-      if (snapshot.tabs.length > 0) {
-        selectTab(snapshot.tabs[0].sessionID)
+      if (tabs.size > 0) {
+        selectTab([...tabs.keys()][0])
       }
     } catch (e) {
       connectionState.value = 'error'

@@ -126,7 +126,7 @@ const bashMeta: ToolMeta = {
     const command = firstArgString(tool.args, COMMAND_KEYS)
     const workdir = tool.args.workdir as string ?? ''
     const workdirStr = workdir ? ` [${truncate(workdir, 40)}]` : ''
-    return `$ ${truncate(command, 80)}${workdirStr}`
+    return `$ ${command}${workdirStr}`
   },
   detail: (tool) => {
     const output = tool.output?.result as string ?? ''
@@ -135,9 +135,9 @@ const bashMeta: ToolMeta = {
       const exitCode = structured.exitCode ?? 0
       const duration = structured.duration ?? tool.duration ?? 0
       const header = `Exit code: ${exitCode} | Duration: ${duration}ms\n\n`
-      return header + truncate(output, 500)
+      return header + output
     }
-    return truncate(output, 500)
+    return output
   },
   error: (tool) => {
     const structured = tool.output?.structured as any

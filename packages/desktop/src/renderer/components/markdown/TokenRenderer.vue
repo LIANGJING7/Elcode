@@ -28,7 +28,7 @@ const md = new MarkdownIt({ html: false, linkify: true })
   .use(markdownItTaskLists)
   .use(markdownItFootnote)
 
-const tokens = computed(() => md.parse(props.content, {}))
+const tokens = computed(() => md.parse(props.content ?? '', {}))
 
 // Block-level token type → Component 映射
 const BLOCK_MAP: Record<string, Component> = {
@@ -117,7 +117,7 @@ const blockNodes = computed<BlockNode[]>(() => {
 
 <template>
   <div class="markdown-content text-sm leading-relaxed">
-    <template v-for="node in blockNodes" :key="node.key">
+    <div v-for="node in blockNodes" :key="node.key" class="markdown-block">
       <component
         :is="node.component"
         :open-token="node.openToken"
@@ -125,6 +125,12 @@ const blockNodes = computed<BlockNode[]>(() => {
         :message-id="messageId"
         :code-index="node.codeIndex"
       />
-    </template>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.markdown-block {
+  display: contents;
+}
+</style>

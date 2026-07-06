@@ -103,12 +103,10 @@ export function useStreamingStore(): StreamingStore {
   // Ensure stream state exists for a session
   function ensureStream(sessionId: string): StreamingState {
     if (!streams[sessionId]) {
-      streams[sessionId] = createInitialState()
-      // Make the Maps reactive
-      const reactiveToolsMap = reactive(streams[sessionId].tools.entities)
-      streams[sessionId].tools.entities = reactiveToolsMap
-      const reactivePendingDeltas = reactive(streams[sessionId].pendingDeltas)
-      streams[sessionId].pendingDeltas = reactivePendingDeltas
+      const state = createInitialState()
+      // Use reactive() to wrap the entire state object, which includes Maps
+      // Vue 3's reactive() handles Map reactivity correctly when the Map is part of a reactive object
+      streams[sessionId] = reactive(state)
     }
     return streams[sessionId]
   }
