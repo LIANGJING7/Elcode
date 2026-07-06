@@ -44,19 +44,9 @@ export function createWindow(): BrowserWindow {
     show: false
   })
 
-  if (isDev) {
-    // vite-plugin-electron sets VITE_DEV_SERVER_URL to the actual dev server
-    // URL (incl. the real port — vite may pick 5174, 5175, ... when 5173 is
-    // busy). Falling back to the default keeps `electron .` usable in a dev
-    // shell if the env var isn't set.
-    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
-    win.loadURL(devUrl)
-    win.webContents.openDevTools()
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  win.once('ready-to-show', () => {
+  // Load splash page first and show immediately
+  const loadingPath = join(__dirname, '../renderer/loading.html')
+  win.loadFile(loadingPath).then(() => {
     win.show()
   })
 
@@ -66,6 +56,24 @@ export function createWindow(): BrowserWindow {
 
   mainWindow = win
   return win
+}
+
+export async function switchToApp(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  
+  const win = mainWindow
+  
+  if (isDev) {
+    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+    await win.loadURL(devUrl)
+  } else {
+    await win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+  
+  // Wait for Vue to finish loading to avoid white flash
+  await new Promise<void>(resolve => {
+    win.webContents.once('did-finish-load', () => resolve())
+  })
 }
 
 export function getMainWindow(): BrowserWindow | null {
