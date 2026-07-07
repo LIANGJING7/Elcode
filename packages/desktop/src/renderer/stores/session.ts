@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem } from '../../types/ipc'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
+import { useSessionTodoStore } from './sessionTodo'
 import { mapLifecycleToStatus, parseToolArgs } from './streaming/types'
 
 // Default time filter: last 30 days
@@ -36,6 +37,7 @@ export const useSessionStore = defineStore('session', () => {
   const workspaceStore = useWorkspaceStore()
   const streamingStore = useStreamingStore()
   const ui = useUiStore()
+  const sessionTodoStore = useSessionTodoStore()
 
   // ========================================
   // Query Layer - 查询参数
@@ -84,6 +86,8 @@ export const useSessionStore = defineStore('session', () => {
   const pendingQueues = reactive<Record<string, PendingMessage[]>>({})
   // Flag to disable auto processQueue when flushMessage is active (race condition protection)
   let flushInProgress = false
+  // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
+  let manuallyInterrupted = false
   
   // Helper: get or create queue array for a session
   function getQueue(sessionId: string): PendingMessage[] {
@@ -175,17 +179,35 @@ export const useSessionStore = defineStore('session', () => {
     state.error = null
 
     try {
-      console.log('[SESSION_STORE_RELOAD] Calling window.desktop.session.list...')
+      console.log('[SESSION_STORE_RELOAD] Calling window.desktop.session.list with params:', {
+        directory: query.directory,
+        workspace: query.workspace,
+        start: query.start,
+        search: query.search,
+        limit: query.limit,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
+      })
       const result = await window.desktop.session.list({
         directory: query.directory,
         workspace: query.workspace,
         start: query.start,
         search: query.search,
         limit: query.limit,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       console.log('[SESSION_STORE_RELOAD] Result received:', JSON.stringify(result).slice(0, 500))
       console.log('[SESSION_STORE_RELOAD] Conversations count:', result.conversations?.length ?? 0)
+      
+      // Debug: Check if any conversation has parent_id (should be null for roots)
+      if (result.conversations && result.conversations.length > 0) {
+        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+        console.log('[SESSION_STORE_RELOAD] Conversations with parent_id (SHOULD BE 0):', withParentId.length)
+        if (withParentId.length > 0) {
+          console.error('[SESSION_STORE_RELOAD] BUG: Backend returned child sessions despite roots=true!', 
+            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+        }
+      }
 
       if (currentGen !== generation) {
         console.log('[SESSION_STORE_RELOAD] Generation mismatch, skipping - current:', currentGen, 'latest:', generation)
@@ -248,12 +270,28 @@ export const useSessionStore = defineStore('session', () => {
     state.error = null
 
     try {
+      console.log('[SESSION_STORE_LOADMORE] Calling window.desktop.session.list with params:', {
+        ...query,
+        cursor: pagination.nextCursor,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
+      })
       const result = await window.desktop.session.list({
         ...query,
         cursor: pagination.nextCursor,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       if (currentGen !== generation) return
+
+      // Debug: Check if any conversation has parent_id
+      if (result.conversations && result.conversations.length > 0) {
+        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+        console.log('[SESSION_STORE_LOADMORE] Loaded', result.conversations.length, 'conversations, with parent_id (SHOULD BE 0):', withParentId.length)
+        if (withParentId.length > 0) {
+          console.error('[SESSION_STORE_LOADMORE] BUG: Backend returned child sessions despite roots=true!', 
+            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+        }
+      }
 
       // Append 去重
       const ids = new Set(state.conversations.map(c => c.id))
@@ -357,12 +395,9 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function interrupt(sessionId: string) {
+    manuallyInterrupted = true
     try {
       await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
-      // 清空该会话的客户端队列
-      const queue = getQueue(sessionId)
-      console.log('[DEBUG interrupt] Clearing queue for session:', sessionId, 'count:', queue.length)
-      clearQueue(sessionId)
     } catch (e) {
       state.error = e instanceof Error ? e.message : 'Failed to interrupt session'
     }
@@ -371,10 +406,13 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * flushMessage - Send a specific queued message immediately (bypass queue order).
    * Implementation: interrupt current streaming, then send this message.
+   * After this message completes, auto-send remaining queue (reset manuallyInterrupted).
    */
   async function flushMessage(pending: PendingMessage) {
     if (!currentSessionId.value) return
     
+    // Reset manuallyInterrupted - user wants to resume auto-sending queue after this message
+    manuallyInterrupted = false
     // Set flag to prevent processQueue from being triggered by interrupt's SSE event
     flushInProgress = true
     
@@ -388,11 +426,8 @@ export const useSessionStore = defineStore('session', () => {
     // 中断当前流式
     await window.desktop.session.interrupt(currentSessionId.value, workspaceStore.currentWorkspace?.path)
     
-    // Clear flag - now safe to allow processQueue again
-    flushInProgress = false
-    
-    // 发送这条消息
-    await sendPending(pending)
+    // 发送这条消息（sendPending 内部会在流式开始后重置 flushInProgress）
+    await sendPending(pending, true)  // passing flag to indicate this is from flushMessage
   }
 
   /**
@@ -476,6 +511,17 @@ export const useSessionStore = defineStore('session', () => {
     if (!workspaceStore.currentWorkspace?.path) return
     try {
       const msgs = await window.desktop.session.messages(sessionId, 100, workspaceStore.currentWorkspace?.path)
+      console.log('[DEBUG loadMessages] received msgs count:', msgs.length)
+      // Log tool calls structured data
+      msgs.forEach((msg, idx) => {
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          msg.toolCalls.forEach((tc, tcIdx) => {
+            console.log(`[DEBUG loadMessages] msg[${idx}] toolCall[${tcIdx}] name:`, tc.name)
+            console.log(`[DEBUG loadMessages]   tc.output keys:`, tc.output ? Object.keys(tc.output) : 'undefined')
+            console.log(`[DEBUG loadMessages]   tc.output.structured:`, tc.output?.structured ? JSON.stringify(tc.output.structured).slice(0, 200) : 'undefined')
+          })
+        }
+      })
       const conv = state.conversations.find(c => c.id === sessionId)
       if (conv) {
         const existingMap = new Map(conv.messages.map(m => [m.id, m]))
@@ -648,8 +694,10 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * sendPending - Send a queued message to backend.
+   * @param pending - The queued message to send
+   * @param fromFlush - If true, reset flushInProgress after streaming starts
    */
-  async function sendPending(pending: PendingMessage) {
+  async function sendPending(pending: PendingMessage, fromFlush = false) {
     if (!currentSessionId.value) {
       console.log('[DEBUG sendPending] No currentSessionId - cannot send')
       state.error = 'No active session'
@@ -673,6 +721,11 @@ export const useSessionStore = defineStore('session', () => {
     // and displays the "Thinking..." animation immediately
     streamingStore.resetStream(currentSessionId.value)
     streamingStore.startStreaming(currentSessionId.value)
+    
+    // Reset flushInProgress after streaming starts (if from flushMessage)
+    if (fromFlush) {
+      flushInProgress = false
+    }
 
     // Create user message AFTER streaming started
     const userMessage: Message = {
@@ -779,15 +832,33 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       if (eventSessionId) {
-        streamingStore.handleEvent(eventSessionId, data.event)
+        const rawEvent = data.event as { type?: string }
+        if (rawEvent.type === 'todo.updated') {
+          console.log('[SSE] todo.updated event received, eventSessionId:', eventSessionId, 'currentSessionId:', currentSessionId.value)
+          const props = (data.event as { properties?: { sessionID?: string; todos?: TodoItem[] } }).properties
+          if (props?.sessionID && props?.todos) {
+            sessionTodoStore.handleTodoUpdated({
+              type: 'todo.updated',
+              sessionID: props.sessionID,
+              todos: props.todos
+            })
+          } else {
+            console.error('[SSE] todo.updated missing properties:', data.event)
+          }
+        } else {
+          streamingStore.handleEvent(eventSessionId, data.event)
+        }
         
         // STREAM_DONE: trigger processQueue (event-driven)
         // stream.ended: SSE connection closed (backend normal completion or error)
         // session.idle: V1 idle status event (interrupt completion)
         // Skip if flushInProgress (race condition protection)
+        // Skip if manuallyInterrupted (user clicked interrupt button - persists until user clicks "立即")
         if (eventType === 'stream.ended' || eventType === 'session.idle') {
           if (flushInProgress) {
             console.log('[SSE STREAM_DONE] Skipping processQueue - flushInProgress')
+          } else if (manuallyInterrupted) {
+            console.log('[SSE STREAM_DONE] Skipping processQueue - manually interrupted (persisted)')
           } else {
             console.log('[SSE STREAM_DONE] Triggering processQueue')
             processQueue()

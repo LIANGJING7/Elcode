@@ -9,8 +9,7 @@
         @select-nav="handleSelectNav"
         @enter-settings="handleEnterSettings"
       />
-
-      <SidebarTabs />
+      <SidebarTabs class="flex-1 min-h-0 overflow-hidden" />
     </template>
 
     <SidebarFooter

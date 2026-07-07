@@ -20,6 +20,7 @@ export interface GlobViewModel extends ToolViewModel {
   files: string[]
   total: number
   truncated: boolean
+  error: string | null
 }
 
 interface GlobStructured {
@@ -55,6 +56,7 @@ export function createGlobViewModel(tool: ToolCall): GlobViewModel {
     files,
     total: files.length,
     truncated,
+    error: tool.error ?? null,
   }
 }
 

@@ -32,11 +32,16 @@ const sorted = computed(() => [...props.model.files].sort())
       <span v-if="status === 'loading'" class="text-warning"> · loading...</span>
     </div>
 
+    <!-- Error -->
+    <div v-if="model.error" class="mb-2 p-2 bg-error/10 rounded text-error">
+      {{ model.error }}
+    </div>
+
     <!-- Empty -->
-    <div v-if="model.total === 0" class="text-text-muted">No files found</div>
+    <div v-if="model.total === 0 && !model.error" class="text-text-muted">No files found</div>
 
     <!-- File list -->
-    <div v-else class="max-h-96 overflow-y-auto space-y-0.5 font-mono">
+    <div v-if="model.total > 0" class="max-h-96 overflow-y-auto space-y-0.5 font-mono">
       <div
         v-for="f in sorted"
         :key="f"

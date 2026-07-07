@@ -137,6 +137,7 @@
       "name": "@model-agent/desktop",
       "version": "1.0.0",
       "dependencies": {
+        "@model-agent/core": "workspace:*",
         "@radix-icons/vue": "^1.0.0",
         "@tailwindcss/vite": "^4.3.1",
         "@tanstack/vue-virtual": "^3.13.31",

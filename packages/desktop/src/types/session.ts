@@ -11,6 +11,7 @@ export interface SessionListQuery {
   search?: string       // Title search (LIKE %search%)
   limit?: number        // Result limit, default 100
   cursor?: number       // Cursor for pagination, filter time_updated < cursor
+  roots?: boolean       // Only return root sessions (parent_id is null), exclude subagent child sessions
 }
 
 /**

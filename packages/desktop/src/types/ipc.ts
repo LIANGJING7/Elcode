@@ -22,6 +22,11 @@ export interface PromptOptions {
   variant?: string
 }
 
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+}
+
 export interface Session {
   id: string
   workspacePath: string
@@ -47,12 +52,12 @@ export interface Message {
 
 /** 类型化的 structured 元数据（按工具区分，TS 自动推导）。后端发送的是
  *  `Record<string, unknown>`，桌面端在 createViewModel 内部按 tool.name
- *  推导出对应的判别分支，不污染数据层。 */
+ * 推导出对应的判别分支，不污染数据层。 */
 export type ToolStructured =
   | { type: 'bash'; exitCode?: number; duration?: number; truncated?: boolean; timedOut?: boolean }
   | { type: 'edit'; diff?: string; additions?: number; deletions?: number }
   | { type: 'write'; existed?: boolean }
-  | { type: 'task'; subagentType?: string; state?: string; summary?: string }
+  | { type: 'task'; subagentType?: string; state?: string; summary?: string; sessionId?: string; sessionID?: string; toolCalls?: number }
   | { type: 'todo'; todos?: Array<{ status: string; content: string }> }
   | { type: 'unknown'; [key: string]: unknown }
 
@@ -235,6 +240,7 @@ export const IPC_CHANNELS = {
   SESSION_STREAM_EVENT: 'session:stream:event',
   SESSION_DELETE: 'session:delete',
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
+  SESSION_TODO: 'session:todo',
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
@@ -305,6 +311,10 @@ export const IPC_CHANNELS = {
   // Global state (lcode.json - cross-project UI preferences)
   GLOBAL_STATE_GET: 'global-state:get',
   GLOBAL_STATE_SET: 'global-state:set',
+
+  // Subagent panel
+  SUBAGENT_WATCH: 'subagent:watch',
+  SUBAGENT_UNWATCH: 'subagent:unwatch',
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

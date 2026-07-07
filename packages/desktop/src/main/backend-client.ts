@@ -311,6 +311,11 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("PATCH", `/session/${sessionID}?${params}`, patch)
     },
+
+    todo: async (sessionID: string, directory?: string): Promise<unknown[]> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/session/${sessionID}/todo?${params}`) as Promise<unknown[]>
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
@@ -566,10 +571,8 @@ export const backend = {
         // falls back to process.cwd() (the monorepo root) and returns sessions
         // for the wrong project_id, yielding an empty list.
         if (query.directory) params.set('directory', storagePath(query.directory))
-        // Do NOT set scope=project: without it, listByProject uses the
-        // exact-directory filter (session.ts:1016-1020) so only sessions
-        // whose `directory` column matches the selected workspace are
-        // returned (subdirectory sessions are excluded).
+        // Filter to root sessions only (exclude subagent child sessions with parent_id set)
+        if (query.roots) params.set('roots', 'true')
         if (query.start) params.set('start', String(query.start))
         if (query.search) params.set('search', query.search)
         if (query.limit) params.set('limit', String(query.limit))

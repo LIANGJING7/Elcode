@@ -68,7 +68,15 @@ function renderOutput(input: {
   text: string
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
-  return [
+  // Return JSON with structured data for desktop app, plus XML for backward compatibility
+  const structured = {
+    type: 'task',
+    sessionId: input.sessionID,
+    sessionID: input.sessionID,  // Also provide sessionID for backward compatibility
+    state: input.state,
+    summary: input.summary ?? '',
+  }
+  const xml = [
     `<task id="${input.sessionID}" state="${input.state}">`,
     ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
     `<${tag}>`,
@@ -76,6 +84,9 @@ function renderOutput(input: {
     `</${tag}>`,
     "</task>",
   ].join("\n")
+  
+  // Combine: structured JSON + XML text (for TUI and backward compatibility)
+  return JSON.stringify({ structured, text: xml })
 }
 
 export const TaskTool = Tool.define(
@@ -345,6 +356,17 @@ export const TaskTool = Tool.define(
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
+      toStructuredOutput: (output) => {
+        if (typeof output === 'string') {
+          try {
+            const parsed = JSON.parse(output)
+            return parsed?.structured ?? { type: 'unknown' }
+          } catch {
+            return { type: 'unknown' }
+          }
+        }
+        return output
+      },
     }
   }),
 )

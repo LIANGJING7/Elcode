@@ -27,6 +27,7 @@ export interface GrepViewModel extends ToolViewModel {
   matches: GrepMatch[]
   total: number
   truncated: boolean
+  error: string | null
 }
 
 interface GrepStructured {
@@ -97,6 +98,7 @@ export function createGrepViewModel(tool: ToolCall): GrepViewModel {
     matches,
     total: matches.length,
     truncated,
+    error: tool.error ?? null,
   }
 }
 
