@@ -60,7 +60,22 @@ const VERSION = await (async () => {
 })()
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
-const teamPath = path.join(path.dirname(rootPkgPath), ".github/TEAM_MEMBERS")
+
+// In monorepo, .github is at the root level, not relative to packages/core/package.json
+// Traverse up to find .github directory
+const findGithubDir = (startDir: string): string | null => {
+  let dir = startDir
+  for (let i = 0; i < 10; i++) {
+    const githubPath = path.join(dir, ".github")
+    if (fs.existsSync(githubPath)) return githubPath
+    dir = path.dirname(dir)
+  }
+  return null
+}
+
+const githubDir = findGithubDir(import.meta.dir)
+if (!githubDir) throw new Error(".github directory not found")
+const teamPath = path.join(githubDir, "TEAM_MEMBERS")
 const team = [
   ...(await Bun.file(teamPath)
     .text()

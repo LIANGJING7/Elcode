@@ -84,6 +84,8 @@ export const useSessionStore = defineStore('session', () => {
   const pendingQueues = reactive<Record<string, PendingMessage[]>>({})
   // Flag to disable auto processQueue when flushMessage is active (race condition protection)
   let flushInProgress = false
+  // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
+  let manuallyInterrupted = false
   
   // Helper: get or create queue array for a session
   function getQueue(sessionId: string): PendingMessage[] {
@@ -357,12 +359,9 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function interrupt(sessionId: string) {
+    manuallyInterrupted = true
     try {
       await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
-      // 清空该会话的客户端队列
-      const queue = getQueue(sessionId)
-      console.log('[DEBUG interrupt] Clearing queue for session:', sessionId, 'count:', queue.length)
-      clearQueue(sessionId)
     } catch (e) {
       state.error = e instanceof Error ? e.message : 'Failed to interrupt session'
     }
@@ -371,10 +370,13 @@ export const useSessionStore = defineStore('session', () => {
   /**
    * flushMessage - Send a specific queued message immediately (bypass queue order).
    * Implementation: interrupt current streaming, then send this message.
+   * After this message completes, auto-send remaining queue (reset manuallyInterrupted).
    */
   async function flushMessage(pending: PendingMessage) {
     if (!currentSessionId.value) return
     
+    // Reset manuallyInterrupted - user wants to resume auto-sending queue after this message
+    manuallyInterrupted = false
     // Set flag to prevent processQueue from being triggered by interrupt's SSE event
     flushInProgress = true
     
@@ -388,11 +390,8 @@ export const useSessionStore = defineStore('session', () => {
     // 中断当前流式
     await window.desktop.session.interrupt(currentSessionId.value, workspaceStore.currentWorkspace?.path)
     
-    // Clear flag - now safe to allow processQueue again
-    flushInProgress = false
-    
-    // 发送这条消息
-    await sendPending(pending)
+    // 发送这条消息（sendPending 内部会在流式开始后重置 flushInProgress）
+    await sendPending(pending, true)  // passing flag to indicate this is from flushMessage
   }
 
   /**
@@ -648,8 +647,10 @@ export const useSessionStore = defineStore('session', () => {
 
   /**
    * sendPending - Send a queued message to backend.
+   * @param pending - The queued message to send
+   * @param fromFlush - If true, reset flushInProgress after streaming starts
    */
-  async function sendPending(pending: PendingMessage) {
+  async function sendPending(pending: PendingMessage, fromFlush = false) {
     if (!currentSessionId.value) {
       console.log('[DEBUG sendPending] No currentSessionId - cannot send')
       state.error = 'No active session'
@@ -673,6 +674,11 @@ export const useSessionStore = defineStore('session', () => {
     // and displays the "Thinking..." animation immediately
     streamingStore.resetStream(currentSessionId.value)
     streamingStore.startStreaming(currentSessionId.value)
+    
+    // Reset flushInProgress after streaming starts (if from flushMessage)
+    if (fromFlush) {
+      flushInProgress = false
+    }
 
     // Create user message AFTER streaming started
     const userMessage: Message = {
@@ -785,9 +791,12 @@ export const useSessionStore = defineStore('session', () => {
         // stream.ended: SSE connection closed (backend normal completion or error)
         // session.idle: V1 idle status event (interrupt completion)
         // Skip if flushInProgress (race condition protection)
+        // Skip if manuallyInterrupted (user clicked interrupt button - persists until user clicks "立即")
         if (eventType === 'stream.ended' || eventType === 'session.idle') {
           if (flushInProgress) {
             console.log('[SSE STREAM_DONE] Skipping processQueue - flushInProgress')
+          } else if (manuallyInterrupted) {
+            console.log('[SSE STREAM_DONE] Skipping processQueue - manually interrupted (persisted)')
           } else {
             console.log('[SSE STREAM_DONE] Triggering processQueue')
             processQueue()
