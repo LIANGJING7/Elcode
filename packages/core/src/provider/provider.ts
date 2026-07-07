@@ -1600,8 +1600,12 @@ export const layer = Layer.effect(
           }
 
           if (Object.keys(provider.models).length === 0) {
-            delete providers[providerID]
-            continue
+            // Keep custom providers (source === 'config') even without models
+            // User can discover models later via refresh or add manually
+            if (provider.source !== 'config') {
+              delete providers[providerID]
+              continue
+            }
           }
         }
 
