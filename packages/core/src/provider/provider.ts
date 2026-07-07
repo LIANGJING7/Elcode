@@ -1057,7 +1057,7 @@ export function toPublicInfo(provider: Info): Info {
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
   return mapValues(providers, (item) => {
     const models = Object.values(item.models)
-    if (models.length === 0) return undefined
+    if (models.length === 0) return ""
     return sort(models)[0].id
   })
 }
