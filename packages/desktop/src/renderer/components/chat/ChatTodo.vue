@@ -36,7 +36,7 @@ const collapsed = ref(false)
 <template>
   <div v-if="show" class="todo-panel-container">
     <div class="max-w-chat-max mx-auto px-6">
-      <Card class="todo-card rounded-b-none border-b-0">
+      <Card class="todo-card rounded-b-none border-b-0 !gap-0">
         <!-- Header with count and collapse button -->
         <div class="todo-header" @click="collapsed = !collapsed">
           <Button variant="ghost" size="sm" class="collapse-btn">
@@ -45,7 +45,7 @@ const collapsed = ref(false)
             <span class="todo-count">Tasks</span>
           </Button>
           <span class="todo-badge">
-            {{ completedCount }}/{{ totalCount }} completed
+            {{ completedCount }}/{{ totalCount }}
           </span>
         </div>
 
@@ -94,7 +94,6 @@ const collapsed = ref(false)
 
 :deep(.todo-card > div[data-slot="card"]) {
   padding: 0 16px 12px 16px;
-  gap: 0 !important;
 }
 
 .todo-header {
