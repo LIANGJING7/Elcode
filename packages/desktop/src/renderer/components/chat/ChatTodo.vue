@@ -83,7 +83,7 @@ const collapsed = ref(false)
 }
 
 .todo-card {
-  padding: 0;
+  padding: 0 0 10px 0;
   margin-bottom: 0;
   background: rgba(31, 31, 35, 0.5);
   border-color: rgba(39, 39, 42, 0.6);
@@ -94,18 +94,18 @@ const collapsed = ref(false)
 
 :deep(.todo-card > div[data-slot="card"]) {
   padding: 0 16px 12px 16px;
-  gap: 0;
+  gap: 0 !important;
 }
 
 .todo-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0;
   font-size: 13px;
   color: #71717a;
   cursor: pointer;
   user-select: none;
+  padding-bottom: 4px;
 }
 
 .todo-header:hover .todo-count {
@@ -121,7 +121,6 @@ const collapsed = ref(false)
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(34, 197, 94, 0.12);
   color: #22c55e;
   border: none;
 }
