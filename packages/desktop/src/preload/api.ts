@@ -208,7 +208,10 @@ export const desktopAPI = {
 
     set: (data: Record<string, unknown>): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_STATE_SET, data)
-  }
+  },
+
+  retryStartup: (): Promise<void> =>
+    ipcRenderer.invoke('retry-startup')
 }
 
 export type DesktopAPI = typeof desktopAPI

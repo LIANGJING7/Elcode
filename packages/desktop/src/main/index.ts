@@ -1,5 +1,5 @@
 import { app, ipcMain, Menu, nativeImage } from 'electron'
-import { createWindow, getMainWindow, switchToApp } from './window'
+import { createWindow, getMainWindow, switchToApp, showError } from './window'
 import { registerIPCHandlers, initBackend } from './ipc/handlers'
 import { stopBackend } from './backend-client'
 import { join } from 'path'
@@ -7,12 +7,8 @@ import { fileURLToPath } from 'url'
 
 ;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
-// Hide the default application menu bar
 Menu.setApplicationMenu(null)
 
-/**
- * Set app icon for macOS dock (development mode needs explicit icon setting)
- */
 function setAppIcon(): void {
   if (process.platform === 'darwin' && !app.isPackaged) {
     const __dirname = join(fileURLToPath(import.meta.url), '..')
@@ -22,25 +18,35 @@ function setAppIcon(): void {
   }
 }
 
-app.whenReady().then(async () => {
+async function startApp(): Promise<void> {
   try {
     setAppIcon()
-    createWindow()              // Shows loading.html immediately
+    await createWindow()
     
     await initBackend()
     registerIPCHandlers()
-    
-    await switchToApp()         // Transition to Vue app
+
+    await switchToApp()
   } catch (err) {
     console.error('Failed to initialize:', err)
-    app.quit()
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    await showError(errorMsg)
   }
+}
+
+app.whenReady().then(() => {
+  startApp()
 
   app.on('activate', () => {
     if (!getMainWindow()) {
-      createWindow()
+      startApp()
     }
   })
+})
+
+ipcMain.handle('retry-startup', async () => {
+  await stopBackend().catch(() => {})
+  await startApp()
 })
 
 // Teardown must finish before the main process actually dies — otherwise

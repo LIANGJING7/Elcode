@@ -17,7 +17,7 @@ function getIconPath(): string {
   return join(__dirname, '../../build', iconName)
 }
 
-export function createWindow(): BrowserWindow {
+export async function createWindow(): Promise<BrowserWindow> {
   // Create native image for better icon handling across platforms
   const icon = nativeImage.createFromPath(getIconPath())
   
@@ -45,10 +45,17 @@ export function createWindow(): BrowserWindow {
   })
 
   // Load splash page first and show immediately
-  const loadingPath = join(__dirname, '../renderer/loading.html')
-  win.loadFile(loadingPath).then(() => {
+  if (isDev) {
+    const loadingUrl = process.env.VITE_DEV_SERVER_URL 
+      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/loading.html`
+      : 'http://localhost:5173/src/renderer/loading.html'
+    await win.loadURL(loadingUrl)
     win.show()
-  })
+  } else {
+    const loadingPath = join(__dirname, '../renderer/loading.html')
+    await win.loadFile(loadingPath)
+    win.show()
+  }
 
   win.on('closed', () => {
     mainWindow = null
@@ -93,4 +100,22 @@ export function sendMessageToRenderer(channel: string, data: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, data)
   }
+}
+
+export async function showError(errorMsg: string): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  
+  const win = mainWindow
+  
+  if (isDev) {
+    const errorUrl = process.env.VITE_DEV_SERVER_URL 
+      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/error.html?error=${encodeURIComponent(errorMsg)}`
+      : `http://localhost:5173/src/renderer/error.html?error=${encodeURIComponent(errorMsg)}`
+    await win.loadURL(errorUrl)
+  } else {
+    const errorPath = join(__dirname, '../renderer/error.html')
+    await win.loadFile(errorPath, { query: { error: errorMsg } })
+  }
+  
+  win.show()
 }

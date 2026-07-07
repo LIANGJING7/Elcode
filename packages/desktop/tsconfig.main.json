@@ -1,5 +1,4 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -16,11 +15,8 @@
     "strictPropertyInitialization": false,
     "noImplicitThis": false,
     "alwaysStrict": false,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["../../src/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/types/**/*.ts"],
-  "exclude": ["node_modules", "dist", "../../node_modules/@ff-labs"]
+  "exclude": ["node_modules", "dist"]
 }
