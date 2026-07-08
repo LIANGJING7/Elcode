@@ -13,7 +13,6 @@ export interface NavigationItem {
 
 // registry 顺序由 order 决定(SidebarHeader 渲染时排序)
 export const navigationRegistry: NavigationItem[] = [
-  { id: 'skills', label: '技能', icon: 'sparkles', view: 'skills', order: 10, enterSettings: true, settingsSection: 'skills' },
 ]
 
 export function getNavigationViewIds(): string[] {
