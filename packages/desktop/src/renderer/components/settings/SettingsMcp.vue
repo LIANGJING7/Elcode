@@ -66,18 +66,18 @@
               <button
                 v-if="selectedStatus?.status !== 'connected'"
                 class="px-3 py-1.5 text-xs bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
-                :disabled="connecting"
+                :disabled="isConnecting"
                 @click="handleConnect(selectedServer)"
               >
-                {{ connecting ? '连接中...' : '连接' }}
+                {{ isConnecting ? '连接中...' : '连接' }}
               </button>
               <button
                 v-else
                 class="px-3 py-1.5 text-xs border border-border hover:border-border-light text-text rounded-lg transition-colors cursor-pointer"
-                :disabled="connecting"
+                :disabled="isConnecting"
                 @click="handleDisconnect(selectedServer)"
               >
-                {{ connecting ? '断开中...' : '断开' }}
+                {{ isConnecting ? '断开中...' : '断开' }}
               </button>
             </div>
           </div>
@@ -196,16 +196,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useDebounceFn } from '@vueuse/core'
 import { useMcpStore } from '../../stores/mcp'
-import { useWorkspaceStore } from '../../stores/workspace'
 import McpServerList from './mcp/McpServerList.vue'
 import BasicSection from './mcp/sections/BasicSection.vue'
 import CommandConfig from './mcp/sections/CommandConfig.vue'
 import HttpConfig from './mcp/sections/HttpConfig.vue'
-import type { McpConfig, McpServerStatus } from '../../../types/ipc'
+import type { McpConfig, McpServerStatus, McpServerConfig } from '../../../types/ipc'
 
 const mcpStore = useMcpStore()
-const workspaceStore = useWorkspaceStore()
 
 // Toast notification state
 const toastMessage = ref('')
@@ -220,23 +219,19 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 }
 
 const { servers, loading, error } = storeToRefs(mcpStore)
-const { currentWorkspace } = storeToRefs(workspaceStore)
-
-const directory = computed(() => currentWorkspace.value?.path)
 
 const selectedServer = ref<string | null>(null)
 const showAddDialog = ref(false)
 const showDeleteConfirm = ref(false)
-const connecting = ref(false)
 
-// Server configurations from backend (real config, not just status)
-const serverConfigs = ref<Record<string, McpConfig>>({})
+// MCP configurations from global config
+const mcpConfigs = ref<Record<string, McpConfig>>({})
 
 // Edit config state
-const editConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
+const editConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true, headers: {} })
 
 // New server config
-const newConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true })
+const newConfig = ref<McpConfig>({ name: '', type: 'local', enabled: true, headers: {} })
 
 // Convert store servers (MCPStatus) to McpServerStatus format
 const convertedServers = computed<Record<string, McpServerStatus>>(() => {
@@ -277,17 +272,20 @@ const statusLabel = computed(() => {
   }
 })
 
+const isConnecting = computed(() => {
+  if (!selectedServer.value) return false
+  return mcpStore.connectingServers.has(selectedServer.value)
+})
+
 const canAdd = computed(() => {
   const errors = validateConfig(newConfig.value)
   return errors.length === 0
 })
 
 onMounted(async () => {
-  // App.vue already loads MCP status on init, no need to reload here
-  // Just load server configs for editing
-  console.log('[SettingsMcp] onMounted, directory:', directory.value)
-  await loadServerConfigs()
-  console.log('[SettingsMcp] configs loaded, serverConfigs:', Object.keys(serverConfigs.value))
+  console.log('[SettingsMcp] onMounted')
+  await loadMcpConfig()
+  console.log('[SettingsMcp] configs loaded, mcpConfigs:', Object.keys(mcpConfigs.value))
   // Select first server if available
   if (Object.keys(servers.value).length > 0) {
     selectedServer.value = Object.keys(servers.value)[0]
@@ -295,27 +293,18 @@ onMounted(async () => {
   }
 })
 
-// Only reload when directory actually changes
-watch(directory, async (newDir, oldDir) => {
-  console.log('[SettingsMcp] directory changed:', oldDir, '->', newDir)
-  if (newDir && newDir !== oldDir) {
-    // Directory changed, need to reload everything
-    await mcpStore.loadStatusImmediate(newDir)
-    await loadServerConfigs()
-  }
-})
-
-async function loadServerConfigs() {
+async function loadMcpConfig() {
   try {
-    console.log('[SettingsMcp] loadServerConfigs: directory=', directory.value)
-    const rawConfigs = await window.desktop.mcp.config(directory.value)
-    console.log('[SettingsMcp] rawConfigs:', JSON.stringify(rawConfigs).slice(0, 500))
-    const converted: Record<string, McpConfig> = {}
-    for (const [name, cfg] of Object.entries(rawConfigs)) {
-      converted[name] = convertBackendConfig(name, cfg as BackendMcpConfig)
+    console.log('[SettingsMcp] loadMcpConfig')
+    const result = await window.desktop.lcode.config.read()
+    if (result.success && result.data?.mcp) {
+      const converted: Record<string, McpConfig> = {}
+      for (const [name, cfg] of Object.entries(result.data.mcp as Record<string, McpServerConfig>)) {
+        converted[name] = convertBackendConfig(name, cfg)
+      }
+      mcpConfigs.value = converted
+      console.log('[SettingsMcp] converted configs:', Object.keys(converted))
     }
-    serverConfigs.value = converted
-    console.log('[SettingsMcp] converted configs:', Object.keys(converted))
   } catch (err) {
     console.error('[SettingsMcp] Failed to load configs:', err)
   }
@@ -323,8 +312,7 @@ async function loadServerConfigs() {
 
 watch(selectedServer, (name) => {
   if (name) {
-    // Use real config from backend, or fall back to basic
-    const realConfig = serverConfigs.value[name]
+    const realConfig = mcpConfigs.value[name]
     if (realConfig) {
       editConfig.value = { ...realConfig }
     } else {
@@ -341,8 +329,76 @@ function handleSelect(name: string) {
   selectedServer.value = name
 }
 
-function handleConfigUpdate(config: McpConfig) {
+// Pending config patches (accumulated then flushed via debounce)
+const pendingPatches = ref<Partial<Omit<McpServerConfig, 'name'>>>({})
+
+const flushUpdates = useDebounceFn(async () => {
+  if (!selectedServer.value) return
+  const patches = { ...pendingPatches.value }
+  pendingPatches.value = {}
+  if (Object.keys(patches).length === 0) return
+
+  const result = await window.desktop.lcode.mcpServer.update(selectedServer.value, patches)
+  if (result.success) {
+    console.log('[SettingsMcp] Config updated:', Object.keys(patches))
+  } else {
+    showToast(`更新失败: ${result.error}`, 'error')
+  }
+}, 300)
+
+async function handleConfigUpdate(config: McpConfig) {
   editConfig.value = { ...config }
+  if (!selectedServer.value) return
+  
+  if (config.headers) {
+    pendingPatches.value.headers = { ...config.headers }
+  }
+  if (config.url !== undefined) {
+    pendingPatches.value.url = config.url
+  }
+  if (config.timeout !== undefined) {
+    pendingPatches.value.timeout = config.timeout
+  }
+  if (config.environment) {
+    pendingPatches.value.environment = { ...config.environment }
+  }
+  
+  flushUpdates()
+}
+
+async function handleFieldUpdate(field: string, value: unknown) {
+  if (!selectedServer.value) return
+  
+  const updates: Partial<Omit<McpServerConfig, 'name'>> = {}
+  
+  if (field === 'enabled') {
+    updates.enabled = value as boolean
+  } else if (field === 'type') {
+    updates.type = value as 'local' | 'remote'
+  } else if (field === 'command') {
+    const cmd = value as string
+    const args = editConfig.value.args || []
+    updates.command = [cmd, ...args]
+    updates.type = 'local'
+  } else if (field === 'args') {
+    const cmd = editConfig.value.command || ''
+    updates.command = [cmd, ...(value as string[])]
+  } else if (field === 'url') {
+    updates.url = value as string
+    updates.type = 'remote'
+  } else if (field === 'environment') {
+    updates.environment = { ...(value as Record<string, string>) }
+  } else if (field === 'timeout') {
+    updates.timeout = value as number
+  }
+  
+  const result = await window.desktop.lcode.mcpServer.update(selectedServer.value, updates)
+  if (result.success) {
+    await loadMcpConfig()
+    showToast('配置已更新', 'success')
+  } else {
+    showToast(`更新失败: ${result.error}`, 'error')
+  }
 }
 
 function handleNewConfigUpdate(config: McpConfig) {
@@ -350,64 +406,70 @@ function handleNewConfigUpdate(config: McpConfig) {
 }
 
 async function handleConnect(name: string) {
-  connecting.value = true
-  try {
-    await mcpStore.connect(name, directory.value)
-    await loadServerConfigs()
-  } finally {
-    connecting.value = false
-  }
+  await mcpStore.connect(name)
+  await loadMcpConfig()
 }
 
 async function handleDisconnect(name: string) {
-  connecting.value = true
-  try {
-    await mcpStore.disconnect(name, directory.value)
-    await loadServerConfigs()
-  } finally {
-    connecting.value = false
-  }
+  await mcpStore.disconnect(name)
+  await loadMcpConfig()
 }
 
 async function handleAddServer() {
+  console.log('[SettingsMcp] ADD server:', newConfig.value.name)
   const config = newConfig.value
   const errors = validateConfig(config)
-  if (errors.length > 0) return
-
-  const payload = {
-    name: config.name,
-    type: config.type,
-    enabled: config.enabled ?? true,
-    command: config.command ? [config.command, ...config.args || []] : undefined,
-    url: config.url,
-    environment: config.environment,
-    timeout: config.timeout
+  if (errors.length > 0) {
+    console.warn('[SettingsMcp] ADD validation errors:', errors)
+    return
   }
 
-  await mcpStore.addServer(payload, directory.value)
-  await loadServerConfigs()
-  showAddDialog.value = false
-  selectedServer.value = config.name
-  // Reset new config
-  newConfig.value = { name: '', type: 'local', enabled: true }
+  const mcpConfig: McpServerConfig = {
+    type: config.type,
+    enabled: config.enabled ?? true,
+    ...(config.type === 'local' && config.command
+      ? { command: [config.command, ...config.args || []] }
+      : {}),
+    ...(config.type === 'remote' && config.url ? { url: config.url } : {}),
+    ...(config.headers && Object.keys(config.headers).length > 0
+      ? { headers: { ...config.headers } }
+      : {}),
+    ...(config.environment ? { environment: { ...config.environment } } : {}),
+    ...(config.timeout ? { timeout: config.timeout } : {}),
+  }
+
+  console.log('[SettingsMcp] ADD mcpConfig:', JSON.stringify(mcpConfig))
+  const result = await window.desktop.lcode.mcpServer.add(config.name, mcpConfig)
+  console.log('[SettingsMcp] ADD result:', result)
+  if (result.success) {
+    await loadMcpConfig()
+    showAddDialog.value = false
+    selectedServer.value = config.name
+    newConfig.value = { name: '', type: 'local', enabled: true, headers: {} }
+    showToast(`服务器 "${config.name}" 已添加`, 'success')
+  } else {
+    showToast(`添加失败: ${result.error}`, 'error')
+  }
 }
 
 async function handleConfirmDelete() {
   if (!selectedServer.value) return
   
   const serverName = selectedServer.value
-  const result = await mcpStore.removeServer(serverName, directory.value)
+  console.log('[SettingsMcp] DELETE server:', serverName)
+  const result = await window.desktop.lcode.mcpServer.delete(serverName)
+  console.log('[SettingsMcp] DELETE result:', result)
   if (result.success) {
     showDeleteConfirm.value = false
     showToast(`服务器 "${serverName}" 已删除`, 'success')
-    // Clear selection if deleted server was selected
+    await loadMcpConfig()
     if (Object.keys(servers.value).length > 0) {
       selectedServer.value = Object.keys(servers.value)[0]
     } else {
       selectedServer.value = null
     }
   } else {
-    showToast(`删除失败`, 'error')
+    showToast(`删除失败: ${result.error}`, 'error')
   }
 }
 
@@ -445,20 +507,8 @@ function convertBackendStatus(status: string): McpServerStatus['status'] {
   }
 }
 
-// Backend config shape (ConfigMCPV1.Info = Local | Remote)
-interface BackendMcpConfig {
-  type: 'local' | 'remote'
-  command?: string[]
-  url?: string
-  enabled?: boolean
-  environment?: Record<string, string>
-  headers?: Record<string, string>
-  oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
-  timeout?: number
-}
-
-// Convert backend ConfigMCPV1.Info to frontend McpConfig
-function convertBackendConfig(name: string, cfg: BackendMcpConfig): McpConfig {
+// Convert backend McpServerConfig to frontend McpConfig
+function convertBackendConfig(name: string, cfg: McpServerConfig): McpConfig {
   if (cfg.type === 'local') {
     const [command, ...args] = cfg.command || []
     return {

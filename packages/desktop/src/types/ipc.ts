@@ -226,6 +226,9 @@ export interface ConsoleState {
   switchableOrgCount: number
 }
 
+// Re-export config types
+export type { LCodeGlobalConfig, McpServerConfig, ConfigPatch, ResultP, CustomProviderConfig } from './config'
+
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
   SESSION_GET: 'session:get',
@@ -251,9 +254,22 @@ export const IPC_CHANNELS = {
   CONFIG_SET: 'config:set',
   CONFIG_MODELS: 'config:models',
 
-  // Config file operations (lcode.jsonc, etc.) - handled directly in main process
-  CONFIG_FILE_READ: 'config-file:read',
-  CONFIG_FILE_WRITE: 'config-file:write',
+  // LCode config - domain-based naming
+  LCODE_CONFIG_READ: 'lcode:config:read',
+  LCODE_CONFIG_PATCH: 'lcode:config:patch',
+  
+  // MCP server - semantic operations
+  LCODE_MCP_SERVER_ADD: 'lcode:mcp-server:add',
+  LCODE_MCP_SERVER_UPDATE: 'lcode:mcp-server:update',
+  LCODE_MCP_SERVER_DELETE: 'lcode:mcp-server:delete',
+
+  // Model - semantic operations (provider-level models)
+  LCODE_MODEL_ADD: 'lcode:model:add',
+  LCODE_MODEL_DELETE: 'lcode:model:delete',
+
+  // Custom Provider - semantic operations
+  LCODE_CUSTOM_PROVIDER_ADD: 'lcode:custom-provider:add',
+  LCODE_CUSTOM_PROVIDER_DELETE: 'lcode:custom-provider:delete',
 
   PROVIDER_AUTH_METHODS: 'provider:auth-methods',
   PROVIDER_AUTHORIZE: 'provider:authorize',
@@ -264,6 +280,7 @@ export const IPC_CHANNELS = {
   PROVIDER_TEST: 'provider:test',
   PROVIDER_REFRESH_MODELS: 'provider:refresh-models',
   PROVIDER_DELETE_MODEL: 'provider:delete-model',
+  PROVIDER_REFRESH_ALL: 'provider:refresh-all',
 
   CONSOLE_GET: 'console:get',
   

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import CollapsiblePanel from './CollapsiblePanel.vue'
 
 const props = defineProps<{
   content: string
@@ -10,28 +9,70 @@ const props = defineProps<{
 
 const expanded = ref(false)
 
-const summary = computed(() => {
-  const firstLine = props.content.split('\n')[0]?.trim() ?? ''
-  return firstLine.length > 50 ? firstLine.slice(0, 50) + '…' : firstLine
-})
-
 const durationText = computed(() => {
   if (!props.duration) return ''
   const ms = props.duration
   if (ms < 1000) return `${ms}ms`
   return `${Math.floor(ms / 1000)}s`
 })
-
-const title = computed(() => {
-  const dur = durationText.value ? ` · ${durationText.value}` : ''
-  return expanded.value ? `- Thought: ${summary.value}${dur}` : `+ Thought: ${summary.value}${dur}`
-})
 </script>
 
 <template>
-  <CollapsiblePanel :title="title" :spinner="status === 'thinking'" :default-collapsed="true" @toggle="expanded = $event">
-    <template #body>
-      <div class="text-xs text-text-muted whitespace-pre-wrap">{{ content }}</div>
-    </template>
-  </CollapsiblePanel>
+  <div v-if="status === 'idle' && !content" />
+  <div v-else class="reasoning-block rounded border border-border my-2 overflow-hidden">
+    <div
+      class="reasoning-header flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
+      :class="status === 'thinking' ? 'cursor-default' : 'hover:bg-bg-surface'"
+      @click="status !== 'thinking' && (expanded = !expanded)"
+    >
+      <template v-if="status === 'thinking'">
+        <div class="flex items-center gap-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent reasoning-dot" />
+          <span class="w-1.5 h-1.5 rounded-full bg-accent/60 reasoning-dot" style="animation-delay: 0.15s" />
+          <span class="w-1.5 h-1.5 rounded-full bg-accent/40 reasoning-dot" style="animation-delay: 0.3s" />
+        </div>
+        <span class="text-xs text-text-muted font-medium">思考中...</span>
+      </template>
+      <template v-else>
+        <svg
+          class="w-3 h-3 text-text-muted transition-transform duration-150 shrink-0"
+          :class="{ 'rotate-90': expanded }"
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="text-xs text-text-muted font-medium">思考过程</span>
+        <span v-if="durationText" class="text-xs text-text-muted"> &middot; {{ durationText }}</span>
+      </template>
+    </div>
+
+    <div v-if="status === 'thinking'" class="reasoning-body border-t border-border px-3 py-2">
+      <div class="text-xs text-text-muted whitespace-pre-wrap leading-relaxed">{{ content }}</div>
+      <div v-if="!content" class="text-xs text-text-muted animate-pulse opacity-50">...</div>
+    </div>
+
+    <div v-else-if="expanded && content" class="reasoning-body border-t border-border px-3 py-2">
+      <div class="text-xs text-text-muted whitespace-pre-wrap leading-relaxed">{{ content }}</div>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.reasoning-dot {
+  animation: reasoning-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes reasoning-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+</style>

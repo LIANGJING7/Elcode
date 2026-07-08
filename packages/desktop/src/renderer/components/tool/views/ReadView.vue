@@ -14,6 +14,13 @@ const isFile = computed(() => props.vm.variant === 'file')
 const isDir = computed(() => props.vm.variant === 'directory')
 const isImage = computed(() => props.vm.variant === 'image')
 
+// Extract file name from path
+const fileName = computed(() => {
+  if (!props.vm.filePath) return ''
+  const parts = props.vm.filePath.split(/[\\/]/)
+  return parts[parts.length - 1] || props.vm.filePath
+})
+
 // Build numbered lines for the file variant
 const numberedLines = computed(() => {
   if (!isFile.value) return []
@@ -37,10 +44,11 @@ const fileVm = computed(() => props.vm as Extract<ReadViewModel, { variant: 'fil
   <div class="read-view text-xs">
     <!-- File content -->
     <template v-if="isFile">
-      <div class="text-text-muted mb-1 font-mono">
-        → Read {{ fileVm.filePath }}
-        <span v-if="fileVm.totalLines" class="text-text-muted"> · {{ fileVm.totalLines }} lines</span>
-        <span v-if="fileVm.truncated" class="text-warning"> · truncated</span>
+      <div class="flex items-center gap-2 text-text-muted mb-2 font-mono">
+        <span class="text-text flex-shrink-0">读取</span>
+        <span class="font-medium text-text" :title="fileVm.filePath">{{ fileName }}</span>
+        <span v-if="fileVm.options?.offset != null" class="text-text-muted">offset={{ fileVm.options.offset }}</span>
+        <span v-if="fileVm.options?.limit != null" class="text-text-muted">limit={{ fileVm.options.limit }}</span>
       </div>
       <div class="bg-code-bg rounded overflow-x-auto max-h-96 overflow-y-auto font-mono">
         <div
@@ -56,10 +64,10 @@ const fileVm = computed(() => props.vm as Extract<ReadViewModel, { variant: 'fil
 
     <!-- Directory listing -->
     <template v-else-if="isDir">
-      <div class="text-text-muted mb-1 font-mono">
-        → List {{ (vm as any).path }}
-        <span v-if="(vm as any).totalEntries != null"> · {{ (vm as any).totalEntries }} entries</span>
-        <span v-if="(vm as any).truncated" class="text-warning"> · truncated</span>
+      <div class="flex items-center gap-2 text-text-muted mb-2 font-mono">
+        <span class="text-text flex-shrink-0">读取</span>
+        <span class="font-medium text-text">{{ (vm as any).path }}</span>
+        <span v-if="(vm as any).totalEntries != null" class="text-text-muted">{{ (vm as any).totalEntries }} entries</span>
       </div>
       <div class="max-h-96 overflow-y-auto space-y-0.5 font-mono">
         <div
@@ -74,7 +82,10 @@ const fileVm = computed(() => props.vm as Extract<ReadViewModel, { variant: 'fil
 
     <!-- Image -->
     <template v-else-if="isImage">
-      <div class="text-text-muted mb-1 font-mono">→ Image {{ imgVm.filePath }}</div>
+      <div class="flex items-center gap-2 text-text-muted mb-2 font-mono">
+        <span class="text-text flex-shrink-0">读取</span>
+        <span class="font-medium text-text">{{ imgVm.fileName }}</span>
+      </div>
       <img :src="imgVm.dataUrl" :alt="imgVm.filePath" class="max-w-full rounded border border-border" />
     </template>
   </div>

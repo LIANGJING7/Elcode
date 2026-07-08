@@ -18,6 +18,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
 }>()
 
 const timelineRef = ref<ChatTimelineExpose>()
@@ -94,6 +96,8 @@ watch(
       :messages="messages"
       :streaming-message="streamingMessage"
       @open-file="emit('openFile', $event)"
+      @open-original-file="emit('openOriginalFile', $event)"
+      @open-diff-file="emit('openDiffFile', $event)"
     />
 
     <!-- Todo 面板: 输入框上方 -->

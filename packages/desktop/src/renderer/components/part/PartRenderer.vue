@@ -17,6 +17,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
   navigateSession: [sessionId: string]
   openSubagentPanel: [sessionId: string]  // New
 }>()
@@ -27,7 +29,10 @@ function handleOpenSubagentPanel(sessionId: string) {
 }
 
 const textPayload = computed(() => props.node.payload as { content: string })
-const toolPayload = computed(() => props.node.payload as ToolCall)
+const toolPayload = computed(() => {
+  const payload = props.node.payload
+  return payload as ToolCall
+})
 const reasoningPayload = computed(() => props.node.payload as { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null })
 </script>
 
@@ -38,6 +43,8 @@ const reasoningPayload = computed(() => props.node.payload as { content: string;
       v-else-if="node.type === 'tool'"
       :tool="toolPayload"
       @open-file="emit('openFile', $event)"
+      @open-original-file="emit('openOriginalFile', $event)"
+      @open-diff-file="emit('openDiffFile', $event)"
       @navigate-session="emit('navigateSession', $event)"
       @open-subagent-panel="handleOpenSubagentPanel($event)"
     />

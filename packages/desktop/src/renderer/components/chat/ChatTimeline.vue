@@ -17,7 +17,11 @@ const props = defineProps<{
   streamingMessage: Message | null
 }>()
 
-const emit = defineEmits<{ openFile: [tool: ToolCall] }>()
+const emit = defineEmits<{
+  openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
+}>()
 
 interface ScrollOptions {
   behavior?: ScrollBehavior
@@ -195,13 +199,24 @@ async function handleOpenSubagentPanel(sessionId: string) {
     <!-- 消息列表（连续 assistant 已按 user turn 聚合） -->
     <div v-for="item in aggregatedItems" :key="item.key">
       <MessageUser v-if="item.role === 'user'" :message="item.message" />
-      <MessageAssistant v-else :message="item.message" @open-file="emit('openFile', $event)" @open-subagent-panel="handleOpenSubagentPanel" />
+      <MessageAssistant 
+        v-else 
+        :message="item.message"
+        @open-file="emit('openFile', $event)"
+        @open-original-file="emit('openOriginalFile', $event)"
+        @open-diff-file="emit('openDiffFile', $event)"
+        @open-subagent-panel="handleOpenSubagentPanel"
+      />
     </div>
 
-    <!-- 流式消息 - DEBUG: always render when streamingMessage exists -->
+<!-- 流式消息 -->
     <div v-if="streamingMessage" class="streaming-container">
-      {{ console.log('[DEBUG ChatTimeline] Rendering StreamingMessage, streamingMessage:', streamingMessage) }}
-      <StreamingMessage @open-file="emit('openFile', $event)" @open-subagent-panel="handleOpenSubagentPanel" />
+      <StreamingMessage
+        @open-file="emit('openFile', $event)"
+        @open-original-file="emit('openOriginalFile', $event)"
+        @open-diff-file="emit('openDiffFile', $event)"
+        @open-subagent-panel="handleOpenSubagentPanel"
+      />
     </div>
     </div>
   </div>

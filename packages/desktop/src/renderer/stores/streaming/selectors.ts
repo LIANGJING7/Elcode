@@ -9,6 +9,7 @@ import { computed, type ComputedRef } from 'vue'
 import type { StreamingState, StreamingToolCall, ToolProgress } from './types'
 import { formatDuration, parseToolArgs } from './types'
 import { getToolCategory } from '../../tool/registry'
+import {ToolCall} from "../../../types/ipc";
 
 // ============================================
 // Tool Summary Types
@@ -211,7 +212,7 @@ export interface TimelineNode {
   id: string
   type: 'reasoning' | 'tool' | 'text' | 'queryGroup'
   order: number
-  payload: StreamingToolCall | StreamingToolCall[] | { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null } | { content: string }
+  payload: ToolCall | ToolCall[] | StreamingToolCall | StreamingToolCall[] | { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null } | { content: string }
 }
 
 /**
@@ -301,7 +302,7 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     // Add text if has content
     if (state.message.content) {
       nodes.push({
-        id: state.message.id ?? 'text',
+        id: 'text-content',
         type: 'text',
         order: order++,
         payload: {
@@ -375,7 +376,7 @@ export function textNode(state: StreamingState): ComputedRef<TimelineNode | null
   return computed(() => {
     if (!state.message.content) return null
     return {
-      id: state.message.id ?? 'text',
+      id: 'text-content',
       type: 'text',
       order: 0,
       payload: {

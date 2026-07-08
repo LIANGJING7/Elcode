@@ -7,7 +7,7 @@
 import type { ToolCall } from '../../types/ipc'
 
 /** Display mode — determines which renderer component to use */
-export type ToolDisplayMode = 'inline' | 'block' | 'subagent' | 'generic'
+export type ToolDisplayMode = 'inline' | 'block' | 'shell' | 'subagent' | 'generic' | 'none'
 
 /** Display context — for future multi-device support */
 export interface DisplayContext {
@@ -37,6 +37,9 @@ export interface ToolMeta {
   
   /** Optional error formatter */
   error?: (tool: ToolCall) => string
+  
+  /** Hide the status icon (✓/✗) for clean inline display */
+  hideStatusIcon?: boolean
 }
 
 /** Diagnostic for code errors */
