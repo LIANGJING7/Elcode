@@ -3,10 +3,12 @@
  * StreamingReasoning - Thinking/reasoning display
  * 
  * Shows reasoning process with:
- * - Real-time content display when thinking
+ * - Real-time content display when thinking (batched via useStreamingMarkdown)
  * - Collapsible content when done (always collapsible if has content)
  */
 import { ref, computed } from 'vue'
+import { useStreamingMarkdown } from '../../composables/useStreamingMarkdown'
+import MarkdownRenderer from '../chat/MarkdownRenderer.vue'
 
 const props = defineProps<{
   content: string
@@ -21,6 +23,10 @@ const hasContent = computed(() => props.content.length > 0)
 
 // Show content during thinking if there's content
 const showThinkingContent = computed(() => props.status === 'thinking' && props.content.length > 0)
+
+// Batch rendering via useStreamingMarkdown (100ms batch via requestAnimationFrame)
+const contentRef = computed(() => props.content)
+const { renderedContent } = useStreamingMarkdown(contentRef)
 </script>
 
 <template>
@@ -36,7 +42,9 @@ const showThinkingContent = computed(() => props.status === 'thinking' && props.
         <span class="text-xs text-text-muted">Thinking...</span>
       </div>
       <div class="px-3 pb-2 pt-1 border-t border-border">
-        <div class="text-xs text-text-muted whitespace-pre-wrap leading-relaxed">{{ content }}</div>
+        <div class="text-xs text-text-muted leading-relaxed">
+          <MarkdownRenderer :content="renderedContent" message-id="streaming-reasoning" />
+        </div>
       </div>
     </div>
 
@@ -68,7 +76,9 @@ const showThinkingContent = computed(() => props.status === 'thinking' && props.
       </button>
       
       <div v-if="expanded" class="px-3 pb-3 pt-1 border-t border-border mt-1">
-        <div class="text-xs text-text-muted whitespace-pre-wrap leading-relaxed">{{ content }}</div>
+        <div class="text-xs text-text-muted leading-relaxed">
+          <MarkdownRenderer :content="renderedContent" message-id="streaming-reasoning" />
+        </div>
       </div>
     </div>
   </div>

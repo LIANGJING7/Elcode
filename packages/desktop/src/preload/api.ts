@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
 import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef } from '../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../types/session'
+import type { FooterSubagentTab, FooterSubagentDetail, SubagentSnapshot, TabsPatch, DetailPatch } from '../types/subagent'
 
 export const desktopAPI = {
   session: {
@@ -61,7 +62,10 @@ export const desktopAPI = {
       }
       ipcRenderer.on(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
-    }
+    },
+
+    todo: (sessionID: string, directory?: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
   },
 
   file: {
@@ -210,6 +214,25 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_STATE_SET, data)
   },
 
+  subagent: {
+    watch: (sessionId: string): Promise<SubagentSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_WATCH, sessionId),
+
+    unwatch: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_UNWATCH, sessionId),
+
+    onTabsUpdate: (callback: (data: { sessionId: string; patch: TabsPatch; version: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; patch: TabsPatch; version: number }) => callback(data)
+      ipcRenderer.on('subagent:tabs:update', handler)
+      return () => ipcRenderer.removeListener('subagent:tabs:update', handler)
+    },
+
+    onDetailUpdate: (callback: (data: { sessionId: string; targetSessionId: string; patches: DetailPatch[]; version: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; targetSessionId: string; patches: DetailPatch[]; version: number }) => callback(data)
+      ipcRenderer.on('subagent:detail:update', handler)
+      return () => ipcRenderer.removeListener('subagent:detail:update', handler)
+    }
+  },
   retryStartup: (): Promise<void> =>
     ipcRenderer.invoke('retry-startup')
 }

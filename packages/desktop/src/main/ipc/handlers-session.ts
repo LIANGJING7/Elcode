@@ -79,6 +79,7 @@ function toToolCall(
   state: {
     status: string
     input?: Record<string, unknown> | string
+    output?: string
     result?: unknown
     structured?: Record<string, unknown>
     content?: unknown[]
@@ -100,9 +101,63 @@ function toToolCall(
       ? completed - ran
       : undefined
 
-  const hasOutput = state?.result !== undefined || state?.structured || state?.content
+  // V1 tools store output as a plain string; try to extract structured data
+  let parsedOutput: { structured?: unknown; text?: string } | undefined
+  let extractedSessionId: string | undefined
+  
+  if (!state?.result && !state?.structured && !state?.content && typeof state?.output === 'string') {
+    const outputStr = state.output
+    console.log('[DEBUG toToolCall] V1 output detected for tool:', name, 'id:', id)
+    console.log('[DEBUG toToolCall]   state.output:', outputStr.slice(0, 300))
+    
+    // Try JSON format first: {"structured": {...}, "text": "..."}
+    try {
+      parsedOutput = JSON.parse(outputStr)
+      const structuredStr = JSON.stringify(parsedOutput?.structured)
+      console.log('[DEBUG toToolCall]   JSON parse success, structured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
+    } catch (e) {
+      // Fall back to XML format: <task id="sessionId" state="...">
+      console.log('[DEBUG toToolCall]   JSON parse failed, trying XML extraction')
+      parsedOutput = undefined
+      
+      // Extract sessionId from <task id="xxx"> attribute
+      const taskIdMatch = outputStr.match(/<task\s+id="([^"]+)"/)
+      if (taskIdMatch) {
+        extractedSessionId = taskIdMatch[1]
+        console.log('[DEBUG toToolCall]   XML extraction success, sessionId:', extractedSessionId)
+        
+        // Also try to extract state attribute
+        const stateMatch = outputStr.match(/<task[^>]+state="([^"]+)"/)
+        const taskState = stateMatch ? stateMatch[1] : 'completed'
+        
+        // Build structured from XML attributes
+        parsedOutput = {
+          structured: {
+            type: 'task',
+            sessionId: extractedSessionId,
+            sessionID: extractedSessionId,
+            state: taskState,
+          },
+          text: outputStr,
+        }
+      } else {
+        console.log('[DEBUG toToolCall]   XML extraction failed, no <task id=...> found')
+      }
+    }
+  }
 
-  return {
+  const actualStructured = (state?.structured ?? parsedOutput?.structured) as Record<string, unknown> | undefined
+  const actualResult = state?.result ?? (parsedOutput && !actualStructured ? parsedOutput : undefined)
+  const hasOutput = actualResult !== undefined || actualStructured !== undefined || state?.content
+
+  console.log('[DEBUG toToolCall] final output for tool:', name)
+  const structuredStr = JSON.stringify(actualStructured)
+  console.log('[DEBUG toToolCall]   actualStructured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
+  const resultStr = typeof actualResult === 'string' ? actualResult : JSON.stringify(actualResult)
+  console.log('[DEBUG toToolCall]   actualResult:', resultStr ? resultStr.slice(0, 100) : 'undefined')
+  console.log('[DEBUG toToolCall]   hasOutput:', hasOutput)
+
+  const toolCall: ToolCall = {
     id,
     name,
     args,
@@ -110,8 +165,8 @@ function toToolCall(
     ...(hasOutput
       ? {
           output: {
-            ...(state?.result !== undefined ? { result: state.result } : {}),
-            ...(state?.structured ? { structured: state.structured as never } : {}),
+            ...(actualResult !== undefined ? { result: actualResult } : {}),
+            ...(actualStructured ? { structured: actualStructured as never } : {}),
             ...(state?.content ? { content: state.content as never } : {}),
           },
         }
@@ -119,6 +174,10 @@ function toToolCall(
     ...(state?.error?.message ? { error: state.error.message } : {}),
     ...(duration !== undefined ? { duration } : {}),
   }
+  
+  const outputStr = JSON.stringify(toolCall.output)
+  console.log('[DEBUG toToolCall]   returning toolCall.output:', outputStr ? outputStr.slice(0, 300) : 'undefined')
+  return toolCall
 }
 
 /** Parse a JSON string to args object; tolerate plain strings. */
@@ -148,7 +207,15 @@ function toMessage(msg: BackendMessage): Message | null {
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
-      ? toolParts.map(p => toToolCall(p.callID || '', p.tool || '', p.state))
+      ? toolParts.map(p => {
+        console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
+        console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
+        console.log('[DEBUG toMessage V1]   p.state.output:', p.state?.output ? (typeof p.state.output === 'string' ? p.state.output.slice(0, 200) : JSON.stringify(p.state.output).slice(0, 200)) : 'undefined')
+        console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
+        console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
+        console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
+        return toToolCall(p.callID || '', p.tool || '', p.state)
+      })
       : undefined
 
     return {
@@ -256,10 +323,27 @@ export function registerSessionHandlers() {
 
   ipcMain.handle(CHANNELS.SESSION_MESSAGES, async (_event, sessionID: string, limit?: number, directory?: string) => {
     const raw = await backend.session.messages(sessionID, limit, directory)
-    // Convert backend messages (V1 or V2) to desktop Message[], filtering out non-displayable types
-    return raw
+    const messages = raw
       .map((msg) => toMessage(msg as BackendMessage))
       .filter((m): m is Message => m !== null)
+    
+    // Ensure data is IPC-safe: fix invalid Dates, deep clone tool output
+    return messages.map(msg => {
+      let timestamp = msg.timestamp
+      if (timestamp instanceof Date && isNaN(timestamp.getTime())) {
+        console.warn('[SESSION_MESSAGES] Invalid Date for msg:', msg.id)
+        timestamp = new Date()
+      }
+      
+      return {
+        ...msg,
+        timestamp,
+        toolCalls: msg.toolCalls?.map(tc => ({
+          ...tc,
+          output: tc.output ? JSON.parse(JSON.stringify(tc.output)) : undefined,
+        })),
+      }
+    })
   })
 
   ipcMain.handle(CHANNELS.SESSION_PROMPT, async (event, sessionID: string, prompt: PromptInput[], options?: PromptOptions, directory?: string) => {
@@ -357,6 +441,10 @@ export function registerSessionHandlers() {
     return await backend.session.update(sessionID, patch, directory)
   })
 
+  ipcMain.handle(CHANNELS.SESSION_TODO, async (_event, sessionID: string, directory?: string) => {
+    return await backend.session.todo(sessionID, directory)
+  })
+
   // Provider handlers
   ipcMain.handle(CHANNELS.PROVIDER_AUTH_METHODS, async (_event, directory?: string) => {
     return await backend.provider.authMethods(directory)
@@ -428,9 +516,12 @@ export function registerSessionHandlers() {
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
   if (!sessionStreams.has(sessionID)) {
     const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
+      // Deep serialize event to ensure IPC compatibility
+      // Some events may contain non-serializable objects
+      const serializedEvent = JSON.parse(JSON.stringify(event))
       webContents.send(CHANNELS.SESSION_STREAM_EVENT, {
         sessionID,
-        event
+        event: serializedEvent
       })
     })
     sessionStreams.set(sessionID, unsubscribe)

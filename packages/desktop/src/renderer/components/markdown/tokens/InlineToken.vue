@@ -18,7 +18,10 @@ function renderTokens(tokens: any[]): VNode[] {
   while (i < tokens.length) {
     const t = tokens[i]
 
-    if (t.type === 'text') {
+    // inline token 的内容在 children 里
+    if (t.type === 'inline' && t.children) {
+      result.push(...renderTokens(t.children))
+    } else if (t.type === 'text') {
       result.push(h('span', t.content))
     } else if (t.type === 'softbreak' || t.type === 'hardbreak') {
       result.push(h('br'))
@@ -95,7 +98,7 @@ function skipUntilClose(tokens: any[], openIdx: number, closeType: string): numb
   return tokens.length
 }
 
-const rendered = () => h('span', renderTokens(props.tokens))
+const rendered = () => h('span', renderTokens(props.tokens ?? []))
 </script>
 
 <template>

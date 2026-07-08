@@ -4,6 +4,8 @@
  * Based on design doc: docs/superpowers/specs/2026-06-29-desktop-chat-streaming-design.md
  */
 
+import type { ToolCall, ToolOutput } from '../../../types/ipc'
+
 // ============================================
 // Core State Types
 // ============================================
@@ -40,10 +42,8 @@ export type StreamingStatus = 'idle' | 'streaming' | 'done' | 'error'
 export interface MessageState {
   /** Message ID from backend */
   id: string | null
-  /** Rendered content */
+  /** Rendered content - direct append from deltas */
   content: string
-  /** Delta buffer - consumed by RAF scheduler */
-  pending: string[]
 }
 
 export interface ReasoningState {
@@ -51,10 +51,8 @@ export interface ReasoningState {
   id: string | null
   /** Reasoning status */
   status: 'idle' | 'thinking' | 'done'
-  /** Raw reasoning content */
+  /** Raw reasoning content - direct append from deltas */
   content: string
-  /** Delta buffer for reasoning */
-  pending: string[]
   /** Start timestamp */
   startedAt: number | null
   /** End timestamp */
@@ -166,13 +164,11 @@ export function createInitialState(version: number = 0): StreamingState {
     message: {
       id: null,
       content: '',
-      pending: []
     },
     reasoning: {
       id: null,
       status: 'idle',
       content: '',
-      pending: [],
       startedAt: null,
       endedAt: null
     },
@@ -181,7 +177,7 @@ export function createInitialState(version: number = 0): StreamingState {
       // It will be wrapped in reactive() in the store
       entities: new Map()
     },
-    // Pending deltas for message.part events - also wrapped in reactive() in the store
+    // Pending deltas for V1 message.part events - still needed
     pendingDeltas: new Map(),
     // Completed reasoning blocks from previous steps
     reasoningHistory: []
@@ -222,4 +218,46 @@ export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+}
+
+/** Convert StreamingToolCall to ToolCall (for compatibility with presentation layer) */
+export function streamingToolToToolCall(tool: StreamingToolCall): ToolCall {
+  const args = parseToolArgs(tool.rawInput)
+  const output: ToolOutput = {}
+  
+  if (tool.rawOutput) {
+    try {
+      const parsedOutput = JSON.parse(tool.rawOutput)
+      console.log('[streamingToolToToolCall] tool:', tool.name, 'rawOutput parsed:', JSON.stringify(parsedOutput).slice(0, 500))
+      console.log('[streamingToolToToolCall] parsedOutput.structured:', JSON.stringify(parsedOutput?.structured).slice(0, 300))
+      output.result = parsedOutput
+      output.structured = parsedOutput?.structured ?? { type: 'unknown' }
+      output.content = parsedOutput?.content ?? undefined
+    } catch {
+      output.result = tool.rawOutput
+    }
+  }
+  
+  if (tool.progress && tool.progress.length > 0) {
+    const content = tool.progress
+      .filter(p => p.type === 'text')
+      .map(p => ({ type: 'text' as const, text: p.message }))
+    if (content.length > 0) {
+      output.content = content
+    }
+  }
+  
+  if (tool.error && !output.result) {
+    output.result = { error: tool.error }
+  }
+  
+  return {
+    id: tool.id,
+    name: tool.name,
+    status: mapLifecycleToStatus(tool.lifecycle),
+    args,
+    output: output.result || output.content || output.structured ? output : undefined,
+    error: tool.error ?? undefined,
+    duration: tool.endedAt && tool.startedAt ? tool.endedAt - tool.startedAt : undefined,
+  }
 }

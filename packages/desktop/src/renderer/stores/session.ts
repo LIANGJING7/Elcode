@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem } from '../../types/ipc'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
 import { useUiStore } from './ui'
+import { useSessionTodoStore } from './sessionTodo'
 import { mapLifecycleToStatus, parseToolArgs } from './streaming/types'
 
 // Default time filter: last 30 days
@@ -36,6 +37,7 @@ export const useSessionStore = defineStore('session', () => {
   const workspaceStore = useWorkspaceStore()
   const streamingStore = useStreamingStore()
   const ui = useUiStore()
+  const sessionTodoStore = useSessionTodoStore()
 
   // ========================================
   // Query Layer - 查询参数
@@ -177,17 +179,35 @@ export const useSessionStore = defineStore('session', () => {
     state.error = null
 
     try {
-      console.log('[SESSION_STORE_RELOAD] Calling window.desktop.session.list...')
+      console.log('[SESSION_STORE_RELOAD] Calling window.desktop.session.list with params:', {
+        directory: query.directory,
+        workspace: query.workspace,
+        start: query.start,
+        search: query.search,
+        limit: query.limit,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
+      })
       const result = await window.desktop.session.list({
         directory: query.directory,
         workspace: query.workspace,
         start: query.start,
         search: query.search,
         limit: query.limit,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       console.log('[SESSION_STORE_RELOAD] Result received:', JSON.stringify(result).slice(0, 500))
       console.log('[SESSION_STORE_RELOAD] Conversations count:', result.conversations?.length ?? 0)
+      
+      // Debug: Check if any conversation has parent_id (should be null for roots)
+      if (result.conversations && result.conversations.length > 0) {
+        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+        console.log('[SESSION_STORE_RELOAD] Conversations with parent_id (SHOULD BE 0):', withParentId.length)
+        if (withParentId.length > 0) {
+          console.error('[SESSION_STORE_RELOAD] BUG: Backend returned child sessions despite roots=true!', 
+            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+        }
+      }
 
       if (currentGen !== generation) {
         console.log('[SESSION_STORE_RELOAD] Generation mismatch, skipping - current:', currentGen, 'latest:', generation)
@@ -250,12 +270,28 @@ export const useSessionStore = defineStore('session', () => {
     state.error = null
 
     try {
+      console.log('[SESSION_STORE_LOADMORE] Calling window.desktop.session.list with params:', {
+        ...query,
+        cursor: pagination.nextCursor,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
+      })
       const result = await window.desktop.session.list({
         ...query,
         cursor: pagination.nextCursor,
+        roots: true,  // Only return root sessions (exclude subagent child sessions)
       })
 
       if (currentGen !== generation) return
+
+      // Debug: Check if any conversation has parent_id
+      if (result.conversations && result.conversations.length > 0) {
+        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+        console.log('[SESSION_STORE_LOADMORE] Loaded', result.conversations.length, 'conversations, with parent_id (SHOULD BE 0):', withParentId.length)
+        if (withParentId.length > 0) {
+          console.error('[SESSION_STORE_LOADMORE] BUG: Backend returned child sessions despite roots=true!', 
+            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+        }
+      }
 
       // Append 去重
       const ids = new Set(state.conversations.map(c => c.id))
@@ -475,6 +511,17 @@ export const useSessionStore = defineStore('session', () => {
     if (!workspaceStore.currentWorkspace?.path) return
     try {
       const msgs = await window.desktop.session.messages(sessionId, 100, workspaceStore.currentWorkspace?.path)
+      console.log('[DEBUG loadMessages] received msgs count:', msgs.length)
+      // Log tool calls structured data
+      msgs.forEach((msg, idx) => {
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          msg.toolCalls.forEach((tc, tcIdx) => {
+            console.log(`[DEBUG loadMessages] msg[${idx}] toolCall[${tcIdx}] name:`, tc.name)
+            console.log(`[DEBUG loadMessages]   tc.output keys:`, tc.output ? Object.keys(tc.output) : 'undefined')
+            console.log(`[DEBUG loadMessages]   tc.output.structured:`, tc.output?.structured ? JSON.stringify(tc.output.structured).slice(0, 200) : 'undefined')
+          })
+        }
+      })
       const conv = state.conversations.find(c => c.id === sessionId)
       if (conv) {
         const existingMap = new Map(conv.messages.map(m => [m.id, m]))
@@ -785,7 +832,22 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       if (eventSessionId) {
-        streamingStore.handleEvent(eventSessionId, data.event)
+        const rawEvent = data.event as { type?: string }
+        if (rawEvent.type === 'todo.updated') {
+          console.log('[SSE] todo.updated event received, eventSessionId:', eventSessionId, 'currentSessionId:', currentSessionId.value)
+          const props = (data.event as { properties?: { sessionID?: string; todos?: TodoItem[] } }).properties
+          if (props?.sessionID && props?.todos) {
+            sessionTodoStore.handleTodoUpdated({
+              type: 'todo.updated',
+              sessionID: props.sessionID,
+              todos: props.todos
+            })
+          } else {
+            console.error('[SSE] todo.updated missing properties:', data.event)
+          }
+        } else {
+          streamingStore.handleEvent(eventSessionId, data.event)
+        }
         
         // STREAM_DONE: trigger processQueue (event-driven)
         // stream.ended: SSE connection closed (backend normal completion or error)

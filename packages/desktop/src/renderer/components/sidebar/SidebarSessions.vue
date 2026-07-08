@@ -25,6 +25,14 @@ watch(
     console.log('[SIDEBAR_SESSIONS] Conversations updated:', convs.length, 'items')
     if (convs.length > 0) {
       console.log('[SIDEBAR_SESSIONS] First conversation:', JSON.stringify(convs[0]).slice(0, 150))
+      
+      // Check for child sessions (should not exist)
+      const childSessions = convs.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+      console.log('[SIDEBAR_SESSIONS] Child sessions in list (SHOULD BE 0):', childSessions.length)
+      if (childSessions.length > 0) {
+        console.error('[SIDEBAR_SESSIONS] BUG: Child sessions appearing in Sidebar!', 
+          childSessions.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+      }
     }
   },
   { immediate: true }
@@ -153,7 +161,7 @@ function isSessionStreaming(sessionId: string): boolean {
           class="session-row group w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-xs transition-colors duration-fast cursor-pointer"
           :class="[
             c.id === currentSessionId
-              ? 'is-active bg-accent-muted text-accent ring-1 ring-accent/20'
+              ? 'is-active bg-accent-muted text-accent'
               : 'text-text-secondary hover:bg-bg-hover hover:text-text',
             isSessionStreaming(c.id) ? 'streaming-session' : ''
           ]"
@@ -229,6 +237,12 @@ function isSessionStreaming(sessionId: string): boolean {
 </template>
 
 <style scoped>
+/* 选中会话样式 */
+.session-row.is-active {
+  background-color: var(--color-accent-muted);
+  font-weight: 500;
+}
+
 /* 正在生成的会话样式 */
 .streaming-session {
   position: relative;

@@ -9,6 +9,7 @@ import { registerSkillHandlers } from './handlers-skill'
 import { registerMcpHandlers } from './handlers-mcp'
 import { registerWindowHandlers } from './handlers-window'
 import { registerGlobalStateHandlers } from './handlers-global-state'
+import { registerSubagentHandlers } from './handlers-subagent'
 
 ;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
@@ -21,6 +22,7 @@ export async function registerIPCHandlers() {
   registerMcpHandlers()
   registerWindowHandlers()
   registerGlobalStateHandlers()
+  registerSubagentHandlers()
 
   ipcMain.handle(CHANNELS.WORKSPACE_GET_CWD, () => {
     return process.cwd()

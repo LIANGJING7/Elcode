@@ -101,6 +101,7 @@ export type FileTabStatus = 'loading' | 'ready' | 'error'
 
 export interface FileTab {
   id: string
+  type: 'file'  // Discriminator for PanelTab union type
   title: string
   subtitle?: string
   filePath?: string  // 仅文件类工具需要
@@ -114,3 +115,8 @@ export interface FileTab {
     foldedHunks?: string[]
   }
 }
+
+// ===== PanelTab (Unified Tab System) =====
+import type { SubagentTab } from './subagent'
+
+export type PanelTab = FileTab | SubagentTab

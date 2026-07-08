@@ -67,9 +67,13 @@ function makeFakeTab(id: string, filePath: string = 'src/app.ts'): FileTab {
     fileName,
     directory,
     lines: [],
+    totalLines: 0,
+    truncated: false,
+    lineStart: 0,
     options: { wrap: false, showLineNumbers: true },
   }
   return {
+    type: 'file',
     id,
     title: fileName,
     subtitle: directory,

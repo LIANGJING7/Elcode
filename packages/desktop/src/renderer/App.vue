@@ -121,6 +121,7 @@ import { useModelsStore } from './stores/models'
 import { useThemeStore } from './stores/theme'
 import { useMcpStore } from './stores/mcp'
 import { useSkillStore } from './stores/skill'
+import { useSubagentStore } from './stores/subagent'
 import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
 useGlobalShortcuts()
@@ -132,6 +133,7 @@ const modelsStore = useModelsStore()
 const themeStore = useThemeStore()
 const mcpStore = useMcpStore()
 const skillStore = useSkillStore()
+const subagentStore = useSubagentStore()
 
 const sidebarWidth = '260px'
 
@@ -216,10 +218,37 @@ watch(
   }
 )
 
+// Bind subagent watch to Session lifecycle
+watch(
+    () => sessionStore.currentSessionId,
+    (newId, oldId) => {
+      if (newId) {
+        // Pass current messages for bootstrap (extract subagent tabs from history)
+        subagentStore.watch(newId, sessionStore.currentMessages)
+      } else {
+        subagentStore.unwatch()
+      }
+    },
+    { immediate: true }
+  )
+
 let cleanupListeners: (() => void) | null = null
+let cleanupSubagentListeners: (() => void) | null = null
 
 onMounted(async () => {
   cleanupListeners = sessionStore.setupStreamListeners()
+
+  // Setup subagent IPC listeners
+  const cleanupTabs = window.desktop.subagent.onTabsUpdate((data) => {
+    subagentStore.updateTabs(data)
+  })
+  const cleanupDetail = window.desktop.subagent.onDetailUpdate((data) => {
+    subagentStore.updateDetail(data)
+  })
+  cleanupSubagentListeners = () => {
+    cleanupTabs()
+    cleanupDetail()
+  }
 
   await themeStore.loadTheme()
 
@@ -246,6 +275,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   cleanupListeners?.()
+  cleanupSubagentListeners?.()
 })
 
 async function handleAddWorkspace() {

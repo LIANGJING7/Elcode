@@ -51,8 +51,6 @@ export function streamingReducer(
       // Don't set status to 'done' — backend may send more steps.
       // Only STREAM_DONE (final terminal event) sets done.
       // Don't touch reasoning status here — let REASONING_STARTED/ENDED manage it.
-      // Reset reasoning pending so deltas from this step are flushed.
-      state.reasoning.pending = []
       return state
 
     case 'STREAM_DONE':
@@ -73,22 +71,17 @@ export function streamingReducer(
 
     case 'TEXT_DELTA':
       state.status = 'streaming'
-      // Push to array directly - Vue tracks array.push() on reactive arrays
-      state.message.pending.push(action.delta)
+      // Directly append to content - component layer will batch render via useStreamingMarkdown
+      state.message.content = state.message.content + action.delta
       return state
 
     case 'TEXT_ENDED':
-      // Append text from this step (multi-step responses have multiple text blocks)
-      // TEXT_DELTA already accumulates via pending, so TEXT_ENDED's full text
-      // may duplicate deltas. Only append if content is different from current.
       state.message.id = action.messageId
-      const newText = action.text
-      if (state.message.content !== newText && !state.message.content.endsWith(newText.slice(-100))) {
-        // New step's text — append with separator
-        state.message.content = state.message.content + (state.message.content ? '\n\n' : '') + newText
+      // TEXT_DELTA already appended deltas, no need to duplicate
+      // Only use TEXT_ENDED if no deltas were received (edge case)
+      if (state.message.content.length === 0 && action.text) {
+        state.message.content = action.text
       }
-      // If content matches, deltas already covered it — just clear pending
-      state.message.pending = []
       return state
 
     // ============================================
@@ -102,15 +95,17 @@ export function streamingReducer(
 
     case 'REASONING_DELTA':
       state.reasoning.status = 'thinking'
-      // Push to array directly - Vue tracks array.push() on reactive arrays
-      state.reasoning.pending.push(action.delta)
+      // Directly append to content - component layer will batch render
+      state.reasoning.content = state.reasoning.content + action.delta
       return state
 
     case 'REASONING_ENDED':
-      // Append reasoning from this step (multi-step responses have multiple reasoning blocks)
       state.reasoning.status = 'done'
-      state.reasoning.content = state.reasoning.content + action.text
-      state.reasoning.pending = []
+      // REASONING_DELTA already appended deltas
+      // Only use REASONING_ENDED text if no deltas received (edge case)
+      if (state.reasoning.content.length === 0 && action.text) {
+        state.reasoning.content = action.text
+      }
       state.reasoning.endedAt = Date.now()
       return state
 
@@ -204,7 +199,11 @@ export function streamingReducer(
     case 'TOOL_SUCCESS':
       // Tool completed successfully
       const toolForSuccess = state.tools.entities.get(action.callId)
-      if (!toolForSuccess) return state
+      if (!toolForSuccess) {
+        console.log('[Reducer] TOOL_SUCCESS - tool not found:', action.callId)
+        return state
+      }
+      console.log('[Reducer] TOOL_SUCCESS:', action.callId, 'tool name:', toolForSuccess.name, 'output:', action.output)
 
       const output = action.output
       const rawOutput = typeof output === 'string' 
@@ -219,7 +218,11 @@ export function streamingReducer(
     case 'TOOL_FAILED':
       // Tool failed
       const toolForFailed = state.tools.entities.get(action.callId)
-      if (!toolForFailed) return state
+      if (!toolForFailed) {
+        console.log('[Reducer] TOOL_FAILED - tool not found:', action.callId)
+        return state
+      }
+      console.log('[Reducer] TOOL_FAILED:', action.callId, 'tool name:', toolForFailed.name, 'error:', action.error)
 
       toolForFailed.lifecycle = 'failed'
       toolForFailed.error = action.error.message
@@ -246,26 +249,5 @@ export function toggleToolExpanded(
   if (!tool) return state
 
   tool.expanded = !tool.expanded
-  return state
-}
-
-/**
- * Consume pending deltas (called by RenderScheduler) - directly mutate state
- */
-export function consumePendingDeltas(state: StreamingState): StreamingState {
-  // Consume message pending
-  const messagePending = state.message.pending
-  if (messagePending.length > 0) {
-    state.message.content = state.message.content + messagePending.join('')
-    state.message.pending = []
-  }
-
-  // Consume reasoning pending
-  const reasoningPending = state.reasoning.pending
-  if (reasoningPending.length > 0) {
-    state.reasoning.content = state.reasoning.content + reasoningPending.join('')
-    state.reasoning.pending = []
-  }
-
   return state
 }
