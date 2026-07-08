@@ -70,8 +70,7 @@ function getStatusChar(status: string, isFailed: boolean): string {
       <svg class="w-3 h-3 text-text-muted transition-transform duration-150" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
       </svg>
-      <span class="text-xs">🔍</span>
-      <span class="text-xs font-medium">Search</span>
+      <span class="text-xs font-medium">已搜索</span>
       <span class="text-xs text-text-muted">({{ tools.length }})</span>
       <span v-if="hasFailures" class="text-xs text-error font-medium">✗ {{ failedCount }}</span>
     </div>

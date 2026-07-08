@@ -30,6 +30,12 @@ export type ToolCategory = 'execution' | 'query' | 'default'
  *  - 'none'   : no click response (for pure display tools) */
 export type ToolInteraction = 'inline' | 'panel' | 'none'
 
+/** How a tool is displayed in the timeline.
+ *  - 'inline' : compact row + expandable detail (edit/write/bash/todo/task)
+ *  - 'panel'  : compact row + right-side panel (grep/glob/read/web_*)
+ *  - 'none'   : hidden from timeline (internal tools only) */
+export type ToolDisplay = 'inline' | 'panel' | 'none'
+
 /** ToolMeta — declares how a tool is displayed. The Presenter hook
  *  `createViewModel` converts a ToolCall into a local ViewModel for the
  *  paired Vue component. */
@@ -48,6 +54,8 @@ export interface ToolMeta<V extends ToolViewModel = ToolViewModel> {
   createViewModel: (tool: ToolCall) => V
   /** Default interaction when the compact row is clicked. */
   defaultInteraction: ToolInteraction
+  /** How the tool appears in timeline. */
+  display?: ToolDisplay
   /** Tool category - determines grouping in timeline. */
   category: ToolCategory
 }

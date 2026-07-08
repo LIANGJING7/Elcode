@@ -8,6 +8,7 @@ const props = defineProps<{
   pending: string
   status: 'pending' | 'running' | 'completed' | 'error'
   error?: string
+  hideStatusIcon?: boolean
 }>()
 
 const emit = defineEmits<{ click: [] }>()
@@ -29,15 +30,15 @@ const handleClick = () => {
 </script>
 
 <template>
-  <div class="inline-tool flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="handleClick">
+  <div class="inline-tool flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="handleClick">
     <template v-if="status === 'running'">
       <span class="animate-pulse text-warning">●</span>
-      <span class="text-xs text-text-muted">{{ pending }}</span>
+      <span class="text-sm text-text-muted">{{ pending }}</span>
     </template>
     <template v-else>
-      <span :class="['text-sm w-4 text-center', statusIcon.class]">{{ statusIcon.char }}</span>
-      <span class="text-xs text-accent w-4 text-center">{{ icon }}</span>
-      <span class="text-xs text-text-primary font-medium flex-1 truncate">{{ summary }}</span>
+      <span v-if="!hideStatusIcon" :class="['text-sm w-4 text-center', statusIcon.class]">{{ statusIcon.char }}</span>
+      <span v-if="icon" class="text-xs text-accent w-4 text-center">{{ icon }}</span>
+      <span class="text-xs text-text-primary flex-1 truncate" v-html="summary"></span>
     </template>
   </div>
   <div v-if="error && errorExpanded" class="error-detail ml-8 mt-1 text-xs text-error bg-error/10 p-2 rounded">{{ error }}</div>

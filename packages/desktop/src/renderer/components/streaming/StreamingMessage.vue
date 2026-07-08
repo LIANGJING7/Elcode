@@ -13,6 +13,8 @@ import TimelineRenderer from '../timeline/TimelineRenderer.vue'
 
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
 }>()
 
 const streamingStore = useStreamingStore()
@@ -34,6 +36,8 @@ const isStreaming = computed(() => streamingStore.isCurrentStreaming.value)
         :nodes="nodes"
         :is-streaming="isStreaming"
         @open-file="emit('openFile', $event)"
+        @open-original-file="emit('openOriginalFile', $event)"
+        @open-diff-file="emit('openDiffFile', $event)"
       />
 
       <div v-if="nodes.length === 0" class="flex items-center gap-3">

@@ -69,13 +69,22 @@
       </div>
       <div v-else class="drag flex-1"></div>
 
-      <!-- 右侧: 给 titleBarOverlay 窗口控制按钮留空间 -->
-      <div class="drag flex-shrink-0" style="width: 138px"></div>
+      <div class="flex items-center flex-shrink-0">
+        <button class="no-drag w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-bg-hover transition-colors" @click="ui.toggleSidebar()" title="切换侧边栏">
+          <svg class="w-4 h-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
+        <div style="width: 142px"></div>
+      </div>
     </div>
 
     <!-- 主体: 侧边栏 + 内容区 + FileTabsPanel -->
     <div class="flex flex-1 min-h-0">
-      <Sidebar v-show="ui.sidebarOpen" />
+      <Transition name="sidebar">
+        <Sidebar v-show="ui.sidebarOpen" />
+      </Transition>
 
       <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
         <WelcomeView v-if="effectiveView === 'welcome'" key="welcome" @open-folder="handleAddWorkspace" />
@@ -257,6 +266,13 @@ onMounted(async () => {
     }
   }
 
+  window.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.key === '\\') {
+      e.preventDefault()
+      ui.toggleSidebar()
+    }
+  })
+
   if (workspaceStore.currentWorkspace) {
     const path = workspaceStore.currentWorkspace.path
     await Promise.allSettled([
@@ -302,5 +318,26 @@ function handleOpenFile(tool: ToolCall) {
   background-image:
     radial-gradient(ellipse at top left, var(--color-accent-glow) 0%, transparent 50%),
     radial-gradient(ellipse at bottom right, var(--color-accent-muted) 0%, transparent 50%);
+}
+
+.sidebar-enter-active,
+.sidebar-leave-active {
+  transition: all 0.2s ease-out;
+}
+
+.sidebar-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.sidebar-enter-to,
+.sidebar-leave-from {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.sidebar-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
 }
 </style>

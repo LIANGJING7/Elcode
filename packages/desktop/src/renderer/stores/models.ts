@@ -1,6 +1,6 @@
 // packages/desktop/src/renderer/stores/models.ts
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, toRaw } from 'vue'
 import { registerSessionOption } from '../composer/sessionOptionsRegistry'
 
 export interface ProviderModel {
@@ -296,7 +296,7 @@ async function loadModels(directory?: string) {
         const globalState = await window.desktop.globalState.get()
         await window.desktop.globalState.set({
           ...globalState,
-          recent: recentModels.value
+          recent: toRaw(recentModels.value)
         })
       } catch (e) {
         console.error('[setSelectedModel] 保存 recentModels 失败:', e)

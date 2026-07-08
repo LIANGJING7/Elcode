@@ -14,8 +14,10 @@ import ReasoningBlock from '../chat/ReasoningBlock.vue'
 import CodeBlock from '../chat/CodeBlock.vue'
 
 const props = defineProps<{ message: Message }>()
-const emit = defineEmits<{ 
+const emit = defineEmits<{
   openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
   openSubagentPanel: [sessionId: string]  // New
 }>()
 
@@ -145,6 +147,8 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
     <TimelineRenderer
       :nodes="timelineNodes"
       @open-file="emit('openFile', $event)"
+      @open-original-file="emit('openOriginalFile', $event)"
+      @open-diff-file="emit('openDiffFile', $event)"
       @open-subagent-panel="handleOpenSubagentPanel($event)"
     />
 

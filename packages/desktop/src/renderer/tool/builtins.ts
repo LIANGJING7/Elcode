@@ -19,14 +19,13 @@ import { truncate, firstArgString, PATH_KEYS, COMMAND_KEYS } from './summary'
 
 const globMeta: ToolMeta = {
   display: 'inline',
-  icon: ICON_GLOB,
+  icon: '',
   pending: 'Finding files...',
+  hideStatusIcon: true,
   summary: (tool) => {
     const pattern = tool.args.pattern as string ?? ''
-    const path = tool.args.path as string ?? ''
     const count = (tool.output?.structured as any)?.count ?? 0
-    const pathStr = path ? ` in ${truncate(path, 30)}` : ''
-    return `Glob "${truncate(pattern)}"${pathStr} (${count} matches)`
+    return '<b>Glob</b> ' + truncate(pattern) + ' ' + count + ' 个结果'
   },
   title: () => '',
   detail: () => ''
@@ -35,14 +34,13 @@ registerTool('glob', globMeta)
 
 const grepMeta: ToolMeta = {
   display: 'inline',
-  icon: ICON_GREP,
+  icon: '',
   pending: 'Searching content...',
+  hideStatusIcon: true,
   summary: (tool) => {
     const pattern = tool.args.pattern as string ?? ''
-    const path = tool.args.path as string ?? ''
     const matches = (tool.output?.structured as any)?.matches ?? 0
-    const pathStr = path ? ` in ${truncate(path, 30)}` : ''
-    return `Grep "${truncate(pattern)}"${pathStr} (${matches} matches)`
+    return '<b>搜索</b> ' + truncate(pattern) + ' ' + matches + ' 个结果'
   },
   title: () => '',
   detail: () => ''
@@ -51,18 +49,24 @@ registerTool('grep', grepMeta)
 
 const readMeta: ToolMeta = {
   display: 'inline',
-  icon: ICON_READ,
+  icon: '',
   pending: 'Reading file...',
+  hideStatusIcon: true,
   summary: (tool) => {
     const filePath = firstArgString(tool.args, PATH_KEYS)
-    const offset = tool.args.offset as number
-    const limit = tool.args.limit as number
-    let rangeStr = ''
-    if (offset || limit) {
-      rangeStr = ` [${offset ?? 1}-${(offset ?? 1) + (limit ?? 2000) - 1}]`
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    const offset = tool.args.offset
+    const limit = tool.args.limit
+    let summary = '<b>读取</b> ' + fileName
+    if (offset != null) {
+      summary += ' o=' + offset
     }
-    return `Read ${truncate(filePath)}${rangeStr}`
+    if (limit != null) {
+      summary += ' l=' + limit
+    }
+    return summary
   },
+  hideStatusIcon: true,
   title: () => '',
   detail: () => ''
 }
@@ -97,11 +101,12 @@ registerTool('websearch', websearchMeta)
 
 const skillMeta: ToolMeta = {
   display: 'inline',
-  icon: ICON_SKILL,
+  icon: '',
   pending: 'Loading skill...',
+  hideStatusIcon: true,
   summary: (tool) => {
     const name = tool.args.name as string ?? ''
-    return `Skill "${truncate(name)}"`
+    return '<b>Skill</b> ' + truncate(name)
   },
   title: () => '',
   detail: () => ''
@@ -113,7 +118,7 @@ registerTool('skill', skillMeta)
 // ============================================
 
 const bashMeta: ToolMeta = {
-  display: 'block',
+  display: 'shell',
   icon: ICON_BASH,
   pending: 'Running command...',
   summary: (tool) => {
@@ -156,13 +161,13 @@ const editMeta: ToolMeta = {
   pending: 'Editing file...',
   summary: (tool) => {
     const filePath = firstArgString(tool.args, PATH_KEYS)
-    const replaceAll = tool.args.replaceAll as boolean
-    const allStr = replaceAll ? ' (all)' : ''
-    return `Edit ${truncate(filePath)}${allStr}`
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    return '<b>编辑</b> ' + fileName
   },
   title: (tool) => {
     const filePath = firstArgString(tool.args, PATH_KEYS)
-    return `← Edit ${truncate(filePath, 60)}`
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    return '编辑 ' + fileName
   },
   detail: (tool) => {
     const structured = tool.output?.structured as any
@@ -182,23 +187,23 @@ const writeMeta: ToolMeta = {
   pending: 'Writing file...',
   summary: (tool) => {
     const filePath = firstArgString(tool.args, PATH_KEYS)
-    return `Write ${truncate(filePath)}`
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    return '<b>写入</b> ' + fileName
   },
   title: (tool) => {
     const filePath = firstArgString(tool.args, PATH_KEYS)
-    return `← Write ${truncate(filePath, 60)}`
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    return '写入 ' + fileName
   },
   detail: (tool) => {
     const content = tool.args.content as string ?? ''
-    const lines = content.split('\n').length
-    const bytes = content.length
-    return `${lines} lines | ${bytes} bytes\n\n${truncate(content, 200)}`
+    return content
   }
 }
 registerTool('write', writeMeta)
 
 const todowriteMeta: ToolMeta = {
-  display: 'block',
+  display: 'none',
   icon: ICON_TODO,
   pending: 'Updating todos...',
   summary: (tool) => {

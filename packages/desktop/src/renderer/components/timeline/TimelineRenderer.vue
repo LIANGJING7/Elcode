@@ -13,12 +13,14 @@ import { streamingToolToToolCall } from '../../stores/streaming/types'
 import PartRenderer from '../part/PartRenderer.vue'
 import SearchFoldGroup from './SearchFoldGroup.vue'
 
-const props = defineProps<{ 
+const props = defineProps<{
   nodes: TimelineNode[]
   isStreaming?: boolean
 }>()
-const emit = defineEmits<{ 
+const emit = defineEmits<{
   openFile: [tool: ToolCall]
+  openOriginalFile: [{ filePath: string; diff: string }]
+  openDiffFile: [string]
   navigateSession: [sessionId: string]
   openSubagentPanel: [sessionId: string]  // New
 }>()
@@ -67,6 +69,8 @@ function getQueryGroupTools(node: TimelineNode): StreamingToolCall[] {
         :node="node"
         :is-streaming="isStreaming"
         @open-file="emit('openFile', $event)"
+        @open-original-file="emit('openOriginalFile', $event)"
+        @open-diff-file="emit('openDiffFile', $event)"
         @navigate-session="handleNavigateSession($event)"
         @open-subagent-panel="handleOpenSubagentPanel($event)"
       />

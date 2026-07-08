@@ -1,66 +1,61 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ChevronRight, ChevronDown } from 'lucide-vue-next'
+import { ChevronRight, ChevronDown, Square, CheckSquare, Circle } from 'lucide-vue-next'
 import { useSessionTodoStore } from '../../stores/sessionTodo'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 
 const sessionTodoStore = useSessionTodoStore()
 const { currentTodos } = storeToRefs(sessionTodoStore)
 
-// Filter out cancelled tasks
 const showItems = computed(() =>
   currentTodos.value.filter(t => t.status !== 'cancelled')
 )
 
-// Count statistics
 const completedCount = computed(() =>
   showItems.value.filter(t => t.status === 'completed').length
 )
 const totalCount = computed(() => showItems.value.length)
 
-// Has active (non-completed) tasks
 const hasActive = computed(() =>
   showItems.value.some(t => t.status !== 'completed')
 )
 
-// Show panel only when there are active tasks
 const show = computed(() => hasActive.value && totalCount.value > 0)
 
-// Collapse state (not persisted)
 const collapsed = ref(false)
+
+function getStatusIcon(status: string) {
+  if (status === 'completed') return CheckSquare
+  if (status === 'in_progress') return Circle
+  return Square
+}
 </script>
 
 <template>
   <div v-if="show" class="todo-panel-container">
     <div class="max-w-chat-max mx-auto px-6">
       <Card class="todo-card rounded-b-none border-b-0 !gap-0">
-        <!-- Header with count and collapse button -->
         <div class="todo-header" @click="collapsed = !collapsed">
-          <Button variant="ghost" size="sm" class="collapse-btn">
-            <ChevronRight v-if="collapsed" class="w-3.5 h-3.5" />
-            <ChevronDown v-else class="w-3.5 h-3.5" />
-            <span class="todo-count">Tasks</span>
-          </Button>
-          <span class="todo-badge">
-            {{ completedCount }}/{{ totalCount }}
-          </span>
+          <div class="header-left">
+            <span class="header-text">已完成 {{ completedCount }} 个任务（共 {{ totalCount }} 个）</span>
+            <ChevronDown v-if="!collapsed" class="header-chevron w-4 h-4" />
+            <ChevronRight v-else class="header-chevron w-4 h-4" />
+          </div>
         </div>
 
-        <!-- Todo list (collapsed controls visibility) -->
         <div class="todo-list" :class="{ collapsed }">
           <div class="todo-list-inner">
-            <!-- Single v-for loop preserving order -->
             <div
               v-for="(item, i) in showItems"
               :key="i"
               class="todo-item"
             >
-              <!-- Status dot (8px colored circle) -->
-              <div class="todo-dot" :class="item.status"></div>
-              <!-- Task content with conditional styling for completed -->
+              <component
+                :is="getStatusIcon(item.status)"
+                class="todo-icon"
+                :class="{ 'icon-completed': item.status === 'completed', 'icon-progress': item.status === 'in_progress' }"
+              />
               <div
                 class="todo-content"
                 :class="{ completed: item.status === 'completed' }"
@@ -100,46 +95,26 @@ const collapsed = ref(false)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
-  color: #71717a;
   cursor: pointer;
   user-select: none;
-  padding-bottom: 4px;
+  padding: 8px 0 5px 8px;
 }
 
-.todo-header:hover .todo-count {
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-text {
+  font-size: 14px;
   color: #e4e4e7;
+  font-weight: 500;
 }
 
-.todo-count {
-  color: #a1a1aa;
-  margin-left: 4px;
-}
-
-.todo-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: #22c55e;
-  border: none;
-}
-
-.collapse-btn {
-  padding: 0 6px;
-  height: 24px;
-  color: #a1a1aa;
-}
-
-.collapse-btn :deep(svg) {
+.header-chevron {
   color: #71717a;
-}
-
-.collapse-btn:hover {
-  background: rgba(39, 39, 42, 0.3);
-}
-
-.collapse-btn:hover :deep(svg) {
-  color: #e4e4e7;
+  transition: transform 0.2s ease;
 }
 
 .todo-list {
@@ -157,58 +132,50 @@ const collapsed = ref(false)
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  padding: 0 8px 8px 8px;
 }
 
 .todo-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 2px 8px;
   font-size: 13px;
-  border-radius: 4px;
-  transition: background 0.15s ease;
 }
 
-.todo-item:hover {
-  background: rgba(39, 39, 42, 0.3);
-}
-
-.todo-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.todo-icon {
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+  color: #52525b;
 }
 
-.todo-dot.completed {
-  background: #22c55e;
+.todo-icon.icon-completed {
+  color: #71717a;
 }
 
-.todo-dot.in-progress {
-  background: #6366f1;
+.todo-icon.icon-progress {
+  color: #d4d0c8;
+  fill: #d4d0c8;
+  animation: pulse-ring 2s ease-in-out infinite;
 }
 
-.todo-dot.pending {
-  background: #71717a;
+@keyframes pulse-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
 }
 
 .todo-content {
   color: #e4e4e7;
-  line-height: 1.4;
+  line-height: 1.5;
   word-wrap: break-word;
+  flex: 1;
 }
 
 .todo-content.completed {
-  opacity: 0.5;
-  color: #a1a1aa;
-}
-
-.todo-list-inner {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  color: #71717a;
+  text-decoration: line-through;
 }
 
 .todo-list-inner::-webkit-scrollbar {
