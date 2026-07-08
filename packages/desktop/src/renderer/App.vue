@@ -70,12 +70,6 @@
       <div v-else class="drag flex-1"></div>
 
       <div class="flex items-center flex-shrink-0">
-        <button class="no-drag w-7 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-bg-hover transition-colors" @click="ui.toggleSidebar()" title="切换侧边栏">
-          <svg class="w-4 h-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
         <div style="width: 142px"></div>
       </div>
     </div>
