@@ -50,10 +50,15 @@ type ToolOutput =
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
 const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+  console.log('[DEBUG settledOutput] result.type:', result.type, 'result.value:', typeof result.value === 'string' ? result.value.slice(0, 200) : result.value)
+  console.log('[DEBUG settledOutput] value (LLM ToolOutput):', value ? { structured: typeof value.structured === 'string' ? value.structured.slice(0, 200) : value.structured } : 'undefined')
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
   const settled = value ?? LLMToolOutput.fromResultValue(result)
+  console.log('[DEBUG settledOutput] settled (after fromResultValue):', settled ? { structured: typeof settled.structured === 'string' ? JSON.stringify(settled.structured).slice(0, 200) : settled.structured, contentCount: settled.content?.length } : 'undefined')
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
-  return { structured: record(settled.structured), content: settled.content }
+  const output = { structured: record(settled.structured), content: settled.content }
+  console.log('[DEBUG settledOutput] final output.structured:', JSON.stringify(output.structured).slice(0, 500))
+  return output
 }
 
 /** Persist one provider turn without executing tools or starting a continuation turn. */

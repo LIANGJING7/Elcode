@@ -8,6 +8,8 @@
 import { computed, type ComputedRef } from 'vue'
 import type { StreamingState, StreamingToolCall, ToolProgress } from './types'
 import { formatDuration, parseToolArgs } from './types'
+import { getToolCategory } from '../../tool/registry'
+import {ToolCall} from "../../../types/ipc";
 
 // ============================================
 // Tool Summary Types
@@ -165,7 +167,7 @@ export function reasoningDuration(state: StreamingState): ComputedRef<string | n
  */
 export function reasoningExpandable(state: StreamingState): ComputedRef<boolean> {
   return computed(() => {
-    return state.reasoning.content.length > 100 || state.reasoning.pending.length > 0
+    return state.reasoning.content.length > 100
   })
 }
 
@@ -174,30 +176,31 @@ export function reasoningExpandable(state: StreamingState): ComputedRef<boolean>
 // ============================================
 
 /**
- * Check if message has content (content or pending)
+ * Check if message has content
  */
 export function hasMessageContent(state: StreamingState): ComputedRef<boolean> {
   return computed(() => {
-    return state.message.content.length > 0 || state.message.pending.length > 0
+    return state.message.content.length > 0
   })
 }
 
 /**
- * Get displayed message content (content + pending deltas)
- * Note: This is for display only, state.message.content is updated by scheduler
+ * Get displayed message content
+ * Note: Directly appended to content, no pending buffer
  */
 export function displayedMessageContent(state: StreamingState): ComputedRef<string> {
   return computed(() => {
-    return state.message.content + state.message.pending.join('')
+    return state.message.content
   })
 }
 
 /**
  * Get displayed reasoning content
+ * Note: Directly appended to content, no pending buffer
  */
 export function displayedReasoningContent(state: StreamingState): ComputedRef<string> {
   return computed(() => {
-    return state.reasoning.content + state.reasoning.pending.join('')
+    return state.reasoning.content
   })
 }
 
@@ -207,9 +210,9 @@ export function displayedReasoningContent(state: StreamingState): ComputedRef<st
 
 export interface TimelineNode {
   id: string
-  type: 'reasoning' | 'tool' | 'text'
+  type: 'reasoning' | 'tool' | 'text' | 'queryGroup'
   order: number
-  payload: StreamingToolCall | { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null } | { content: string }
+  payload: ToolCall | ToolCall[] | StreamingToolCall | StreamingToolCall[] | { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null } | { content: string }
 }
 
 /**
@@ -244,7 +247,7 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     if (state.reasoning.status !== 'idle') {
       allReasoning.push({
         id: state.reasoning.id ?? 'current-reasoning',
-        content: state.reasoning.content + state.reasoning.pending.join(''),
+        content: state.reasoning.content,
         status: state.reasoning.status,
         startedAt: state.reasoning.startedAt ?? Date.now(),
         endedAt: state.reasoning.endedAt
@@ -297,15 +300,174 @@ export function timelineNodes(state: StreamingState): ComputedRef<TimelineNode[]
     }
 
     // Add text if has content
-    if (state.message.content || state.message.pending.length > 0) {
+    if (state.message.content) {
       nodes.push({
-        id: state.message.id ?? 'text',
+        id: 'text-content',
         type: 'text',
         order: order++,
         payload: {
-          content: state.message.content + state.message.pending.join('')
+          content: state.message.content
         }
       })
+    }
+
+    return nodes
+  })
+}
+
+/**
+ * Build grouped tool nodes from state (consecutive query tools grouped).
+ * Query tools (read/grep/glob/web_*) are grouped into 'queryGroup' nodes.
+ * Execution tools (bash/edit/write/todo/task) remain as individual 'tool' nodes.
+ * Tools with lifecycle 'preparing' are NOT grouped (still pending).
+ */
+export function groupedToolNodes(state: StreamingState): ComputedRef<TimelineNode[]> {
+  return computed(() => {
+    const nodes: TimelineNode[] = []
+    let order = 0
+
+    const tools = Array.from(state.tools.entities.values())
+      .sort((a, b) => a.startedAt - b.startedAt)
+
+    let queryGroup: StreamingToolCall[] = []
+
+    for (const tool of tools) {
+      const category = getToolCategory(tool.name)
+      const isPreparing = tool.lifecycle === 'preparing' || tool.lifecycle === 'waiting'
+
+      if (category === 'query' && !isPreparing) {
+        queryGroup.push(tool)
+      } else {
+        if (queryGroup.length > 0) {
+          nodes.push({
+            id: `query-group-${order}`,
+            type: 'queryGroup',
+            order: order++,
+            payload: [...queryGroup],
+          })
+          queryGroup = []
+        }
+        nodes.push({
+          id: tool.id,
+          type: 'tool',
+          order: order++,
+          payload: tool,
+        })
+      }
+    }
+
+    if (queryGroup.length > 0) {
+      nodes.push({
+        id: `query-group-${order}`,
+        type: 'queryGroup',
+        order: order++,
+        payload: [...queryGroup],
+      })
+    }
+
+    return nodes
+  })
+}
+
+/**
+ * Build text node from state (separate selector for performance).
+ */
+export function textNode(state: StreamingState): ComputedRef<TimelineNode | null> {
+  return computed(() => {
+    if (!state.message.content) return null
+    return {
+      id: 'text-content',
+      type: 'text',
+      order: 0,
+      payload: {
+        content: state.message.content
+      }
+    }
+  })
+}
+
+/**
+ * Build reasoning node from state (separate selector for performance).
+ */
+export function reasoningNode(state: StreamingState): ComputedRef<TimelineNode | null> {
+  return computed(() => {
+    const allReasoning: Array<{
+      id: string
+      content: string
+      status: 'idle' | 'thinking' | 'done'
+      startedAt: number
+      endedAt: number | null
+    }> = []
+
+    for (const block of state.reasoningHistory) {
+      allReasoning.push({
+        id: block.id,
+        content: block.content,
+        status: 'done',
+        startedAt: block.startedAt,
+        endedAt: block.endedAt
+      })
+    }
+
+    if (state.reasoning.status !== 'idle') {
+      allReasoning.push({
+        id: state.reasoning.id ?? 'current-reasoning',
+        content: state.reasoning.content,
+        status: state.reasoning.status,
+        startedAt: state.reasoning.startedAt ?? Date.now(),
+        endedAt: state.reasoning.endedAt
+      })
+    }
+
+    if (allReasoning.length === 0) return null
+
+    const mergedContent = allReasoning.map(r => r.content).join('')
+    const mergedStatus = allReasoning.some(r => r.status === 'thinking') ? 'thinking' : 'done'
+
+    let totalDuration = 0
+    for (const r of allReasoning) {
+      if (r.startedAt && r.endedAt) {
+        totalDuration += r.endedAt - r.startedAt
+      } else if (r.startedAt && r.status === 'thinking') {
+        totalDuration += Date.now() - r.startedAt
+      }
+    }
+
+    return {
+      id: 'merged-reasoning',
+      type: 'reasoning',
+      order: 0,
+      payload: {
+        content: mergedContent,
+        status: mergedStatus,
+        duration: totalDuration > 0 ? formatDuration(totalDuration) : null
+      }
+    }
+  })
+}
+
+/**
+ * Build complete grouped timeline (reasoning + grouped tools + text).
+ * Uses split selectors for performance (only recomputes relevant parts).
+ */
+export function groupedTimelineNodes(state: StreamingState): ComputedRef<TimelineNode[]> {
+  return computed(() => {
+    const nodes: TimelineNode[] = []
+    let order = 0
+
+    const reasoning = reasoningNode(state).value
+    if (reasoning) {
+      nodes.push({ ...reasoning, order: order++ })
+    }
+
+    const toolNodes = groupedToolNodes(state).value
+    for (const node of toolNodes) {
+      nodes.push({ ...node, order: order++ })
+    }
+
+    const text = textNode(state).value
+    if (text) {
+      nodes.push({ ...text, order: order++ })
     }
 
     return nodes
@@ -446,5 +608,9 @@ export const selectors = {
   displayedReasoningContent,
   
   // Timeline
-  timelineNodes
+  timelineNodes,
+  groupedToolNodes,
+  textNode,
+  reasoningNode,
+  groupedTimelineNodes
 }

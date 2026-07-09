@@ -1,7 +1,10 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef, McpServerConfig, ConfigPatch, LCodeGlobalConfig, CustomProviderConfig } from '../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../types/session'
+import type { FooterSubagentTab, FooterSubagentDetail, SubagentSnapshot, TabsPatch, DetailPatch } from '../types/subagent'
+
+type ResultP<T = unknown> = Promise<{ success: boolean; data?: T; error?: string }>
 
 export const desktopAPI = {
   session: {
@@ -61,7 +64,10 @@ export const desktopAPI = {
       }
       ipcRenderer.on(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
-    }
+    },
+
+    todo: (sessionID: string, directory?: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
   },
 
   file: {
@@ -94,14 +100,6 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CONFIG_MODELS, directory)
   },
 
-  configFile: {
-    read: (filePath: string, directory?: string): Promise<{ success: boolean; content?: string; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_FILE_READ, filePath, directory),
-    
-    write: (filePath: string, content: string, directory?: string): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_FILE_WRITE, filePath, content, directory)
-  },
-
   console: {
     get: (directory?: string): Promise<ConsoleState> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONSOLE_GET, directory)
@@ -132,8 +130,11 @@ export const desktopAPI = {
     refreshModels: (providerId: string, directory?: string): Promise<{ success: boolean; models?: unknown[]; changed?: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_REFRESH_MODELS, providerId, directory),
 
-    deleteModel: (providerId: string, modelId: string, directory?: string): Promise<{ success: boolean; fromApi?: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_DELETE_MODEL, providerId, modelId, directory)
+deleteModel: (providerId: string, modelId: string, directory?: string): Promise<{ success: boolean; fromApi?: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_DELETE_MODEL, providerId, modelId, directory),
+
+    refreshAll: (directory?: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDER_REFRESH_ALL, directory),
   },
 
   workspace: {
@@ -210,6 +211,144 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_STATE_SET, data)
   },
 
+  subagent: {
+    watch: (sessionId: string): Promise<SubagentSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_WATCH, sessionId),
+
+    unwatch: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SUBAGENT_UNWATCH, sessionId),
+
+    onTabsUpdate: (callback: (data: { sessionId: string; patch: TabsPatch; version: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; patch: TabsPatch; version: number }) => callback(data)
+      ipcRenderer.on('subagent:tabs:update', handler)
+      return () => ipcRenderer.removeListener('subagent:tabs:update', handler)
+    },
+
+    onDetailUpdate: (callback: (data: { sessionId: string; targetSessionId: string; patches: DetailPatch[]; version: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; targetSessionId: string; patches: DetailPatch[]; version: number }) => callback(data)
+      ipcRenderer.on('subagent:detail:update', handler)
+      return () => ipcRenderer.removeListener('subagent:detail:update', handler)
+    }
+  },
+
+  lcode: {
+    config: {
+      read: (): ResultP<LCodeGlobalConfig> => {
+        console.log('[PRELOAD_LCODE] config.read invoked')
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CONFIG_READ).then((result) => {
+          console.log('[PRELOAD_LCODE] config.read result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] config.read error:', err)
+          throw err
+        })
+      },
+
+      patch: (patches: ConfigPatch[]): ResultP => {
+        console.log('[PRELOAD_LCODE] config.patch invoked, patches:', JSON.stringify(patches))
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CONFIG_PATCH, patches).then((result) => {
+          console.log('[PRELOAD_LCODE] config.patch result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] config.patch error:', err)
+          throw err
+        })
+      }
+    },
+    mcpServer: {
+      add: (name: string, config: McpServerConfig): ResultP => {
+        console.log('[PRELOAD_LCODE] mcpServer.add invoked, name:', name, 'config:', JSON.stringify(config))
+        // Serialize to ensure IPC compatibility
+        const serializedConfig = JSON.parse(JSON.stringify(config))
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_MCP_SERVER_ADD, name, serializedConfig).then((result) => {
+          console.log('[PRELOAD_LCODE] mcpServer.add result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] mcpServer.add error:', err)
+          throw err
+        })
+      },
+
+      update: (name: string, patch: Partial<McpServerConfig>): ResultP => {
+        console.log('[PRELOAD_LCODE] mcpServer.update invoked, name:', name, 'patch:', JSON.stringify(patch))
+        // Serialize to ensure IPC compatibility
+        const serializedPatch = JSON.parse(JSON.stringify(patch))
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_MCP_SERVER_UPDATE, name, serializedPatch).then((result) => {
+          console.log('[PRELOAD_LCODE] mcpServer.update result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] mcpServer.update error:', err)
+          throw err
+        })
+      },
+
+      delete: (name: string): ResultP => {
+        console.log('[PRELOAD_LCODE] mcpServer.delete invoked, name:', name)
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_MCP_SERVER_DELETE, name).then((result) => {
+          console.log('[PRELOAD_LCODE] mcpServer.delete result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] mcpServer.delete error:', err)
+          throw err
+        })
+      }
+    },
+    model: {
+      add: (providerId: string, modelId: string, config: {
+          name?: string
+          options?: {
+            reasoningEffort?: string
+            textVerbosity?: string
+            reasoningSummary?: string
+            include?: string[]
+            thinking?: { type?: string; budgetTokens?: number }
+          }
+          variants?: Record<string, unknown>
+        }): ResultP => {
+        console.log('[PRELOAD_LCODE] model.add invoked:', providerId, '/', modelId)
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_MODEL_ADD, providerId, modelId, config).then((result) => {
+          console.log('[PRELOAD_LCODE] model.add result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] model.add error:', err)
+          throw err
+        })
+      },
+      delete: (providerId: string, modelId: string): ResultP => {
+        console.log('[PRELOAD_LCODE] model.delete invoked:', providerId, '/', modelId)
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_MODEL_DELETE, providerId, modelId).then((result) => {
+          console.log('[PRELOAD_LCODE] model.delete result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] model.delete error:', err)
+          throw err
+        })
+      }
+    },
+    customProvider: {
+      add: (config: CustomProviderConfig): ResultP => {
+        console.log('[PRELOAD_LCODE] customProvider.add invoked')
+        const serializedConfig = JSON.parse(JSON.stringify(config))
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_ADD, serializedConfig).then((result) => {
+          console.log('[PRELOAD_LCODE] customProvider.add result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] customProvider.add error:', err)
+          throw err
+        })
+      },
+      delete: (providerId: string): ResultP => {
+        console.log('[PRELOAD_LCODE] customProvider.delete invoked:', providerId)
+        return ipcRenderer.invoke(IPC_CHANNELS.LCODE_CUSTOM_PROVIDER_DELETE, providerId).then((result) => {
+          console.log('[PRELOAD_LCODE] customProvider.delete result:', result)
+          return result
+        }).catch((err) => {
+          console.error('[PRELOAD_LCODE] customProvider.delete error:', err)
+          throw err
+        })
+      }
+    }
+  },
   retryStartup: (): Promise<void> =>
     ipcRenderer.invoke('retry-startup')
 }

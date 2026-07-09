@@ -22,6 +22,11 @@ export interface PromptOptions {
   variant?: string
 }
 
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+}
+
 export interface Session {
   id: string
   workspacePath: string
@@ -47,12 +52,12 @@ export interface Message {
 
 /** 类型化的 structured 元数据（按工具区分，TS 自动推导）。后端发送的是
  *  `Record<string, unknown>`，桌面端在 createViewModel 内部按 tool.name
- *  推导出对应的判别分支，不污染数据层。 */
+ * 推导出对应的判别分支，不污染数据层。 */
 export type ToolStructured =
   | { type: 'bash'; exitCode?: number; duration?: number; truncated?: boolean; timedOut?: boolean }
   | { type: 'edit'; diff?: string; additions?: number; deletions?: number }
   | { type: 'write'; existed?: boolean }
-  | { type: 'task'; subagentType?: string; state?: string; summary?: string }
+  | { type: 'task'; subagentType?: string; state?: string; summary?: string; sessionId?: string; sessionID?: string; toolCalls?: number }
   | { type: 'todo'; todos?: Array<{ status: string; content: string }> }
   | { type: 'unknown'; [key: string]: unknown }
 
@@ -221,6 +226,9 @@ export interface ConsoleState {
   switchableOrgCount: number
 }
 
+// Re-export config types
+export type { LCodeGlobalConfig, McpServerConfig, ConfigPatch, ResultP, CustomProviderConfig } from './config'
+
 export const IPC_CHANNELS = {
   SESSION_CREATE: 'session:create',
   SESSION_GET: 'session:get',
@@ -232,6 +240,7 @@ export const IPC_CHANNELS = {
   SESSION_STREAM_EVENT: 'session:stream:event',
   SESSION_DELETE: 'session:delete',
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
+  SESSION_TODO: 'session:todo',
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
@@ -245,9 +254,22 @@ export const IPC_CHANNELS = {
   CONFIG_SET: 'config:set',
   CONFIG_MODELS: 'config:models',
 
-  // Config file operations (lcode.jsonc, etc.) - handled directly in main process
-  CONFIG_FILE_READ: 'config-file:read',
-  CONFIG_FILE_WRITE: 'config-file:write',
+  // LCode config - domain-based naming
+  LCODE_CONFIG_READ: 'lcode:config:read',
+  LCODE_CONFIG_PATCH: 'lcode:config:patch',
+  
+  // MCP server - semantic operations
+  LCODE_MCP_SERVER_ADD: 'lcode:mcp-server:add',
+  LCODE_MCP_SERVER_UPDATE: 'lcode:mcp-server:update',
+  LCODE_MCP_SERVER_DELETE: 'lcode:mcp-server:delete',
+
+  // Model - semantic operations (provider-level models)
+  LCODE_MODEL_ADD: 'lcode:model:add',
+  LCODE_MODEL_DELETE: 'lcode:model:delete',
+
+  // Custom Provider - semantic operations
+  LCODE_CUSTOM_PROVIDER_ADD: 'lcode:custom-provider:add',
+  LCODE_CUSTOM_PROVIDER_DELETE: 'lcode:custom-provider:delete',
 
   PROVIDER_AUTH_METHODS: 'provider:auth-methods',
   PROVIDER_AUTHORIZE: 'provider:authorize',
@@ -258,6 +280,7 @@ export const IPC_CHANNELS = {
   PROVIDER_TEST: 'provider:test',
   PROVIDER_REFRESH_MODELS: 'provider:refresh-models',
   PROVIDER_DELETE_MODEL: 'provider:delete-model',
+  PROVIDER_REFRESH_ALL: 'provider:refresh-all',
 
   CONSOLE_GET: 'console:get',
   
@@ -288,6 +311,10 @@ export const IPC_CHANNELS = {
   // Global state (lcode.json - cross-project UI preferences)
   GLOBAL_STATE_GET: 'global-state:get',
   GLOBAL_STATE_SET: 'global-state:set',
+
+  // Subagent panel
+  SUBAGENT_WATCH: 'subagent:watch',
+  SUBAGENT_UNWATCH: 'subagent:unwatch',
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

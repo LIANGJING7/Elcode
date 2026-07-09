@@ -184,6 +184,7 @@ function buildReadTab(tool: ToolCall): FileTab {
     }
 
     return {
+      type: 'file',
       id: tool.id,
       title: fileName,
       subtitle: directory,
@@ -222,6 +223,7 @@ function buildReadTab(tool: ToolCall): FileTab {
   }
 
   return {
+    type: 'file',
     id: tool.id,
     title: fileName,
     subtitle: directory,
@@ -308,6 +310,7 @@ function buildDiffTab(tool: ToolCall): FileTab {
   }
 
   return {
+    type: 'file',
     id: tool.id,
     title: fileName,
     subtitle: directory,
@@ -321,6 +324,7 @@ function buildDiffTab(tool: ToolCall): FileTab {
 function buildGrepTab(tool: ToolCall): FileTab {
   const model = createGrepViewModel(tool)
   return {
+    type: 'file',
     id: tool.id,
     title: `grep "${truncate(model.pattern, 20)}"`,
     subtitle: model.path,
@@ -333,6 +337,7 @@ function buildGrepTab(tool: ToolCall): FileTab {
 function buildGlobTab(tool: ToolCall): FileTab {
   const model = createGlobViewModel(tool)
   return {
+    type: 'file',
     id: tool.id,
     title: `glob "${truncate(model.pattern, 20)}"`,
     subtitle: model.path,
@@ -345,6 +350,7 @@ function buildGlobTab(tool: ToolCall): FileTab {
 function buildWebFetchTab(tool: ToolCall): FileTab {
   const model = createWebFetchViewModel(tool)
   return {
+    type: 'file',
     id: tool.id,
     title: `webfetch ${truncate(model.url, 25)}`,
     subtitle: model.contentType,
@@ -357,6 +363,7 @@ function buildWebFetchTab(tool: ToolCall): FileTab {
 function buildWebSearchTab(tool: ToolCall): FileTab {
   const model = createWebSearchViewModel(tool)
   return {
+    type: 'file',
     id: tool.id,
     title: `search "${truncate(model.query, 20)}"`,
     subtitle: model.provider,
@@ -374,6 +381,7 @@ function buildUnknownTab(tool: ToolCall): FileTab {
     result: tool.output?.result,
   }
   return {
+    type: 'file',
     id: tool.id,
     title: tool.name,
     subtitle: 'unknown tool',

@@ -29,7 +29,15 @@ async function readWorkspacesFile(): Promise<WorkspacePersistence> {
 
 async function writeWorkspacesFile(data: WorkspacePersistence): Promise<void> {
   const filePath = getWorkspacesFilePath()
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+  // Convert Date objects to ISO strings for JSON serialization
+  const serializedData = {
+    workspaces: data.workspaces.map(w => ({
+      ...w,
+      lastAccessed: w.lastAccessed instanceof Date ? w.lastAccessed.toISOString() : w.lastAccessed,
+    })),
+    currentWorkspacePath: data.currentWorkspacePath,
+  }
+  await fs.writeFile(filePath, JSON.stringify(serializedData, null, 2), 'utf-8')
 }
 
 /**
@@ -53,9 +61,16 @@ export function registerWorkspaceHandlers() {
   ipcMain.handle(CHANNELS.WORKSPACE_LIST, async () => {
     console.log('[Workspace] LIST called')
     const data = await readWorkspacesFile()
+    console.log('[Workspace] LIST result:', data.workspaces.length, 'workspaces, currentWorkspacePath:', data.currentWorkspacePath)
     return data.workspaces.sort((a, b) => 
       new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime()
     )
+  })
+
+  ipcMain.handle(CHANNELS.WORKSPACE_GET_CWD, async () => {
+    const cwd = process.cwd()
+    console.log('[Workspace] GET_CWD:', cwd)
+    return cwd
   })
 
   ipcMain.handle(CHANNELS.WORKSPACE_ADD, async (_event, workspacePath?: string) => {

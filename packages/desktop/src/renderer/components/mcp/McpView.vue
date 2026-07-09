@@ -48,7 +48,7 @@
           <div>
             <label class="text-2xs text-text-muted block mb-1">Name</label>
             <input
-              v-model="newServer.name"
+              v-model="newServerName"
               type="text"
               class="w-full px-3 py-2 rounded-lg bg-bg-hover border border-border text-text text-sm outline-none focus:border-accent"
               placeholder="my-mcp-server"
@@ -107,61 +107,60 @@
 import { onMounted, ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMcpStore } from '../../stores/mcp'
-import { useWorkspaceStore } from '../../stores/workspace'
 import McpCard from './McpCard.vue'
-import type { MCPAddPayload } from '../../../types/ipc'
+import type { McpServerConfig } from '../../../types/ipc'
 
 const mcpStore = useMcpStore()
-const workspaceStore = useWorkspaceStore()
 
 const { servers, loading, error } = storeToRefs(mcpStore)
-const { currentWorkspace } = storeToRefs(workspaceStore)
 
 const serverNames = computed(() => Object.keys(servers.value).sort())
 
 const showAddDialog = ref(false)
-const newServer = ref<MCPAddPayload>({
-  name: '',
+const newServer = ref<McpServerConfig>({
   type: 'local',
+  enabled: true,
   command: [],
   url: ''
 })
+const newServerName = ref('')
 const localCommand = ref('')
 
 const canAdd = computed(() => {
-  if (!newServer.value.name.trim()) return false
+  if (!newServerName.value.trim()) return false
   if (newServer.value.type === 'local' && !localCommand.value.trim()) return false
   if (newServer.value.type === 'remote' && !newServer.value.url?.trim()) return false
   return true
 })
 
-// App.vue already loads MCP status on init, no need to reload here
-
 async function handleConnect(name: string) {
-  await mcpStore.connect(name, currentWorkspace.value?.path)
+  await mcpStore.connect(name)
 }
 
 async function handleDisconnect(name: string) {
-  await mcpStore.disconnect(name, currentWorkspace.value?.path)
+  await mcpStore.disconnect(name)
 }
 
 async function handleAdd() {
-  const payload: MCPAddPayload = {
-    name: newServer.value.name.trim(),
+  const config: McpServerConfig = {
     type: newServer.value.type,
     enabled: true
   }
 
-  if (payload.type === 'local') {
-    payload.command = localCommand.value.trim().split(' ')
+  if (config.type === 'local') {
+    config.command = localCommand.value.trim().split(' ')
   } else {
-    payload.url = newServer.value.url?.trim() || ''
+    config.url = newServer.value.url?.trim() || ''
   }
 
-  await mcpStore.addServer(payload, currentWorkspace.value?.path)
-  showAddDialog.value = false
-  newServer.value = { name: '', type: 'local', command: [], url: '' }
-  localCommand.value = ''
+  const result = await window.desktop.lcode.mcpServer.add(newServerName.value.trim(), config)
+  if (result.success) {
+    await mcpStore.loadStatusImmediate()
+    showAddDialog.value = false
+    newServerName.value = ''
+    newServer.value = { type: 'local', enabled: true, command: [], url: '' }
+    localCommand.value = ''
+  }
 }
 </script>
 

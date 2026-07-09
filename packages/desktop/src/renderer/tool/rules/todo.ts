@@ -55,7 +55,8 @@ export function makeTodoMeta(component: ToolMeta['component']): ToolMeta<TodoVie
     icon: '#',
     title: 'Todos',
     component,
-    defaultInteraction: 'inline',
+    defaultInteraction: 'none',
+    display: 'none',  // Don't show in stream
     summary: () => 'Update todo list',
     createViewModel: createTodoViewModel,
     category: 'execution',

@@ -43,11 +43,16 @@ const grouped = computed(() => {
       <span v-if="status === 'loading'" class="text-warning"> · loading...</span>
     </div>
 
+    <!-- Error -->
+    <div v-if="model.error" class="mb-2 p-2 bg-error/10 rounded text-error">
+      {{ model.error }}
+    </div>
+
     <!-- Empty -->
-    <div v-if="model.total === 0" class="text-text-muted">No matches found</div>
+    <div v-if="model.total === 0 && !model.error" class="text-text-muted">No matches found</div>
 
     <!-- Grouped matches -->
-    <div v-else class="space-y-2 max-h-96 overflow-y-auto">
+    <div v-if="model.total > 0" class="space-y-2 max-h-96 overflow-y-auto">
       <div v-for="[resource, items] in grouped" :key="resource">
         <div class="text-accent font-mono mb-0.5">{{ resource }}</div>
         <div

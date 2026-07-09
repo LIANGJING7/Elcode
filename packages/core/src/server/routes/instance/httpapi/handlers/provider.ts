@@ -42,6 +42,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const cfg = yield* Config.Service
     const provider = yield* Provider.Service
     const svc = yield* ProviderAuth.Service
+    const modelsDev = yield* ModelsDev.Service
 
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
       const config = yield* cfg.get()
@@ -53,6 +54,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
       }
       const connected = yield* provider.list()
+      console.log('[ProviderHttpApi.list] connected keys:', Object.keys(connected))
+      console.log('[ProviderHttpApi.list] connected providers:', JSON.stringify(Object.keys(connected).map(k => ({ id: k, source: connected[k].source }))))
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,
@@ -167,6 +170,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider add')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -216,6 +221,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider update')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -243,6 +250,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           }),
         ),
       ).pipe(
+        Effect.tap(() => Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after provider delete')),
+        Effect.tap(() => modelsDev.refresh(true)),
         Effect.catch(() =>
           Effect.succeed({
             success: false,
@@ -310,6 +319,16 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       )
     })
 
+    // Refresh all models cache
+    const refreshAll = Effect.fn("ProviderHttpApi.refreshAll")(function* () {
+      console.log('[refreshAll] Starting full refresh')
+      yield* cfg.invalidate()
+      console.log('[refreshAll] Config invalidated')
+      yield* provider.invalidate()
+      console.log('[refreshAll] InstanceState invalidated')
+      return { success: true }
+    })
+
     // Delete a model from provider config (writes to config file)
     const deleteModel = Effect.fn("ProviderHttpApi.deleteModel")(function* (ctx: {
       params: { providerID: ProviderV2.ID, modelID: string }
@@ -363,6 +382,9 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const result = yield* cfg.updateGlobal(updatedConfig)
       console.log('[DeleteModel] config updated, changed:', result.changed)
       
+      yield* Effect.logInfo('[ProviderHandler] ModelsDev cache refresh triggered after model delete')
+      yield* modelsDev.refresh(true)
+      
       return { success: true, notInConfig: false }
     })
 
@@ -377,5 +399,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       .handle("test", test)
       .handle("refreshModels", refreshModels)
       .handle("deleteModel", deleteModel)
+      .handle("refreshAll", refreshAll)
   }),
 )

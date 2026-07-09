@@ -1,5 +1,24 @@
 <template>
   <div class="flex h-full flex-col p-5">
+    <!-- Toast notification -->
+    <div 
+      v-if="toastMessage" 
+      class="fixed top-12 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all duration-300"
+      :class="toastType === 'success' ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'"
+    >
+      <div class="flex items-center gap-2">
+        <svg v-if="toastType === 'success'" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span class="text-sm font-medium">{{ toastMessage }}</span>
+      </div>
+    </div>
+
     <!-- Header -->
     <div class="flex-shrink-0 mb-6">
       <h2 class="text-2xl font-bold text-text mb-2">模型设置</h2>
@@ -150,25 +169,35 @@
                 v-if="modelEntries.length > 0"
                 class="border border-border rounded-lg divide-y divide-border"
               >
-                <div
+<div
                   v-for="model in modelEntries"
                   :key="model.id"
-                  class="flex items-center justify-between px-3 py-2.5"
+                  class="group flex items-center justify-between px-3 py-2.5 hover:bg-bg-hover transition-colors"
                 >
-                  <span class="text-sm text-text font-mono">{{ model.name }}</span>
-                  <div class="flex items-center gap-1.5">
-                    <button
-                      class="w-7 h-7 flex items-center justify-center rounded hover:bg-bg-hover text-text-muted transition-colors cursor-pointer"
-                      title="删除模型"
-                      @click="handleDeleteModel(model.id)"
-                    >
-                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+<span class="text-sm text-text font-mono truncate flex-1">{{ model.name }}</span>
+                   <div class="flex items-center gap-1.5">
+                     <button
+                       class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-bg-active text-text-muted hover:text-text transition-all cursor-pointer"
+                       title="编辑模型"
+                       @click="handleEditModel(model.id)"
+                     >
+                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                       </svg>
+                     </button>
+                     <button
+                       class="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-bg-active text-text-muted hover:text-text transition-all cursor-pointer"
+                       title="删除模型"
+                       @click="handleDeleteModel(model.id)"
+                     >
+                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                         <line x1="18" y1="6" x2="6" y2="18"/>
+                         <line x1="6" y1="6" x2="18" y2="18"/>
+                       </svg>
+                     </button>
+                   </div>
+                 </div>
               </div>
               <div v-else class="text-xs text-text-muted py-4 text-center border border-border rounded-lg">
                 暂无模型，请刷新模型列表
@@ -276,7 +305,7 @@
       :console-state="modelsStore.consoleState"
       :connected="modelsStore.connectedProviders"
       @select="handleProviderSelect"
-      @custom="handleCustomProvider"
+      @customSubmit="handleCustomProviderSubmit"
       @close="showConnectDialog = false"
     />
 
@@ -343,8 +372,9 @@
       :provider-id="selectedProviderId"
       :provider-name="selectedProvider?.name"
       :directory="directory"
+      :edit-model="editingModel"
       @success="handleAddModelSuccess"
-      @close="showAddModelModal = false"
+      @close="handleCloseAddModelModal"
     />
   </div>
 </template>
@@ -352,7 +382,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useWorkspaceStore } from '../../stores/workspace'
-import { useModelsStore, type ProviderInfo, type AuthMethod } from '../../stores/models'
+import { useModelsStore, type ProviderInfo, type ProviderModel, type AuthMethod } from '../../stores/models'
 import ConnectProviderDialog from './ConnectProviderDialog.vue'
 import ProviderAuthDialog from './ProviderAuthDialog.vue'
 import OAuthWaitingDialog from './OAuthWaitingDialog.vue'
@@ -361,6 +391,7 @@ import AddProviderModal from './AddProviderModal.vue'
 import EditProviderModal from './EditProviderModal.vue'
 import AddModelModal from './AddModelModal.vue'
 import type { AuthorizationResult } from '../../types/ipc'
+import type { CustomProviderConfig } from '../../../types/custom-provider'
 
 const workspaceStore = useWorkspaceStore()
 const modelsStore = useModelsStore()
@@ -390,7 +421,20 @@ const showAuthDialog = ref(false)
 const showOAuthWaiting = ref(false)
 const showModelSelect = ref(false)
 const showAddModelModal = ref(false)
+const editingModel = ref<{ modelId: string; model: ProviderModel } | undefined>(undefined)
 const selectedProviderId = ref<string>('')
+
+// Toast notification state
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  toastMessage.value = message
+  toastType.value = type
+  setTimeout(() => {
+    toastMessage.value = ''
+  }, 3000)
+}
 const selectedAuthMethod = ref<AuthMethod | undefined>(undefined)
 const oauthInputs = ref<Record<string, string>>({})
 const authorizationResult = ref<AuthorizationResult | undefined>(undefined)
@@ -490,11 +534,25 @@ function handleMethodSelect(methodIndex: number) {
   }
 }
 
-function handleCustomProvider(providerId: string) {
-  showConnectDialog.value = false
-  selectedProviderId.value = providerId
-  selectedAuthMethod.value = { type: 'api', label: 'API Key' }
-  showAuthDialog.value = true
+const handleCustomProviderSubmit = async (config: CustomProviderConfig) => {
+  console.log('[SettingsModels] Custom provider submit:', config.providerId, 'type:', config.providerType)
+  
+  try {
+    const result = await window.desktop.lcode.customProvider.add(config)
+    
+    if (result.success) {
+      console.log('[SettingsModels] Custom provider added successfully')
+      showConnectDialog.value = false
+      await modelsStore.loadModels(directory.value)
+      showToast('Provider saved successfully', 'success')
+    } else {
+      console.error('[SettingsModels] Failed to add custom provider:', result.error)
+      showToast(result.error || 'Failed to add provider', 'error')
+    }
+  } catch (err) {
+    console.error('[SettingsModels] Error adding custom provider:', err)
+    showToast('Failed to add custom provider', 'error')
+  }
 }
 
 async function startOAuth(providerId: string, methodIndex: number, inputs: Record<string, string>) {
@@ -540,10 +598,26 @@ function handleModelSelect(providerId: string, modelId: string) {
   }
 }
 
-function handleAddModelSuccess(providerId: string, modelId: string) {
+async function handleAddModelSuccess(providerId: string, modelId: string) {
+  console.log('[handleAddModelSuccess] called with', providerId, modelId)
   showAddModelModal.value = false
-  // 刷新模型列表
-  modelsStore.loadModels(directory.value)
+  editingModel.value = undefined
+  // Call refreshAll with correct directory before loadModels
+  try {
+    await window.desktop.provider.refreshAll(directory.value)
+    console.log('[handleAddModelSuccess] refreshAll done for directory:', directory.value)
+  } catch (e) {
+    console.error('[handleAddModelSuccess] refreshAll error:', e)
+  }
+  console.log('[handleAddModelSuccess] calling loadModels')
+  await modelsStore.loadModels(directory.value)
+  console.log('[handleAddModelSuccess] loadModels completed')
+  showToast('模型配置已更新', 'success')
+}
+
+function handleCloseAddModelModal() {
+  showAddModelModal.value = false
+  editingModel.value = undefined
 }
 
 function handleEdit(providerId: string) {
@@ -616,6 +690,16 @@ function handleDeleteModel(modelId: string) {
     deletingModelId.value = modelId
     deletingModelName.value = model.name
     showDeleteModelConfirm.value = true
+  }
+}
+
+function handleEditModel(modelId: string) {
+  if (!selectedProvider.value) return
+  const model = selectedProvider.value.models[modelId]
+  console.log('[SettingsModels] handleEditModel:', modelId, 'model:', JSON.stringify(model))
+  if (model) {
+    editingModel.value = { modelId, model }
+    showAddModelModal.value = true
   }
 }
 

@@ -1055,7 +1055,11 @@ export function toPublicInfo(provider: Info): Info {
 }
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
-  return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
+  return mapValues(providers, (item) => {
+    const models = Object.values(item.models)
+    if (models.length === 0) return ""
+    return sort(models)[0].id
+  })
 }
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
@@ -1106,6 +1110,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly invalidate: () => Effect.Effect<void>
 }
 
 interface State {
@@ -1314,9 +1319,21 @@ export const layer = Layer.effect(
             return
           }
           const match = database[providerID]
-          if (!match) return
-          // @ts-expect-error
-          providers[providerID] = mergeDeep(match, provider)
+          if (match) {
+            // @ts-expect-error
+            providers[providerID] = mergeDeep(match, provider)
+            return
+          }
+          if (provider.source === "config") {
+            providers[providerID] = mergeDeep({
+              id: providerID,
+              name: providerID,
+              source: "config",
+              env: [],
+              options: {},
+              models: {},
+            } as Info, provider)
+          }
         }
 
         // load plugins first so config() hook runs before reading cfg.provider
@@ -1362,6 +1379,7 @@ export const layer = Layer.effect(
 
         // extend database from config
         for (const [providerID, provider] of configProviders) {
+          console.log('[ProviderInit] Processing config provider:', providerID)
           const existing = database[providerID]
           const parsed: Info = {
             id: ProviderV2.ID.make(providerID),
@@ -1373,6 +1391,7 @@ export const layer = Layer.effect(
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+            console.log('[ProviderInit] Processing model:', modelID, 'config name:', model.name)
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
@@ -1386,6 +1405,7 @@ export const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            console.log('[ProviderInit] Model', modelID, 'final name:', name)
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1456,11 +1476,13 @@ export const layer = Layer.effect(
 
         // load env
         const envs = yield* env.all()
+        console.log('[ProviderInit] envs:', Object.keys(envs).filter(k => envs[k]))
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
+          console.log('[ProviderInit] Found env key for provider:', providerID, 'env:', provider.env)
           mergeProvider(providerID, {
             source: "env",
             key: provider.env.length === 1 ? apiKey : undefined,
@@ -1469,10 +1491,12 @@ export const layer = Layer.effect(
 
         // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
+        console.log('[ProviderInit] auths keys:', Object.keys(auths))
         for (const [id, provider] of Object.entries(auths)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
+            console.log('[ProviderInit] Found auth for provider:', providerID)
             mergeProvider(providerID, {
               source: "api",
               key: provider.key,
@@ -1501,6 +1525,10 @@ export const layer = Layer.effect(
           mergeProvider(providerID, patch)
         }
 
+        /*
+        // DISABLED: 内置 custom providers 加载
+        // 这些 provider (anthropic, opencode, openai, xai, github-copilot, azure 等) 
+        // 现在需要通过配置文件或环境变量来启用，而不是自动加载
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
@@ -1518,6 +1546,7 @@ export const layer = Layer.effect(
             mergeProvider(providerID, patch)
           }
         }
+        */
 
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
@@ -1587,8 +1616,12 @@ export const layer = Layer.effect(
           }
 
           if (Object.keys(provider.models).length === 0) {
-            delete providers[providerID]
-            continue
+            // Keep custom providers (source === 'config') even without models
+            // User can discover models later via refresh or add manually
+            if (provider.source !== 'config') {
+              delete providers[providerID]
+              continue
+            }
           }
         }
 
@@ -1603,7 +1636,23 @@ export const layer = Layer.effect(
       }),
     )
 
-    const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+    const list = Effect.fn("Provider.list")(function* () {
+      const dir = yield* InstanceState.directory
+      console.log('[Provider.list] Getting providers for directory:', dir)
+      const providers = yield* InstanceState.use(state, (s) => s.providers)
+      console.log('[Provider.list] Final providers count:', Object.keys(providers).length)
+      for (const [id, p] of Object.entries(providers)) {
+        console.log('[Provider.list] Provider:', id, 'source:', p.source, 'name:', p.name, 'hasKey:', !!p.key)
+      }
+      return providers
+    })
+
+    const invalidateState = Effect.fn("Provider.invalidate")(function* () {
+      const dir = yield* InstanceState.directory
+      console.log('[Provider] Invalidating InstanceState cache for directory:', dir)
+      yield* InstanceState.invalidate(state)
+      console.log('[Provider] InstanceState cache invalidated')
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -1934,7 +1983,7 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, invalidate: invalidateState })
   }),
 )
 

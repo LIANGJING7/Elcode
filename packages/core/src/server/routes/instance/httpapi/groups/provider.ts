@@ -186,6 +186,16 @@ export const ProviderApi = HttpApi.make("provider")
             description: "Delete a specific model from a provider's configuration.",
           }),
         ),
+        HttpApiEndpoint.post("refreshAll", `${root}/refresh-all`, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Struct({ success: Schema.Boolean }), "Refresh all models cache result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.refreshAll",
+            summary: "Refresh all models cache",
+            description: "Force refresh the ModelsDev cache to get latest model data.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({

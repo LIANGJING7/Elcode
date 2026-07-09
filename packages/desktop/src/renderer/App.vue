@@ -69,13 +69,16 @@
       </div>
       <div v-else class="drag flex-1"></div>
 
-      <!-- 右侧: 给 titleBarOverlay 窗口控制按钮留空间 -->
-      <div class="drag flex-shrink-0" style="width: 138px"></div>
+      <div class="flex items-center flex-shrink-0">
+        <div style="width: 142px"></div>
+      </div>
     </div>
 
     <!-- 主体: 侧边栏 + 内容区 + FileTabsPanel -->
     <div class="flex flex-1 min-h-0">
-      <Sidebar v-show="ui.sidebarOpen" />
+      <Transition name="sidebar">
+        <Sidebar v-show="ui.sidebarOpen" />
+      </Transition>
 
       <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
         <WelcomeView v-if="effectiveView === 'welcome'" key="welcome" @open-folder="handleAddWorkspace" />
@@ -121,6 +124,7 @@ import { useModelsStore } from './stores/models'
 import { useThemeStore } from './stores/theme'
 import { useMcpStore } from './stores/mcp'
 import { useSkillStore } from './stores/skill'
+import { useSubagentStore } from './stores/subagent'
 import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
 useGlobalShortcuts()
@@ -132,6 +136,7 @@ const modelsStore = useModelsStore()
 const themeStore = useThemeStore()
 const mcpStore = useMcpStore()
 const skillStore = useSkillStore()
+const subagentStore = useSubagentStore()
 
 const sidebarWidth = '260px'
 
@@ -201,25 +206,48 @@ watch(
   () => workspaceStore.currentWorkspace?.path,
   async (newPath, oldPath) => {
     if (newPath && newPath !== oldPath) {
-      // 并行加载，带异常隔离
       await Promise.allSettled([
         modelsStore.loadModels(newPath),
-        mcpStore.loadStatusImmediate(newPath),
         skillStore.load(newPath),
       ])
     } else if (!newPath && oldPath) {
-      // 清空状态
       modelsStore.clearModels()
-      mcpStore.clear()
       skillStore.clear()
     }
   }
 )
 
+// Bind subagent watch to Session lifecycle
+watch(
+    () => sessionStore.currentSessionId,
+    (newId, oldId) => {
+      if (newId) {
+        // Pass current messages for bootstrap (extract subagent tabs from history)
+        subagentStore.watch(newId, sessionStore.currentMessages)
+      } else {
+        subagentStore.unwatch()
+      }
+    },
+    { immediate: true }
+  )
+
 let cleanupListeners: (() => void) | null = null
+let cleanupSubagentListeners: (() => void) | null = null
 
 onMounted(async () => {
   cleanupListeners = sessionStore.setupStreamListeners()
+
+  // Setup subagent IPC listeners
+  const cleanupTabs = window.desktop.subagent.onTabsUpdate((data) => {
+    subagentStore.updateTabs(data)
+  })
+  const cleanupDetail = window.desktop.subagent.onDetailUpdate((data) => {
+    subagentStore.updateDetail(data)
+  })
+  cleanupSubagentListeners = () => {
+    cleanupTabs()
+    cleanupDetail()
+  }
 
   await themeStore.loadTheme()
 
@@ -232,13 +260,19 @@ onMounted(async () => {
     }
   }
 
+  window.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.key === '\\') {
+      e.preventDefault()
+      ui.toggleSidebar()
+    }
+  })
+
   if (workspaceStore.currentWorkspace) {
     const path = workspaceStore.currentWorkspace.path
-    // 并行加载，互不影响
     await Promise.allSettled([
       sessionStore.reload(),
       modelsStore.loadModels(path),
-      mcpStore.loadStatus(path),
+      mcpStore.loadStatusImmediate(),
       skillStore.load(path),
     ])
   }
@@ -246,6 +280,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   cleanupListeners?.()
+  cleanupSubagentListeners?.()
 })
 
 async function handleAddWorkspace() {
@@ -277,5 +312,26 @@ function handleOpenFile(tool: ToolCall) {
   background-image:
     radial-gradient(ellipse at top left, var(--color-accent-glow) 0%, transparent 50%),
     radial-gradient(ellipse at bottom right, var(--color-accent-muted) 0%, transparent 50%);
+}
+
+.sidebar-enter-active,
+.sidebar-leave-active {
+  transition: all 0.2s ease-out;
+}
+
+.sidebar-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.sidebar-enter-to,
+.sidebar-leave-from {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.sidebar-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
 }
 </style>

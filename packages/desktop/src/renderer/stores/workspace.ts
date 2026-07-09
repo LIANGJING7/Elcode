@@ -12,21 +12,31 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const hasCurrentWorkspace = computed(() => currentWorkspace.value !== null)
 
   async function loadWorkspaces() {
+    console.log('[WORKSPACE] loadWorkspaces() called')
     isLoading.value = true
     error.value = null
     try {
       const list = await window.desktop.workspace.list()
+      console.log('[WORKSPACE] workspace.list() result:', list)
       workspaces.value = list
       
       const cwd = await window.desktop.workspace.getCwd()
+      console.log('[WORKSPACE] workspace.getCwd() result:', cwd)
       
       const matchByCwd = workspaces.value.find(w => w.path === cwd)
+      console.log('[WORKSPACE] matchByCwd:', matchByCwd)
       if (matchByCwd) {
         currentWorkspace.value = matchByCwd
+        console.log('[WORKSPACE] Set currentWorkspace to matchByCwd:', currentWorkspace.value)
       } else if (workspaces.value.length > 0) {
         currentWorkspace.value = workspaces.value[0]
+        console.log('[WORKSPACE] Set currentWorkspace to first item:', currentWorkspace.value)
+      } else {
+        console.log('[WORKSPACE] No workspaces found, currentWorkspace remains null')
       }
+      console.log('[WORKSPACE] Final currentWorkspace:', currentWorkspace.value)
     } catch (e) {
+      console.error('[WORKSPACE] loadWorkspaces() error:', e)
       error.value = e instanceof Error ? e.message : 'Failed to load workspaces'
       workspaces.value = []
     } finally {
