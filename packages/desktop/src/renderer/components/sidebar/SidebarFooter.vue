@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useUiStore } from '../../stores/ui'
 import { useThemeStore } from '../../stores/theme'
+import { Sun, Moon, Settings } from 'lucide-vue-next'
 
 const ui = useUiStore()
 const themeStore = useThemeStore()
@@ -19,23 +20,25 @@ function toggleTheme() {
 </script>
 
 <template>
-  <div class="sidebar-footer px-3 py-2 border-t border-border/60 flex items-center gap-1">
+  <div v-if="!isSettingsMode" class="sidebar-footer px-3 py-2 border-t border-border/60 flex items-center gap-2">
     <button
-      class="flex-1 flex items-center justify-center py-1.5 rounded-md text-sm text-text-muted hover:bg-bg-tertiary transition-colors duration-fast"
+      class="flex-1 flex items-center justify-center py-1.5 rounded-md text-text-muted hover:bg-bg-tertiary transition-colors duration-fast"
       title="切换主题"
       @click="toggleTheme"
     >
-      <span class="text-base">{{ isDark ? '☀' : '☾' }}</span>
+      <Sun v-if="isDark" class="w-4 h-4" />
+      <Moon v-else class="w-4 h-4" />
     </button>
 
+    <div class="w-px h-4 bg-border/60" />
+
     <button
-      v-if="!isSettingsMode"
       data-sidebar-action="settings"
-      class="flex-1 flex items-center justify-center py-1.5 rounded-md text-sm text-text-muted hover:bg-bg-tertiary transition-colors duration-fast"
-      title="设置"
+      class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm text-text-muted hover:bg-bg-tertiary transition-colors duration-fast"
       @click="emit('enter-settings')"
     >
-      <span>⚙</span>
+      <Settings class="w-4 h-4" />
+      <span>设置</span>
     </button>
   </div>
 </template>

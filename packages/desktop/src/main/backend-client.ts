@@ -184,7 +184,7 @@ export async function startBackend(): Promise<{ port: number }> {
       // 2. "elcode server listening on http://${hostname}:${port}" - from compiled executable
       let match = text.match(/PORT:(\d+)/)
       if (!match) {
-        match = text.match(/elcode server listening on http:\/\/[\d.]+:(\d+)/)
+        match = text.match(/elcode server listening on http:\/\/[\w.]+:(\d+)/)
       }
       if (match && !portFound) {
         portFound = true

@@ -1,5 +1,5 @@
-appId: com.opencode.desktop
-productName: OpenCode Desktop
+appId: com.elcode.desktop
+productName: Elcode
 directories:
   buildResources: build
   output: release_new
@@ -8,8 +8,8 @@ files:
   - build/**/*
 # Include compiled core backend executable (path is relative to packages/desktop)
 extraResources:
-  - from: "../../dist/opencode-windows-x64/bin/opencode.exe"
-    to: "backend/opencode.exe"
+  - from: "../core/dist/@model-agent/core-windows-x64/bin/elcode.exe"
+    to: "backend/elcode.exe"
 mac:
   icon: build/icon.png
   category: public.app-category.developer-tools
