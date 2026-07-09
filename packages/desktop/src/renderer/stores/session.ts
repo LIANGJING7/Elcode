@@ -199,13 +199,13 @@ export const useSessionStore = defineStore('session', () => {
       console.log('[SESSION_STORE_RELOAD] Result received:', JSON.stringify(result).slice(0, 500))
       console.log('[SESSION_STORE_RELOAD] Conversations count:', result.conversations?.length ?? 0)
       
-      // Debug: Check if any conversation has parent_id (should be null for roots)
+      // Debug: Check if any conversation has parentID (should be undefined for roots)
       if (result.conversations && result.conversations.length > 0) {
-        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
-        console.log('[SESSION_STORE_RELOAD] Conversations with parent_id (SHOULD BE 0):', withParentId.length)
+        const withParentId = result.conversations.filter(c => c.parentID !== undefined)
+        console.log('[SESSION_STORE_RELOAD] Conversations with parentID (SHOULD BE 0):', withParentId.length)
         if (withParentId.length > 0) {
           console.error('[SESSION_STORE_RELOAD] BUG: Backend returned child sessions despite roots=true!', 
-            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+            withParentId.map(c => ({ id: c.id, title: c.title, parentID: c.parentID })))
         }
       }
 
@@ -283,13 +283,13 @@ export const useSessionStore = defineStore('session', () => {
 
       if (currentGen !== generation) return
 
-      // Debug: Check if any conversation has parent_id
+      // Debug: Check if any conversation has parentID
       if (result.conversations && result.conversations.length > 0) {
-        const withParentId = result.conversations.filter(c => c.parent_id !== null && c.parent_id !== undefined)
-        console.log('[SESSION_STORE_LOADMORE] Loaded', result.conversations.length, 'conversations, with parent_id (SHOULD BE 0):', withParentId.length)
+        const withParentId = result.conversations.filter(c => c.parentID !== undefined)
+        console.log('[SESSION_STORE_LOADMORE] Loaded', result.conversations.length, 'conversations, with parentID (SHOULD BE 0):', withParentId.length)
         if (withParentId.length > 0) {
           console.error('[SESSION_STORE_LOADMORE] BUG: Backend returned child sessions despite roots=true!', 
-            withParentId.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+            withParentId.map(c => ({ id: c.id, title: c.title, parentID: c.parentID })))
         }
       }
 
@@ -800,11 +800,11 @@ export const useSessionStore = defineStore('session', () => {
         const info = props?.info as Record<string, unknown> | undefined
         if (info) {
           const sessionId = info.id as string
-          const parentId = info.parent_id as string | undefined
+          const parentID = info.parentID as string | undefined
           
           // Skip child sessions (subagent sessions) - only show root sessions in sidebar
-          if (parentId) {
-            console.log('[SSE] session.created - skipping child session:', sessionId, 'parent:', parentId)
+          if (parentID) {
+            console.log('[SSE] session.created - skipping child session:', sessionId, 'parent:', parentID)
             return
           }
           
