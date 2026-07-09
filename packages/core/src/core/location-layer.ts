@@ -41,6 +41,7 @@ import { LLMClient } from "@/llm"
 import { RequestExecutor } from "@/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
+import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { FetchHttpClient } from "effect/unstable/http"
 
@@ -92,6 +93,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(services),
       Layer.provide(model),
       Layer.provide(skillGuidance),
+      Layer.provide(BackgroundReviewer.defaultLayer),
     )
     return Layer.mergeAll(
       services,

@@ -27,11 +27,13 @@ import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
+import { SessionMessage } from "../message"
 import { SessionStore } from "../store"
 import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
+import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -101,6 +103,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const reviewer = yield* BackgroundReviewer.Service
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -391,6 +394,23 @@ export const layer = Layer.effect(
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
+      const messages = yield* getContext(input.sessionID).pipe(
+        Effect.map((context) =>
+          context
+            .filter(
+              (m): m is SessionMessage.User | SessionMessage.Assistant =>
+                m.type === "user" || m.type === "assistant",
+            )
+            .map((m) => ({
+              role: m.type,
+              content:
+                m.type === "user"
+                  ? m.text
+                  : m.content.filter((c) => c.type === "text").map((c) => c.text).join(""),
+            })),
+        ),
+      )
+      yield* reviewer.reviewInBackground(messages)
     })
 
     return Service.of({
