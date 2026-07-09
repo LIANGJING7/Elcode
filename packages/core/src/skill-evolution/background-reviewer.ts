@@ -109,6 +109,9 @@ Guidelines:
                 reason: update.reason || "Auto-created",
               })
             } else if (update.type === "update" && update.skillName && update.newPrompt) {
+              const oldSkill = yield* skillV2.get(update.skillName)
+              const oldPrompt = oldSkill?.content || ""
+              
               yield* skillManager.update(
                 update.skillName,
                 update.newPrompt,
@@ -116,7 +119,7 @@ Guidelines:
               )
               yield* events.publish(SkillUpdated, {
                 skillName: update.skillName,
-                oldPrompt: "",
+                oldPrompt: oldPrompt,
                 newPrompt: update.newPrompt,
                 reason: update.reason || "Auto-updated",
               })
