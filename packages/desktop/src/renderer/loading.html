@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCode</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-app-region: no-drag;
+      background: #1a1a1a;
+    }
+    
+    .loading-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .loading-icon {
+      width: 64px;
+      height: 64px;
+      will-change: transform;
+      animation: breathe 2s cubic-bezier(.4, 0, .2, 1) infinite;
+    }
+    
+    @keyframes breathe {
+      0%, 100% {
+        transform: scale(0.96);
+        opacity: 0.75;
+      }
+      50% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading-container">
+    <svg class="loading-icon" viewBox="0 0 24 24" fill="none">
+      <defs>
+        <linearGradient id="sidebarIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1A1A1A"/>
+          <stop offset="100%" stop-color="#F5F5F5"/>
+        </linearGradient>
+      </defs>
+      <!-- L vertical fragments -->
+      <polygon points="5,4 7,4 6.5,7 4.5,7" fill="url(#sidebarIconGradient)"/>
+      <polygon points="7.5,4.5 9.5,4 9,7.5 7,8" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+      <polygon points="4,7.5 6.5,7 6,10.5 3.5,11" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+      <polygon points="7,8 9,7.5 8.5,11 6.5,11.5" fill="url(#sidebarIconGradient)" opacity="0.8"/>
+      <polygon points="3.5,11.5 6,11 5.5,14.5 3,15" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+      <polygon points="6.5,12 8.5,11.5 8,15 6,15.5" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+      <!-- L horizontal fragments -->
+      <polygon points="6,15.5 8,15 8.5,17.5 6.5,18" fill="url(#sidebarIconGradient)"/>
+      <polygon points="8.5,15.5 11,16 12,18.5 9.5,18" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+      <polygon points="11.5,16.5 14.5,17 15.5,19.5 12.5,19" fill="url(#sidebarIconGradient)" opacity="0.85"/>
+      <polygon points="15,17.5 17.5,16.5 18,19 15.5,20" fill="url(#sidebarIconGradient)" opacity="0.8"/>
+      <polygon points="18,17 20,16 19.5,19 17.5,20" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+    </svg>
+  </div>
+</body>
+</html>

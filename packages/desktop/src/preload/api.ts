@@ -348,7 +348,9 @@ deleteModel: (providerId: string, modelId: string, directory?: string): Promise<
         })
       }
     }
-  }
+  },
+  retryStartup: (): Promise<void> =>
+    ipcRenderer.invoke('retry-startup')
 }
 
 export type DesktopAPI = typeof desktopAPI

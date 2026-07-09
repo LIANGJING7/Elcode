@@ -17,7 +17,7 @@ function getIconPath(): string {
   return join(__dirname, '../../build', iconName)
 }
 
-export function createWindow(): BrowserWindow {
+export async function createWindow(): Promise<BrowserWindow> {
   // Create native image for better icon handling across platforms
   const icon = nativeImage.createFromPath(getIconPath())
   
@@ -44,21 +44,18 @@ export function createWindow(): BrowserWindow {
     show: false
   })
 
+  // Load splash page first and show immediately
   if (isDev) {
-    // vite-plugin-electron sets VITE_DEV_SERVER_URL to the actual dev server
-    // URL (incl. the real port — vite may pick 5174, 5175, ... when 5173 is
-    // busy). Falling back to the default keeps `electron .` usable in a dev
-    // shell if the env var isn't set.
-    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
-    win.loadURL(devUrl)
-    win.webContents.openDevTools()
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  win.once('ready-to-show', () => {
+    const loadingUrl = process.env.VITE_DEV_SERVER_URL 
+      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/loading.html`
+      : 'http://localhost:5173/src/renderer/loading.html'
+    await win.loadURL(loadingUrl)
     win.show()
-  })
+  } else {
+    const loadingPath = join(__dirname, '../renderer/loading.html')
+    await win.loadFile(loadingPath)
+    win.show()
+  }
 
   win.on('closed', () => {
     mainWindow = null
@@ -66,6 +63,24 @@ export function createWindow(): BrowserWindow {
 
   mainWindow = win
   return win
+}
+
+export async function switchToApp(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  
+  const win = mainWindow
+  
+  if (isDev) {
+    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+    await win.loadURL(devUrl)
+  } else {
+    await win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+  
+  // Wait for Vue to finish loading to avoid white flash
+  await new Promise<void>(resolve => {
+    win.webContents.once('did-finish-load', () => resolve())
+  })
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -85,4 +100,22 @@ export function sendMessageToRenderer(channel: string, data: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, data)
   }
+}
+
+export async function showError(errorMsg: string): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  
+  const win = mainWindow
+  
+  if (isDev) {
+    const errorUrl = process.env.VITE_DEV_SERVER_URL 
+      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/error.html?error=${encodeURIComponent(errorMsg)}`
+      : `http://localhost:5173/src/renderer/error.html?error=${encodeURIComponent(errorMsg)}`
+    await win.loadURL(errorUrl)
+  } else {
+    const errorPath = join(__dirname, '../renderer/error.html')
+    await win.loadFile(errorPath, { query: { error: errorMsg } })
+  }
+  
+  win.show()
 }

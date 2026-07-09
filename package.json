@@ -13,5 +13,8 @@
         "typecheck": "bun run typecheck --filter '*'",
         "test": "bun run test --filter '@model-agent/core'",
         "build": "bun run build --filter '*'"
+    },
+    "devDependencies": {
+        "@tsconfig/bun": "^1.0.10"
     }
 }

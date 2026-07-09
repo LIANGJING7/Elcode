@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
     "jsx": "preserve",
@@ -7,10 +7,10 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
     "noUncheckedIndexedAccess": false,
-    "customConditions": ["browser"],
-    "paths": {
-      "@/*": ["./src/*"],
-      "@test/*": ["./test/*"]
-    }
-  }
+    "customConditions": ["browser"]
+  },
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/desktop" }
+  ]
 }
