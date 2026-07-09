@@ -143,7 +143,7 @@ Guidelines:
         // Fire-and-forget background review
         // In production, this would be managed by a proper scope/scheduler
         // For now, we just run it without blocking the caller
-        yield* review(messages).pipe(Effect.ignore)
+        yield* review(messages).pipe(Effect.forkDetach)
       })
 
       return Service.of({
