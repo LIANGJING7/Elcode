@@ -40,7 +40,7 @@ export interface Interface {
   
   readonly delete: (
     name: string
-  ) => Effect.Effect<void, InvalidSkillNameError, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Global.Service>
+  ) => Effect.Effect<void, SkillNotFoundError | InvalidSkillNameError, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Global.Service>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillManagerTool") {}
@@ -122,7 +122,9 @@ ${newPrompt}
       const skills = yield* skillV2.list()
       const skill = skills.find((s) => s.name === sanitizedName)
 
-      if (!skill) return
+      if (!skill) {
+        return yield* Effect.fail(new SkillNotFoundError(sanitizedName))
+      }
 
       const skillDir = dirname(skill.location)
       const archiveDir = join(global.config, "skills", ".archive")

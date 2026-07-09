@@ -178,6 +178,23 @@ describe("SkillManagerTool", () => {
     expect(result._tag).toBe("SkillNotFoundError")
   })
 
+  test("should fail when deleting non-existent skill", async () => {
+    const testLayer = SkillManagerTool.layer.pipe(
+      Layer.provide(UsageTracker.layer),
+      Layer.provide(mockSkillV2Layer),
+      Layer.provide(FSUtil.defaultLayer),
+      Layer.provide(Global.defaultLayer),
+      Layer.provide(Database.layerFromPath(":memory:")),
+    )
+
+    const program = SkillManagerTool.use.delete("nonexistent")
+      .pipe(Effect.provide(testLayer))
+
+    const result = await Effect.runPromise(program).catch((error) => error)
+    
+    expect(result._tag).toBe("SkillNotFoundError")
+  })
+
   test("should delete skill by archiving", async () => {
     const testHome = join(os.tmpdir(), "lcode-test-delete-" + Date.now())
     const testConfig = join(testHome, ".config", "lcode")
