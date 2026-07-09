@@ -26,12 +26,7 @@ const durationText = computed(() => {
       @click="status !== 'thinking' && (expanded = !expanded)"
     >
       <template v-if="status === 'thinking'">
-        <div class="flex items-center gap-0.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-accent reasoning-dot" />
-          <span class="w-1.5 h-1.5 rounded-full bg-accent/60 reasoning-dot" style="animation-delay: 0.15s" />
-          <span class="w-1.5 h-1.5 rounded-full bg-accent/40 reasoning-dot" style="animation-delay: 0.3s" />
-        </div>
-        <span class="text-xs text-text-muted font-medium">思考中...</span>
+        <span class="text-xs text-text-muted font-medium thinking-text">思考中</span>
       </template>
       <template v-else>
         <svg
@@ -58,13 +53,13 @@ const durationText = computed(() => {
 </template>
 
 <style scoped>
-.reasoning-dot {
-  animation: reasoning-dot 1.2s ease-in-out infinite;
+.thinking-text {
+  animation: thinking-fade 1.5s ease-in-out infinite;
 }
 
-@keyframes reasoning-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
+@keyframes thinking-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .animate-pulse {

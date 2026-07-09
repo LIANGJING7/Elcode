@@ -40,21 +40,20 @@ const isStreaming = computed(() => streamingStore.isCurrentStreaming.value)
         @open-diff-file="emit('openDiffFile', $event)"
       />
 
-      <div v-if="nodes.length === 0" class="flex items-center gap-3">
-        <div class="flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-glow" />
-          <span class="w-1.5 h-1.5 rounded-full bg-accent/60" style="animation: pulse 1.2s ease-in-out 0.15s infinite" />
-          <span class="w-1.5 h-1.5 rounded-full bg-accent/40" style="animation: pulse 1.2s ease-in-out 0.3s infinite" />
-        </div>
-        <span class="text-xs text-text-muted">Thinking...</span>
+      <div v-if="nodes.length === 0" class="flex items-center gap-2">
+        <span class="text-xs text-text-muted thinking-text">思考中</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.5; transform: scale(0.8); }
+.thinking-text {
+  animation: thinking-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes thinking-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>
