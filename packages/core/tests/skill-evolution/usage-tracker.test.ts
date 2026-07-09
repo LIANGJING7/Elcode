@@ -44,4 +44,22 @@ describe("UsageTracker", () => {
 
     expect(result?.lifecycle_state).toBe("archived")
   })
+
+  test("should handle concurrent access without race condition", async () => {
+    const program = Effect.gen(function* () {
+      const skillName = "concurrent-test"
+
+      yield* Effect.all(
+        [UsageTracker.use.recordUse(skillName), UsageTracker.use.recordUse(skillName)],
+        { concurrency: "unbounded" },
+      )
+
+      const stats = yield* UsageTracker.use.getStats(skillName)
+      return stats
+    }).pipe(Effect.provide(UsageTracker.layer), Effect.provide(testLayer))
+
+    const result = await Effect.runPromise(program)
+
+    expect(result?.use_count).toBe(2)
+  })
 })

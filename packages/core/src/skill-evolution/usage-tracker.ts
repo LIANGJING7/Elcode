@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { serviceUse } from "@/core/effect/service-use"
 import { Effect, Layer, Context, Clock } from "effect"
 import { Database } from "@/core/database/database"
@@ -25,32 +25,26 @@ export const layer: Layer.Layer<Service, never, Database.Service | Clock.Clock> 
     const recordUse = Effect.fn("UsageTracker.recordUse")(function* (skillName: string) {
       const now = yield* Clock.currentTimeMillis
 
-      const existing = yield* db.select().from(skill_usage).where(eq(skill_usage.skill_name, skillName)).get()
-
-      if (existing) {
-        yield* db
-          .update(skill_usage)
-          .set({
-            use_count: existing.use_count + 1,
+      yield* db
+        .insert(skill_usage)
+        .values({
+          skill_name: skillName,
+          use_count: 1,
+          last_used_at: now,
+          first_used_at: now,
+          lifecycle_state: LifecycleState.ACTIVE,
+          time_created: now,
+          time_updated: now,
+        })
+        .onConflictDoUpdate({
+          target: skill_usage.skill_name,
+          set: {
+            use_count: sql`${skill_usage.use_count} + 1`,
             last_used_at: now,
             time_updated: now,
-          })
-          .where(eq(skill_usage.skill_name, skillName))
-          .run()
-      } else {
-        yield* db
-          .insert(skill_usage)
-          .values({
-            skill_name: skillName,
-            use_count: 1,
-            last_used_at: now,
-            first_used_at: now,
-            lifecycle_state: LifecycleState.ACTIVE,
-            time_created: now,
-            time_updated: now,
-          })
-          .run()
-      }
+          },
+        })
+        .run()
     })
 
     const getStats = Effect.fn("UsageTracker.getStats")((skillName: string) =>
