@@ -18,9 +18,9 @@ export interface ReviewResult {
 }
 
 export interface UsageStats {
-  skill_name: string
-  use_count: number
-  last_used_at: number
-  first_used_at: number
-  lifecycle_state: string
+  skillName: string
+  useCount: number
+  lastUsedAt: number
+  firstUsedAt: number
+  lifecycleState: LifecycleState
 }
