@@ -9,7 +9,7 @@ describe('uiStore', () => {
     const ui = useUiStore()
     expect(ui.view).toBe('welcome')
     expect(ui.previousView).toBe('welcome')
-    expect(ui.settingsSection).toBe('appearance')
+    expect(ui.settingsSection).toBe('models')
     expect(ui.sidebarOpen).toBe(true)
   })
 

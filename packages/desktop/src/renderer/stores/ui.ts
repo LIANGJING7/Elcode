@@ -4,13 +4,13 @@ import type { FileTab, PanelTab } from '../types/presentation'
 import { useSubagentStore } from './subagent'
 
 export type View = 'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'
-export type SettingsSection = 'appearance' | 'models' | 'mcp' | 'skills'
+export type SettingsSection = 'models' | 'mcp' | 'skills'
 
 export const useUiStore = defineStore('ui', () => {
   // 单一 source of truth: view. previousView 仅在进/出 settings 时记/读
   const view = ref<View>('welcome')
   const previousView = ref<View>('welcome')
-  const settingsSection = ref<SettingsSection>('appearance')
+  const settingsSection = ref<SettingsSection>('models')
 
   // 面板与导航 UI 态(均不污染 view 语义)
   const sidebarOpen = ref(true)

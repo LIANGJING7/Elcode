@@ -32,22 +32,6 @@
           @blur="commitEditTitle"
         />
 
-        <button
-          class="no-drag px-2 py-1 rounded hover:bg-bg-hover text-text-muted flex-shrink-0"
-          @click.stop="titleMenuOpen = !titleMenuOpen"
-        >
-          ⋯
-        </button>
-
-        <ul
-          v-if="titleMenuOpen"
-          class="no-drag absolute left-[calc(var(--spacing-sidebar)+1rem)] top-11 bg-bg-surface border border-border rounded shadow-lg py-1 z-50 min-w-[160px]"
-        >
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doCopy; closeTitleMenu()">复制</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="startEditTitle; closeTitleMenu()">重命名</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-error hover:bg-bg-hover text-left" @click="handleDeleteSession; closeTitleMenu()">删除</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doExport; closeTitleMenu()">导出 Markdown</button></li>
-        </ul>
       </div>
       <div v-else class="drag flex-1"></div>
 
@@ -130,8 +114,6 @@ const hasCurrentWorkspace = computed(() => workspaceStore.hasCurrentWorkspace)
 // 标题栏 rename 状态
 const editingTitle = ref(false)
 const titleDraft = ref('')
-const titleMenuOpen = ref(false)
-
 function startEditTitle() {
   editingTitle.value = true
   titleDraft.value = currentConversation.value?.title ?? ''
@@ -142,18 +124,6 @@ function commitEditTitle() {
   if (titleDraft.value && titleDraft.value !== currentConversation.value?.title) {
     handleRename(titleDraft.value)
   }
-}
-
-function closeTitleMenu() {
-  titleMenuOpen.value = false
-}
-
-function doCopy() {
-  // 复制会话 — 占位
-}
-
-function doExport() {
-  // 导出 Markdown — 占位
 }
 
 // view 由业务状态决定默认页面，临时 UI 状态只表示用户操作。

@@ -800,6 +800,14 @@ export const useSessionStore = defineStore('session', () => {
         const info = props?.info as Record<string, unknown> | undefined
         if (info) {
           const sessionId = info.id as string
+          const parentId = info.parent_id as string | undefined
+          
+          // Skip child sessions (subagent sessions) - only show root sessions in sidebar
+          if (parentId) {
+            console.log('[SSE] session.created - skipping child session:', sessionId, 'parent:', parentId)
+            return
+          }
+          
           const conv = state.conversations.find(c => c.id === sessionId)
           if (conv) {
             // Update existing tempConv with backend info

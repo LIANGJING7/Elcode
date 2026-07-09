@@ -11,7 +11,7 @@ defineEmits<{ openFolder: [] }>()
       <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-card flex items-center justify-center shadow-lg">
         <FolderOpen class="w-10 h-10 text-accent" />
       </div>
-      <h2 class="text-lg font-semibold text-foreground mb-2">欢迎使用 LCode</h2>
+      <h2 class="text-lg font-semibold text-foreground mb-2">欢迎使用 EL Code</h2>
       <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
         打开文件夹开始与你的代码库对话。LCode 可以读取、写入和编辑文件，运行命令，帮助你更高效地构建。
       </p>

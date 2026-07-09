@@ -7,10 +7,10 @@ import { useUiStore } from '../../../stores/ui'
 describe('SettingsNav', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('渲染 4 个设置项', () => {
+  it('渲染 3 个设置项', () => {
     const w = mount(SettingsNav)
     expect(w.findAll('button[data-settings-section]').map(b => b.attributes('data-settings-section')))
-      .toEqual(['appearance', 'models', 'mcp', 'skills'])
+      .toEqual(['models', 'mcp', 'skills'])
   })
 
   it('点设置项设 uiStore.settingsSection, 不动 view (仍是 settings)', async () => {
@@ -30,7 +30,7 @@ describe('SettingsNav', () => {
     ui.settingsSection = 'mcp'
     const w = mount(SettingsNav)
     expect(w.find('button[data-settings-section="mcp"]').classes()).toContain('is-active')
-    expect(w.find('button[data-settings-section="appearance"]').classes()).not.toContain('is-active')
+    expect(w.find('button[data-settings-section="models"]').classes()).not.toContain('is-active')
   })
 
   it('← 返回 exitSettings', async () => {
