@@ -1,3 +1,13 @@
+/**
+ * UsageTracker.Service - Skill usage tracking for lifecycle management
+ * 
+ * This is a FIRE-AND-FORGET service:
+ * - Usage stats are non-critical metadata
+ * - Database failures are acceptable (don't block user flow)
+ * - Errors are intentionally swallowed to prevent disruption
+ * 
+ * For critical operations that must succeed, use different error handling.
+ */
 import { eq, sql } from "drizzle-orm"
 import { serviceUse } from "@/core/effect/service-use"
 import { Effect, Layer, Context, Clock } from "effect"
