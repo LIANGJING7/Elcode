@@ -8,22 +8,39 @@ import { Global } from "@/core/global"
 import { Clock } from "effect"
 import os from "os"
 
+export class SkillNotFoundError {
+  readonly _tag = "SkillNotFoundError"
+  constructor(readonly name: string) {}
+}
+
+export class InvalidSkillNameError {
+  readonly _tag = "InvalidSkillNameError"
+  constructor(readonly name: string) {}
+}
+
+const sanitizeSkillName = (name: string): Effect.Effect<string, InvalidSkillNameError> => {
+  if (!name || name.includes('/') || name.includes('..') || name.includes('\\')) {
+    return Effect.fail(new InvalidSkillNameError(name))
+  }
+  return Effect.succeed(name)
+}
+
 export interface Interface {
   readonly create: (
     name: string,
     prompt: string,
     reason: string
-  ) => Effect.Effect<string, never, FSUtil.Service | UsageTracker.Service | Clock.Clock>
+  ) => Effect.Effect<string, InvalidSkillNameError, FSUtil.Service | UsageTracker.Service | Clock.Clock>
   
   readonly update: (
     name: string,
     newPrompt: string,
     reason: string
-  ) => Effect.Effect<void, never, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Clock.Clock>
+  ) => Effect.Effect<void, SkillNotFoundError | InvalidSkillNameError, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Clock.Clock>
   
   readonly delete: (
     name: string
-  ) => Effect.Effect<void, never, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Global.Service>
+  ) => Effect.Effect<void, InvalidSkillNameError, FSUtil.Service | SkillV2.Service | UsageTracker.Service | Global.Service>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillManagerTool") {}
@@ -52,12 +69,13 @@ export const layer: Layer.Layer<
       prompt: string,
       reason: string,
     ): string {
-      const skillDir = getSkillDir(name)
+      const sanitizedName = yield* sanitizeSkillName(name)
+      const skillDir = getSkillDir(sanitizedName)
       const skillPath = join(skillDir, "SKILL.md")
       const now = yield* Clock.currentTimeMillis
       const timestamp = new Date(now).toISOString()
 
-      const content = `# ${name}
+      const content = `# ${sanitizedName}
 
 ${prompt}
 
@@ -67,7 +85,7 @@ ${prompt}
       yield* fs.ensureDir(skillDir)
       yield* fs.writeFileString(skillPath, content)
 
-      yield* usageTracker.recordUse(name)
+      yield* usageTracker.recordUse(sanitizedName)
 
       return skillPath
     })
@@ -77,17 +95,18 @@ ${prompt}
       newPrompt: string,
       reason: string,
     ): void {
+      const sanitizedName = yield* sanitizeSkillName(name)
       const skills = yield* skillV2.list()
-      const skill = skills.find((s) => s.name === name)
+      const skill = skills.find((s) => s.name === sanitizedName)
 
       if (!skill) {
-        return yield* Effect.die(new Error(`Skill ${name} not found`))
+        return yield* Effect.fail(new SkillNotFoundError(sanitizedName))
       }
 
       const now = yield* Clock.currentTimeMillis
       const timestamp = new Date(now).toISOString()
 
-      const updatedContent = `# ${name}
+      const updatedContent = `# ${sanitizedName}
 
 ${newPrompt}
 
@@ -95,18 +114,19 @@ ${newPrompt}
 <!-- Reason: ${reason} -->`
 
       yield* fs.writeFileString(skill.location, updatedContent)
-      yield* usageTracker.recordUse(name)
+      yield* usageTracker.recordUse(sanitizedName)
     })
 
     const delete_ = Effect.fn("SkillManagerTool.delete")(function* (name: string): void {
+      const sanitizedName = yield* sanitizeSkillName(name)
       const skills = yield* skillV2.list()
-      const skill = skills.find((s) => s.name === name)
+      const skill = skills.find((s) => s.name === sanitizedName)
 
       if (!skill) return
 
       const skillDir = dirname(skill.location)
       const archiveDir = join(global.config, "skills", ".archive")
-      const archivePath = join(archiveDir, name)
+      const archivePath = join(archiveDir, sanitizedName)
 
       yield* fs.ensureDir(archiveDir)
       yield* Effect.tryPromise({
@@ -117,7 +137,7 @@ ${newPrompt}
         catch: (error) => error,
       })
 
-      yield* usageTracker.markArchived(name)
+      yield* usageTracker.markArchived(sanitizedName)
     })
 
     return Service.of({
