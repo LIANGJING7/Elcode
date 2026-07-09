@@ -5,20 +5,7 @@ import { SkillManagerTool } from "./skill-manager-tool"
 import { EventV2 } from "@/core/event"
 import { FSUtil } from "@/core/fs-util"
 import { SkillCreated, SkillUpdated } from "./events"
-import type { ReviewResult } from "./types"
-
-const ReviewResultSchema = Schema.Struct({
-  shouldUpdate: Schema.Boolean,
-  confidence: Schema.Number,
-  updates: Schema.Array(
-    Schema.Struct({
-      type: Schema.Literal("create", "update", "delete"),
-      skillName: Schema.optional(Schema.String),
-      newPrompt: Schema.optional(Schema.String),
-      reason: Schema.optional(Schema.String),
-    }),
-  ),
-})
+import { ReviewResultSchema, type ReviewResult } from "./types"
 
 export interface Interface {
   readonly buildPrompt: (
@@ -91,15 +78,16 @@ Guidelines:
       ): void {
         const prompt = yield* buildPrompt(messages)
 
-        // TODO: Implement actual LLM call with structured output
-        // For now, this is a placeholder that would call session.llm.generateStructured
-        // The test doesn't verify the actual LLM call, just the prompt generation
-        // and background execution
-
-        // Mock result for now - in production, this would be:
-        // const result = yield* llm.generateStructured<ReviewResult>(prompt, {
-        //   schema: ReviewResultSchema,
-        // })
+        // TODO: LLM Integration Point
+        // In production, this would call the LLM with structured output:
+        // const result = yield* llm.generateStructured(prompt, { schema: ReviewResultSchema })
+        // The LLM would analyze the conversation and decide:
+        // - Whether to create/update/delete skills
+        // - What changes to make
+        // - Confidence level for each decision
+        //
+        // For now, return a safe default that never creates skills automatically.
+        // This prevents unintended skill modifications during testing.
 
         const result: ReviewResult = {
           shouldUpdate: false,
@@ -140,10 +128,12 @@ Guidelines:
       const reviewInBackground = Effect.fn("BackgroundReviewer.reviewInBackground")(function* (
         messages: Array<{ role: string; content: string }>,
       ): void {
-        // Fire-and-forget background review
-        // In production, this would be managed by a proper scope/scheduler
-        // For now, we just run it without blocking the caller
-        yield* review(messages).pipe(Effect.forkDetach)
+        yield* review(messages).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("Background skill review failed", { cause })
+          ),
+          Effect.forkDetach
+        )
       })
 
       return Service.of({
