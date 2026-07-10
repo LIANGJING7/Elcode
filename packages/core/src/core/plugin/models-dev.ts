@@ -1,5 +1,6 @@
 import { DateTime, Effect, Scope, Stream } from "effect"
 import { Catalog } from "../catalog"
+import { Config } from "@/config/config"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { ModelRequest } from "../model-request"
@@ -54,15 +55,25 @@ export const ModelsDevPlugin = PluginV2.define({
   id: PluginV2.ID.make("models-dev"),
   effect: Effect.gen(function* () {
     const catalog = yield* Catalog.Service
+    const config = yield* Config.Service
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const transform = yield* catalog.transform()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
+      const cfg = yield* config.get()
       yield* transform((catalog) => {
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
+          const configProvider = cfg.provider?.[providerID]
+          const hasConfigModels = configProvider && Object.keys(configProvider.models ?? {}).length > 0
+          
+          // 如果配置文件定义了 provider 但没有 models，跳过该 provider
+          if (configProvider && !hasConfigModels) {
+            continue
+          }
+          
           catalog.provider.update(providerID, (provider) => {
             provider.name = item.name
             provider.env = [...item.env]
