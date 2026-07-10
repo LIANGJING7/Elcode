@@ -40,6 +40,7 @@
           :queue-count="queueCount"
           @send="handleSend"
           @slash-command="handleSlashCommand"
+          @mention="handleMention"
           @focus="isFocused = true"
           @blur="isFocused = false"
         />
@@ -130,12 +131,15 @@ import SessionOptions from './composer/SessionOptions.vue'
 import QueuedMessageChip from './composer/QueuedMessageChip.vue'
 import { useModelsStore } from '../stores/models'
 import type { PendingMessage } from '../stores/session'
+import type { MentionItem } from '../../types/mention'
 
 interface Attachment {
   type: 'file' | 'at'
   name: string
   path: string
   content?: string
+  url?: string
+  mime?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -270,6 +274,16 @@ function handleSlashCommand(command: string) {
   } else if (command === 'build') {
     sessionOptions.value.mode = 'build'
   }
+}
+
+function handleMention(item: MentionItem) {
+  attachments.value.push({
+    type: 'at',
+    name: item.value,
+    path: item.value,
+    url: item.url,
+    mime: item.mime
+  })
 }
 
 function handleFlushQueued(pending: PendingMessage) {
