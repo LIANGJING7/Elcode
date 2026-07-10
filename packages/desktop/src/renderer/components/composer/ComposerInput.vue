@@ -92,6 +92,9 @@ const { searchAll, loadAgents, loadResources, loading: mentionLoading } = useMen
 onMounted(() => {
   loadAgents()
   loadResources()
+  nextTick(() => {
+    mentionAutocompleteRef.value?.setAnchor(textareaRef.value)
+  })
 })
 
 // Dynamic placeholder: show queue hint when messages are queued
