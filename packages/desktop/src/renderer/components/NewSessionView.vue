@@ -83,7 +83,7 @@ async function handleComposerSend(
         ELCODE
       </div>
 
-      <div class="flex max-w-chat-max mx-auto mb-1">
+      <div class="flex mb-1 mx-6">
         <WorkspaceSelector />
       </div>
 
