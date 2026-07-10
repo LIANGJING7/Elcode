@@ -1,6 +1,5 @@
 /**
  * @提及类型定义
- * 复用 core 的 RunPromptPart 类型
  */
 
 export type MentionKind = 'file' | 'agent' | 'resource'
@@ -37,7 +36,7 @@ export function parseMentionPath(input: string): {
   
   return {
     path: match[1],
-    lineStart: parseInt(match[2]),
-    lineEnd: match[3] ? parseInt(match[3]) : undefined
+    lineStart: parseInt(match[2], 10),
+    lineEnd: match[3] ? parseInt(match[3], 10) : undefined
   }
 }
