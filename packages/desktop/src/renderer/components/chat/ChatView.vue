@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, provide, onMounted } from 'vue'
 import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
 import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
 import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
+import MentionAutocomplete from '../composer/MentionAutocomplete.vue'
+import { useMention } from '../../composables/useMention'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore } from '../../stores/session'
+import type { MentionItem, MentionState } from '../../types/mention'
 
-// Props: 会话元信息 + 消息流
 const props = defineProps<{
   sessionId: string
   messages: Message[]
@@ -23,20 +25,53 @@ const emit = defineEmits<{
 }>()
 
 const timelineRef = ref<ChatTimelineExpose>()
-
-// 一次性滚动标志：只在首次打开或切换会话时滚动
 const needInitialScroll = ref(false)
-
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
+
+const { searchAll, loadAgents, loadResources, loading: mentionLoading } = useMention()
+const mentionState = ref<MentionState>({
+  visible: false, query: '', atIndex: 0, selectedIndex: 0, items: []
+})
+let mentionQuerySeq = 0
+
+async function showMentionMenu(atIndex: number, query: string) {
+  const seq = ++mentionQuerySeq
+  mentionState.value.atIndex = atIndex
+  mentionState.value.query = query
+  mentionState.value.visible = true
+  mentionState.value.selectedIndex = 0
+  const items = await searchAll(query)
+  if (seq === mentionQuerySeq) mentionState.value.items = items
+}
+
+function hideMention() {
+  mentionState.value.visible = false
+  mentionState.value.items = []
+}
+
+function handleMentionSelect(item: MentionItem) {
+  hideMention()
+}
+
+onMounted(() => {
+  loadAgents()
+  loadResources()
+})
+
+const mentionVisible = ref(false)
+
+provide('mention', {
+  showMenu: showMentionMenu,
+  hideMenu: hideMention,
+  visible: mentionVisible,
+})
 
 async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
   sessionStore.sendMessage(content, promptOptions)
-
-  // 用户发送消息时平滑滚动到底部
   await nextTick()
   requestAnimationFrame(() => {
     timelineRef.value?.scrollToBottom({ behavior: 'smooth' })
@@ -45,52 +80,28 @@ async function handleSend(content: string, options: Record<string, unknown>, _at
 }
 
 function handleInterrupt() {
-  if (props.sessionId) {
-    sessionStore.interrupt(props.sessionId)
-  }
+  if (props.sessionId) sessionStore.interrupt(props.sessionId)
 }
 
-function handleFlushQueued(pending: PendingMessage) {
-  sessionStore.flushMessage(pending)
-}
+function handleFlushQueued(pending: PendingMessage) { sessionStore.flushMessage(pending) }
+function handleEditQueued(pending: PendingMessage) { sessionStore.editMessage(pending.id) }
+function handleRemoveQueued(pendingId: string) { sessionStore.removeMessage(pendingId) }
 
-function handleEditQueued(pending: PendingMessage) {
-  // editMessage removes from queue and returns content; Composer will put it into the input box
-  sessionStore.editMessage(pending.id)
-}
+watch(() => sessionStore.currentSessionId, () => { needInitialScroll.value = true }, { immediate: true })
 
-function handleRemoveQueued(pendingId: string) {
-  sessionStore.removeMessage(pendingId)
-}
-
-// 监听会话切换，设置一次性滚动标志
-watch(
-  () => sessionStore.currentSessionId,
-  () => {
-    needInitialScroll.value = true
-  },
-  { immediate: true }
-)
-
-// 监听消息变化，在标志为 true 时执行滚动
-watch(
-  () => sessionStore.currentMessages.length,
-  async (length) => {
-    if (!needInitialScroll.value) return
-    if (length === 0) return
-    
-    await nextTick()
-    requestAnimationFrame(() => {
-      timelineRef.value?.scrollToBottom({ behavior: 'auto' })
-      needInitialScroll.value = false
-    })
-  }
-)
+watch(() => sessionStore.currentMessages.length, async (length) => {
+  if (!needInitialScroll.value) return
+  if (length === 0) return
+  await nextTick()
+  requestAnimationFrame(() => {
+    timelineRef.value?.scrollToBottom({ behavior: 'auto' })
+    needInitialScroll.value = false
+  })
+})
 </script>
 
 <template>
   <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg overflow-hidden">
-    <!-- 时间线 -->
     <ChatTimeline
       ref="timelineRef"
       :messages="messages"
@@ -99,11 +110,7 @@ watch(
       @open-original-file="emit('openOriginalFile', $event)"
       @open-diff-file="emit('openDiffFile', $event)"
     />
-
-    <!-- Todo 面板: 输入框上方 -->
     <ChatTodo class="flex-shrink-0" />
-
-    <!-- 输入区 -->
     <Composer
       :has-active-session="true"
       :is-streaming="streamingStore.isCurrentStreaming.value"
@@ -115,6 +122,12 @@ watch(
       @flush-queued="handleFlushQueued"
       @edit-queued="handleEditQueued"
       @remove-queued="handleRemoveQueued"
+    />
+    <MentionAutocomplete
+      :state="mentionState"
+      :loading="mentionLoading"
+      @select="handleMentionSelect"
+      @hide="hideMention"
     />
   </div>
 </template>
