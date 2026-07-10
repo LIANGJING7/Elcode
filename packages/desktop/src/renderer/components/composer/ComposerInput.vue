@@ -13,6 +13,9 @@
     />
 
     <!-- Mention Autocomplete -->
+    <div v-if="mentionState.visible" style="position: fixed; top: 50px; left: 50px; background: red; color: white; padding: 20px; z-index: 99999;">
+      MENTION MENU VISIBLE - {{ mentionAgents.length }} agents
+    </div>
     <MentionAutocomplete
       :state="mentionState"
       :agents="mentionAgents"
