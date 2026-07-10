@@ -17,10 +17,10 @@ function storagePath(input: string): string {
 
 // Resolve the backend executable path based on development vs production mode
 function getBackendExecutablePath(): { command: string; args: string[]; cwd: string } {
-  // In packaged mode, use the compiled opencode.exe
+  // In packaged mode, use the compiled elcode.exe
   if (app.isPackaged) {
     const resourcesPath = process.resourcesPath
-    const backendExe = path.join(resourcesPath, "backend", "opencode.exe")
+    const backendExe = path.join(resourcesPath, "backend", "elcode.exe")
     
     if (fs.existsSync(backendExe)) {
       console.log(`[Backend] Using packaged backend: ${backendExe}`)
@@ -181,10 +181,10 @@ export async function startBackend(): Promise<{ port: number }> {
 
       // Support two output formats:
       // 1. PORT:${port} - from backend-launcher.ts
-      // 2. "opencode server listening on http://${hostname}:${port}" - from compiled executable
+      // 2. "elcode server listening on http://${hostname}:${port}" - from compiled executable
       let match = text.match(/PORT:(\d+)/)
       if (!match) {
-        match = text.match(/opencode server listening on http:\/\/[\d.]+:(\d+)/)
+        match = text.match(/elcode server listening on http:\/\/[\w.]+:(\d+)/)
       }
       if (match && !portFound) {
         portFound = true
@@ -633,6 +633,7 @@ function toConversation(raw: Record<string, unknown>): Conversation {
     createdAt: new Date(time.created ?? Date.now()),
     updatedAt: new Date(time.updated ?? time.created ?? Date.now()),
     directory: String(raw.directory ?? ''),
+    parentID: raw.parentID ? String(raw.parentID) : undefined,
   }
 }
 

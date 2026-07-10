@@ -67,9 +67,9 @@ function handleManualSend() {
 <template>
   <div class="new-session-view flex-1 flex items-center justify-center bg-bg">
     <div class="w-full max-w-2xl mx-6">
-      <!-- LCODE 标识 -->
+      <!-- ELCODE 标识 -->
       <div class="text-4xl font-bold text-text-muted/30 mb-4 text-center select-none">
-        LCODE
+        ELCODE
       </div>
 
       <!-- 工作区选择器（左对齐） -->

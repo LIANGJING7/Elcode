@@ -7,7 +7,6 @@ import { useUiStore, type SettingsSection } from '../../stores/ui'
 // 不动 view(仍是 settings); 主区内容由 SettingsView 按 settingsSection 渲染(phase 6).
 const ui = useUiStore()
 const sections: { id: SettingsSection; label: string }[] = [
-  { id: 'appearance', label: 'Appearance' },
   { id: 'models', label: '模型' },
   { id: 'mcp', label: 'MCP' },
   { id: 'skills', label: 'Skills' },

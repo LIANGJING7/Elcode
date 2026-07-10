@@ -21,9 +21,39 @@ const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
-const plugin = createSolidTransformPlugin()
-// Web UI has been removed from this fork - always skip embedding
-// Web UI embedding removed - skipEmbedWebUi is always true
+const solidPlugin = createSolidTransformPlugin()
+
+// Plugin to handle ?url imports for WASM and other files
+const urlImportPlugin: BunPlugin = {
+  name: "url-import",
+  setup(build) {
+    build.onResolve({ filter: /\?url$/ }, (args) => {
+      const filePath = args.path.replace(/\?url$/, "")
+      return { path: require.resolve(filePath, { paths: [args.resolveDir] }), namespace: "url-import" }
+    })
+    build.onLoad({ filter: /.*/, namespace: "url-import" }, (args) => ({
+      contents: `export default "${args.path}"`,
+      loader: "js",
+    }))
+  },
+}
+
+// Plugin to handle ?raw imports for markdown files
+const rawImportPlugin: BunPlugin = {
+  name: "raw-import",
+  setup(build) {
+    build.onResolve({ filter: /\?raw$/ }, (args) => {
+      const filePath = args.path.replace(/\?raw$/, "")
+      return { path: require.resolve(filePath, { paths: [args.resolveDir] }), namespace: "raw-import" }
+    })
+    build.onLoad({ filter: /.*/, namespace: "raw-import" }, async (args) => ({
+      contents: `export default ${JSON.stringify(await fs.promises.readFile(args.path, "utf-8"))}`,
+      loader: "js",
+    }))
+  },
+}
+
+const plugins = [solidPlugin, urlImportPlugin, rawImportPlugin]
 
 const allTargets: {
   os: string
@@ -142,7 +172,7 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["node"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: plugins,
     external: ["node-gyp"],
     format: "esm",
     minify: true,
@@ -154,7 +184,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      outfile: `dist/${name}/bin/elcode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -172,7 +202,7 @@ for (const item of targets) {
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/opencode`
+    const binaryPath = `dist/${name}/bin/elcode`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()

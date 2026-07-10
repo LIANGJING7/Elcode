@@ -7,7 +7,6 @@ import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "../installation/version"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -44,13 +43,7 @@ export function path() {
     if (Flag.LCODE_DB === ":memory:" || isAbsolute(Flag.LCODE_DB)) return Flag.LCODE_DB
     return join(Global.Path.data, Flag.LCODE_DB)
   }
-  if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
-    process.env.LCODE_DISABLE_CHANNEL_DB === "1" ||
-    process.env.LCODE_DISABLE_CHANNEL_DB === "true"
-  )
-    return join(Global.Path.data, "opencode.db")
-  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
+  return join(Global.Path.data, "lcode.db")
 }
 
 export const defaultLayer = Layer.unwrap(

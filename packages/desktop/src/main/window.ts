@@ -44,6 +44,11 @@ export async function createWindow(): Promise<BrowserWindow> {
     show: false
   })
 
+  // Open DevTools in development mode
+  if (isDev) {
+    win.webContents.openDevTools()
+  }
+  
   // Load splash page first and show immediately
   if (isDev) {
     const loadingUrl = process.env.VITE_DEV_SERVER_URL 
@@ -81,6 +86,11 @@ export async function switchToApp(): Promise<void> {
   await new Promise<void>(resolve => {
     win.webContents.once('did-finish-load', () => resolve())
   })
+  
+  // Open DevTools in development mode
+  if (isDev) {
+    win.webContents.openDevTools()
+  }
 }
 
 export function getMainWindow(): BrowserWindow | null {
