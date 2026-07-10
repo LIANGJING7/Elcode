@@ -139,8 +139,8 @@ onMounted(() => {
 <template>
   <div
     v-if="state.visible"
-    class="mention-autocomplete absolute bottom-full left-0 mb-2 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30"
-    :style="{ minWidth: '320px', maxWidth: '500px' }"
+    class="mention-autocomplete"
+    style="position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); min-width: 320px; max-width: 500px; max-height: 400px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; color: #fff;"
   >
     <div class="p-2 border-b border-border">
       <input
