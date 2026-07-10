@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart } from '../../types/ipc'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
@@ -31,6 +31,7 @@ export interface PendingMessage {
   content: string
   createdAt: number
   agent?: string  // 'plan' or 'build'
+  inputs?: PromptInput[]  // Full prompt inputs including files
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -543,14 +544,18 @@ export const useSessionStore = defineStore('session', () => {
   // Actions - 消息发送
   // ========================================
 
-  async function sendMessage(content: string, options?: PromptOptions) {
+  async function sendMessage(inputs: PromptInput[], options?: PromptOptions) {
     console.log('[DEBUG sendMessage] === START ===')
-    console.log('[DEBUG sendMessage] content:', content.slice(0, 50))
+    console.log('[DEBUG sendMessage] inputs:', inputs.length, 'types:', inputs.map(i => i.type))
     console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
     console.log('[DEBUG sendMessage] isPendingNewSession:', isPendingNewSession.value)
 
-    if (!content.trim()) return
+    // Extract text content for UI display and validation
+    const textContent = inputs.filter(i => i.type === 'text').map(i => i.text).join(' ')
+    const hasFiles = inputs.some(i => i.type === 'file')
+    
+    if (!textContent.trim() && !hasFiles) return
     state.error = null
 
     // 如果正在流式，将消息加入队列（不调用 backend）
@@ -561,9 +566,10 @@ export const useSessionStore = defineStore('session', () => {
 
       const pending: PendingMessage = {
         id: queueId,
-        content,
+        content: textContent,
         createdAt: Date.now(),
-        agent: options?.agent
+        agent: options?.agent,
+        inputs
       }
 
       // Push to current session's queue
@@ -610,11 +616,21 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] isCurrentStreaming:', streamingStore.isCurrentStreaming.value)
 
     // Create user message AFTER streaming started
+    const fileParts: FilePart[] = inputs
+      .filter((i): i is FilePromptInput => i.type === 'file')
+      .map(i => ({
+        type: 'file',
+        mime: i.mime,
+        name: i.filename,
+        url: i.url
+      }))
+    
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content,
-      timestamp: new Date()
+      content: textContent,
+      timestamp: new Date(),
+      files: fileParts.length > 0 ? fileParts : undefined
     }
 
     console.log('[DEBUG sendMessage] currentConversation:', currentConversation.value ? 'exists' : 'null')
@@ -643,11 +659,10 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] streamingMessage computed:', streamingMessage.value ? 'exists' : 'null')
 
     try {
-      const prompt: PromptInput[] = [{ type: 'text', text: content }]
       console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions)
       await window.desktop.session.prompt(
         currentSessionId.value,
-        prompt,
+        inputs,
         promptOptions,
         workspaceStore.currentWorkspace?.path
       )
@@ -728,11 +743,21 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // Create user message AFTER streaming started
+    const fileParts: FilePart[] = (pending.inputs ?? [])
+      .filter((i): i is FilePromptInput => i.type === 'file')
+      .map(i => ({
+        type: 'file',
+        mime: i.mime,
+        name: i.filename,
+        url: i.url
+      }))
+    
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
       content: pending.content,
-      timestamp: new Date()
+      timestamp: new Date(),
+      files: fileParts.length > 0 ? fileParts : undefined
     }
 
     if (!currentConversation.value) {
@@ -754,10 +779,13 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
-      const prompt: PromptInput[] = [{ type: 'text', text: pending.content }]
+      
+      // Use pending.inputs if available, otherwise construct from content
+      const inputs: PromptInput[] = pending.inputs ?? [{ type: 'text', text: pending.content }]
+      
       await window.desktop.session.prompt(
         currentSessionId.value,
-        prompt,
+        inputs,
         promptOptions,
         workspaceStore.currentWorkspace?.path
       )

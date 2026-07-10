@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
+import type { Message, ToolCall, PromptOptions, PromptInput } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
 import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
@@ -30,11 +30,38 @@ const needInitialScroll = ref(false)
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
 
-async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
+async function handleSend(content: string, options: Record<string, unknown>, attachments: Array<{ type: string; name?: string; path?: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
-  sessionStore.sendMessage(content, promptOptions)
+
+  // Build PromptInput array from content and attachments
+  const inputs: PromptInput[] = []
+
+  // Add text content
+  if (content.trim()) {
+    inputs.push({ type: 'text', text: content })
+  }
+
+  // Add file/image attachments
+  for (const att of attachments) {
+    if (att.mime) {
+      const url = att.url || (att.content
+        ? (att.isBase64
+            ? `data:${att.mime};base64,${att.content}`
+            : `data:${att.mime};utf8,${encodeURIComponent(att.content)}`)
+        : '')
+      
+      inputs.push({
+        type: 'file',
+        mime: att.mime,
+        filename: att.name,
+        url
+      })
+    }
+  }
+
+  sessionStore.sendMessage(inputs, promptOptions)
 
   // 用户发送消息时平滑滚动到底部
   await nextTick()

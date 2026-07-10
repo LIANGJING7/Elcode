@@ -80,8 +80,11 @@ export const desktopAPI = {
     list: (cwd: string, pattern?: string, directory?: string): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, cwd, pattern, directory),
 
-    pick: (): Promise<{ filePath: string; content: string; name: string } | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK)
+    pick: (): Promise<{ filePath: string; content: string; name: string; mime: string; isBase64: boolean } | { files: { filePath: string; content: string; name: string; mime: string; isBase64: boolean }[] } | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK),
+
+    pickImage: (): Promise<{ filePath: string; content: string; name: string; mime: string; isSvg: boolean } | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK_IMAGE)
   },
 
   tool: {
