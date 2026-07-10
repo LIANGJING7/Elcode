@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { MentionItem, MentionState, MentionKind } from '../../../types/mention'
 
 const props = defineProps<{
@@ -14,125 +14,87 @@ const emit = defineEmits<{
   hide: []
 }>()
 
-const searchInputRef = ref<HTMLInputElement | null>(null)
-const searchQuery = ref('')
-const activeTab = ref<MentionKind | 'all'>('all')
 const selectedIndex = ref(0)
-
-const tabs = [
-  { kind: 'all' as const, label: 'All' },
-  { kind: 'agent' as const, label: 'Agents' },
-  { kind: 'file' as const, label: 'Files' },
-  { kind: 'resource' as const, label: 'Resources' }
-]
-
-const query = computed(() => searchQuery.value.toLowerCase())
-
-const filteredAgents = computed(() => {
-  const items = props.agents
-  if (!query.value) return items
-  return items.filter(item =>
-    item.value.toLowerCase().includes(query.value) ||
-    item.description?.toLowerCase().includes(query.value)
-  )
-})
-
-const filteredFiles = computed(() => {
-  const items = props.state.items.filter(i => i.kind === 'file')
-  if (!query.value) return items
-  return items.filter(item =>
-    item.value.toLowerCase().includes(query.value)
-  )
-})
-
-const filteredResources = computed(() => {
-  const items = props.resources
-  if (!query.value) return items
-  return items.filter(item =>
-    item.value.toLowerCase().includes(query.value) ||
-    item.description?.toLowerCase().includes(query.value)
-  )
-})
+const PAGE_SIZE = 10
 
 const allItems = computed(() => {
-  console.log('[MentionAutocomplete] computing allItems', {
-    agents: props.agents.length,
-    files: props.state.items.length,
-    resources: props.resources.length,
-    filteredAgents: filteredAgents.value.length,
-    filteredFiles: filteredFiles.value.length,
-    filteredResources: filteredResources.value.length,
-  })
-  if (activeTab.value === 'all') {
-    return [...filteredAgents.value, ...filteredFiles.value, ...filteredResources.value]
-  }
-  if (activeTab.value === 'agent') return filteredAgents.value
-  if (activeTab.value === 'file') return filteredFiles.value
-  if (activeTab.value === 'resource') return filteredResources.value
-  return []
+  return [...props.agents, ...props.resources, ...props.state.items]
 })
 
-function shouldShow(kind: MentionKind): boolean {
-  if (activeTab.value !== 'all' && activeTab.value !== kind) return false
-  if (kind === 'agent') return filteredAgents.value.length > 0
-  if (kind === 'file') return filteredFiles.value.length > 0
-  if (kind === 'resource') return filteredResources.value.length > 0
-  return false
-}
+const filteredItems = computed(() => {
+  const query = props.state.query.toLowerCase()
+  if (!query) return allItems.value
+  return allItems.value.filter(item =>
+    item.value.toLowerCase().includes(query) ||
+    item.description?.toLowerCase().includes(query)
+  )
+})
 
-function isSelected(kind: MentionKind, index: number): boolean {
-  return selectedIndex.value === getGlobalIndex(kind, index)
-}
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredItems.value.length / PAGE_SIZE)))
 
-function getGlobalIndex(kind: MentionKind, localIndex: number): number {
-  if (activeTab.value !== 'all') return localIndex
-  let offset = 0
-  if (kind === 'agent') return localIndex
-  offset += filteredAgents.value.length
-  if (kind === 'file') return offset + localIndex
-  offset += filteredFiles.value.length
-  if (kind === 'resource') return offset + localIndex
-  return localIndex
+const currentPage = ref(0)
+
+watch(() => props.state.query, () => {
+  currentPage.value = 0
+  selectedIndex.value = 0
+})
+
+const pagedItems = computed(() => {
+  const start = currentPage.value * PAGE_SIZE
+  return filteredItems.value.slice(start, start + PAGE_SIZE)
+})
+
+const globalIndex = computed(() => {
+  const start = currentPage.value * PAGE_SIZE
+  return start + selectedIndex.value
+})
+
+const selectedItem = computed(() => {
+  const idx = globalIndex.value
+  if (idx >= 0 && idx < filteredItems.value.length) {
+    return filteredItems.value[idx]
+  }
+  return null
+})
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (selectedIndex.value < pagedItems.value.length - 1) {
+      selectedIndex.value++
+    } else if (currentPage.value < totalPages.value - 1) {
+      currentPage.value++
+      selectedIndex.value = 0
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (selectedIndex.value > 0) {
+      selectedIndex.value--
+    } else if (currentPage.value > 0) {
+      currentPage.value--
+      selectedIndex.value = PAGE_SIZE - 1
+    }
+  } else if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault()
+    if (selectedItem.value) {
+      emit('select', selectedItem.value)
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('hide')
+  }
 }
 
 function selectItem(item: MentionItem) {
   emit('select', item)
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    selectedIndex.value = Math.min(selectedIndex.value + 1, allItems.value.length - 1)
-  }
-  if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
-  }
-  if (e.key === 'Enter' || e.key === 'Tab') {
-    e.preventDefault()
-    const item = allItems.value[selectedIndex.value]
-    if (item) selectItem(item)
-  }
-  if (e.key === 'Escape') {
-    e.preventDefault()
-    emit('hide')
-  }
-}
-
-watch(allItems, () => {
-  console.log('[MentionAutocomplete] allItems changed:', allItems.value.length)
-  selectedIndex.value = 0
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
 })
 
-onMounted(() => {
-  console.log('[MentionAutocomplete] mounted', {
-    stateVisible: props.state.visible,
-    agents: props.agents.length,
-    resources: props.resources.length
-  })
-  nextTick(() => {
-    searchInputRef.value?.focus()
-  })
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -140,119 +102,50 @@ onMounted(() => {
   <div
     v-if="state.visible"
     class="mention-autocomplete"
-    style="position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); min-width: 320px; max-width: 500px; max-height: 400px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; color: #fff;"
+    style="position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); min-width: 360px; max-width: 500px; max-height: 440px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 9999; overflow: hidden;"
   >
-    <div class="p-2 border-b border-border">
-      <input
-        ref="searchInputRef"
-        v-model="searchQuery"
-        type="text"
-        placeholder="Search files, agents, or resources..."
-        class="w-full bg-bg-hover border border-border rounded px-2 py-1.5 text-sm text-text focus:outline-none focus:border-accent"
-        @keydown="handleKeydown"
-      />
-    </div>
-
-    <div class="flex border-b border-border">
-      <button
-        v-for="tab in tabs"
-        :key="tab.kind"
-        class="px-3 py-1.5 text-xs font-medium transition-colors hover:bg-bg-hover"
-        :class="activeTab === tab.kind
-          ? 'text-accent border-b-2 border-accent'
-          : 'text-text-muted'"
-        @click="activeTab = tab.kind"
+    <div style="max-height: 400px; overflow-y: auto;">
+      <div
+        v-for="(item, index) in pagedItems"
+        :key="item.value + '-' + item.kind"
+        class="mention-item"
+        :style="{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '10px 16px',
+          cursor: 'pointer',
+          background: index === selectedIndex ? '#2a2a3e' : 'transparent',
+          transition: 'background 0.15s',
+          borderRadius: '8px',
+          margin: '2px 4px',
+        }"
+        @click="selectItem(item)"
+        @mouseenter="selectedIndex = index"
       >
-        {{ tab.label }}
-      </button>
-    </div>
-
-    <div class="max-h-48 overflow-y-auto">
-      <div v-if="shouldShow('agent')" class="mention-group">
-        <div class="px-3 py-1 text-xs text-text-muted bg-bg-hover sticky top-0">
-          Agents
-        </div>
-        <button
-          v-for="(item, index) in filteredAgents"
-          :key="'agent-' + item.value"
-          class="mention-item w-full px-3 py-2 text-left text-sm hover:bg-accent-muted transition-colors flex items-center gap-2"
-          :class="{ 'bg-accent-muted': isSelected('agent', index) }"
-          @click="selectItem(item)"
-          @mouseenter="selectedIndex = getGlobalIndex('agent', index)"
-        >
-          <span class="text-accent font-mono">@</span>
-          <span class="flex-1 truncate">{{ item.value }}</span>
-          <span v-if="item.description" class="text-text-muted text-xs truncate">
-            {{ item.description }}
-          </span>
-        </button>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+          <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+        </svg>
+        <span style="color: #e2e8f0; font-size: 14px; font-weight: 500;">@{{ item.value }}</span>
+        <span v-if="item.description" style="color: #64748b; font-size: 12px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">{{ item.description }}</span>
       </div>
 
-      <div v-if="shouldShow('file')" class="mention-group">
-        <div class="px-3 py-1 text-xs text-text-muted bg-bg-hover sticky top-0">
-          Files
-        </div>
-        <button
-          v-for="(item, index) in filteredFiles"
-          :key="'file-' + item.value"
-          class="mention-item w-full px-3 py-2 text-left text-sm hover:bg-accent-muted transition-colors flex items-center gap-2"
-          :class="{ 'bg-accent-muted': isSelected('file', index) }"
-          @click="selectItem(item)"
-          @mouseenter="selectedIndex = getGlobalIndex('file', index)"
-        >
-          <span class="text-accent font-mono">@</span>
-          <span class="flex-1 truncate">{{ item.value }}</span>
-          <span v-if="item.directory" class="text-text-muted">/</span>
-        </button>
-      </div>
-
-      <div v-if="shouldShow('resource')" class="mention-group">
-        <div class="px-3 py-1 text-xs text-text-muted bg-bg-hover sticky top-0">
-          Resources
-        </div>
-        <button
-          v-for="(item, index) in filteredResources"
-          :key="'resource-' + item.value"
-          class="mention-item w-full px-3 py-2 text-left text-sm hover:bg-accent-muted transition-colors flex items-center gap-2"
-          :class="{ 'bg-accent-muted': isSelected('resource', index) }"
-          @click="selectItem(item)"
-          @mouseenter="selectedIndex = getGlobalIndex('resource', index)"
-        >
-          <span class="text-accent font-mono">@</span>
-          <span class="flex-1 truncate">{{ item.value }}</span>
-          <span v-if="item.description" class="text-text-muted text-xs truncate">
-            {{ item.description }}
-          </span>
-        </button>
-      </div>
-
-      <div v-if="allItems.length === 0" class="px-3 py-4 text-center">
-        <p class="text-sm text-text-muted">
-          {{ loading ? 'Searching...' : 'No matches found' }}
-        </p>
+      <div v-if="pagedItems.length === 0" style="padding: 24px; text-align: center; color: #64748b; font-size: 14px;">
+        {{ loading ? 'Searching...' : 'No matches found' }}
       </div>
     </div>
 
-    <div class="sticky bottom-0 bg-bg-elevated border-t border-border px-3 py-1.5 flex items-center gap-2 text-xs text-text-muted">
-      <kbd>↑↓</kbd> Navigate
-      <span class="mx-1">·</span>
-      <kbd>Enter</kbd> Select
-      <span class="mx-1">·</span>
-      <kbd>Esc</kbd> Close
+    <div v-if="filteredItems.length > PAGE_SIZE" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-top: 1px solid #2a2a3e; font-size: 12px; color: #64748b;">
+      <span>{{ globalIndex + 1 }} / {{ filteredItems.length }}</span>
+      <span>Page {{ currentPage + 1 }} / {{ totalPages }}</span>
+      <span>↑↓ Navigate · Enter Select · Esc Close</span>
     </div>
   </div>
 </template>
 
 <style scoped>
-.mention-autocomplete {
-  max-height: 400px;
-}
-
-.mention-group {
-  border-bottom: 1px solid var(--border);
-}
-
-.mention-group:last-child {
-  border-bottom: none;
+.mention-item:hover {
+  background: #2a2a3e !important;
 }
 </style>

@@ -46,15 +46,7 @@ export function registerFileHandlers() {
   })
 
   ipcMain.handle(CHANNELS.FILE_SEARCH, async (_event, query: string, directory?: string) => {
-    console.log('[HANDLER] FILE_SEARCH called', { query, directory })
-    try {
-      const result = await backend.file.search(query, directory)
-      console.log('[HANDLER] FILE_SEARCH result:', result)
-      return result
-    } catch (err) {
-      console.error('[HANDLER] FILE_SEARCH error:', err)
-      throw err
-    }
+    return await backend.file.search(query, directory)
   })
 
   // Open file picker dialog and return file contents

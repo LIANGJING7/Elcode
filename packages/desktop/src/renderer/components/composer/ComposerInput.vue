@@ -13,9 +13,6 @@
     />
 
     <!-- Mention Autocomplete -->
-    <div v-if="mentionState.visible" style="position: fixed; top: 50px; left: 50px; background: red; color: white; padding: 20px; z-index: 99999;">
-      MENTION MENU VISIBLE - {{ mentionAgents.length }} agents
-    </div>
     <MentionAutocomplete
       :state="mentionState"
       :agents="mentionAgents"
@@ -241,7 +238,6 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
 }
 
 function checkMentionTrigger(text: string, cursorPos: number) {
-  console.log('[MENTION] checkMentionTrigger called', { text, cursorPos })
   let atIndex = -1
   for (let i = cursorPos - 1; i >= 0; i--) {
     if (text[i] === '@') {
@@ -253,14 +249,12 @@ function checkMentionTrigger(text: string, cursorPos: number) {
     }
   }
 
-  console.log('[MENTION] atIndex:', atIndex)
   if (atIndex === -1) {
     hideMention()
     return
   }
 
   const query = text.slice(atIndex + 1, cursorPos)
-  console.log('[MENTION] query:', query)
 
   if (query.includes(' ') || query.includes('\n')) {
     hideMention()
@@ -271,40 +265,26 @@ function checkMentionTrigger(text: string, cursorPos: number) {
 }
 
 async function showMentionMenu(atIndex: number, query: string) {
-  console.log('[MENTION] showMentionMenu START', { atIndex, query })
   const seq = ++mentionQuerySeq
   mentionState.value.atIndex = atIndex
   mentionState.value.query = query
-  console.log('[MENTION] mentionState before agents:', JSON.stringify(mentionState.value))
 
   try {
     if (mentionAgents.value.length === 0) {
-      console.log('[MENTION] fetching agents...')
       mentionAgents.value = await getAgents()
-      console.log('[MENTION] agents result:', mentionAgents.value.length)
     }
     if (mentionResources.value.length === 0) {
-      console.log('[MENTION] fetching resources...')
       mentionResources.value = await getResources()
-      console.log('[MENTION] resources result:', mentionResources.value.length)
     }
 
-    console.log('[MENTION] searching files with query:', query)
     const files = await searchFiles(query)
-    console.log('[MENTION] files result:', files.length)
-    
-    if (seq !== mentionQuerySeq) {
-      console.log('[MENTION] stale request, returning')
-      return
-    }
+    if (seq !== mentionQuerySeq) return
 
     mentionState.value.items = files
     mentionState.value.visible = true
     mentionState.value.selectedIndex = 0
-    console.log('[MENTION] mentionState AFTER setting visible:', JSON.stringify(mentionState.value))
-    console.log('[MENTION] mentionState.visible is:', mentionState.value.visible)
   } catch (err) {
-    console.error('[MENTION] showMentionMenu ERROR:', err)
+    console.error('[MENTION] error:', err)
   }
 }
 
