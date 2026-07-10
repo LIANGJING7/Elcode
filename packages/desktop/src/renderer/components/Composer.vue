@@ -1,6 +1,6 @@
 <template>
-  <div class="pt-0 pb-6 mx-6 relative z-10">
-    <div class="max-w-chat-max mx-auto overflow-hidden bg-bg">
+  <div class="pt-0 pb-6 mx-6">
+    <div class="max-w-chat-max mx-auto">
       <!-- Queued messages chips (above input box) -->
       <div
         v-if="pendingQueue.length > 0"
@@ -18,7 +18,7 @@
       </div>
 
       <div
-class="composer bg-bg-elevated border border-border rounded-2xl shadow transition-all duration-200 flex flex-col min-h-[120px] "
+class="composer bg-bg-elevated border border-border rounded-2xl shadow transition-all duration-200 flex flex-col min-h-[120px]"
       :class="isFocused
         ? 'border-border-light shadow-sm'
         : 'border-border hover:border-border-light'"

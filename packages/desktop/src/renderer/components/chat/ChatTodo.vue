@@ -34,7 +34,7 @@ function getStatusIcon(status: string) {
 
 <template>
   <div v-if="show" class="todo-panel-container">
-    <div class="max-w-chat-max mx-auto px-6">
+    <div class="max-w-chat-max mx-auto">
       <Card class="todo-card rounded-b-none border-b-0 !gap-0">
         <div class="todo-header" @click="collapsed = !collapsed">
           <div class="header-left">
