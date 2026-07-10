@@ -271,35 +271,40 @@ function checkMentionTrigger(text: string, cursorPos: number) {
 }
 
 async function showMentionMenu(atIndex: number, query: string) {
-  console.log('[MENTION] showMentionMenu called', { atIndex, query })
+  console.log('[MENTION] showMentionMenu START', { atIndex, query })
   const seq = ++mentionQuerySeq
   mentionState.value.atIndex = atIndex
   mentionState.value.query = query
+  console.log('[MENTION] mentionState before agents:', JSON.stringify(mentionState.value))
 
   try {
     if (mentionAgents.value.length === 0) {
       console.log('[MENTION] fetching agents...')
       mentionAgents.value = await getAgents()
-      console.log('[MENTION] agents result:', mentionAgents.value)
+      console.log('[MENTION] agents result:', mentionAgents.value.length)
     }
     if (mentionResources.value.length === 0) {
       console.log('[MENTION] fetching resources...')
       mentionResources.value = await getResources()
-      console.log('[MENTION] resources result:', mentionResources.value)
+      console.log('[MENTION] resources result:', mentionResources.value.length)
     }
 
     console.log('[MENTION] searching files with query:', query)
     const files = await searchFiles(query)
-    console.log('[MENTION] files result:', files)
+    console.log('[MENTION] files result:', files.length)
     
-    if (seq !== mentionQuerySeq) return
+    if (seq !== mentionQuerySeq) {
+      console.log('[MENTION] stale request, returning')
+      return
+    }
 
     mentionState.value.items = files
     mentionState.value.visible = true
     mentionState.value.selectedIndex = 0
-    console.log('[MENTION] menu shown, state:', mentionState.value)
+    console.log('[MENTION] mentionState AFTER setting visible:', JSON.stringify(mentionState.value))
+    console.log('[MENTION] mentionState.visible is:', mentionState.value.visible)
   } catch (err) {
-    console.error('[MENTION] error:', err)
+    console.error('[MENTION] showMentionMenu ERROR:', err)
   }
 }
 
