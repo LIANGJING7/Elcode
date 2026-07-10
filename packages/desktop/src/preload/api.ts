@@ -70,7 +70,7 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
 
     agents: (directory?: string): Promise<Agent[]> =>
-      ipcRenderer.invoke('session:agents', directory),
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory),
   },
 
   file: {
@@ -87,7 +87,7 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK),
 
     search: (query: string, directory?: string): Promise<FileMatch[]> =>
-      ipcRenderer.invoke('file:search', query, directory)
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_SEARCH, query, directory)
   },
 
   tool: {

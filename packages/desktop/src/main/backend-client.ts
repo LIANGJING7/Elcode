@@ -316,6 +316,11 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/session/${sessionID}/todo?${params}`) as Promise<unknown[]>
     },
+
+    agents: async (directory?: string): Promise<unknown[]> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/api/agent?${params}`) as Promise<unknown[]>
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
@@ -395,6 +400,12 @@ export const backend = {
       if (pattern) params.set("pattern", pattern)
       if (directory) params.set("directory", storagePath(directory))
       return request("GET", `/file/list?${params.toString()}`) as Promise<unknown[]>
+    },
+
+    search: async (query: string, directory?: string): Promise<unknown[]> => {
+      const params = new URLSearchParams({ query })
+      if (directory) params.set("directory", storagePath(directory))
+      return request("GET", `/find/file?${params.toString()}`) as Promise<unknown[]>
     },
   },
   

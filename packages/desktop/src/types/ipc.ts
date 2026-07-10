@@ -242,11 +242,13 @@ export const IPC_CHANNELS = {
   SESSION_DELETE: 'session:delete',
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   SESSION_TODO: 'session:todo',
+  SESSION_AGENTS: 'session:agents',
   
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
   FILE_LIST: 'file:list',
   FILE_PICK: 'file:pick',
+  FILE_SEARCH: 'file:search',
   
   TOOL_EXECUTE: 'tool:execute',
   TOOL_LIST: 'tool:list',

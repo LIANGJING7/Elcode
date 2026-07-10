@@ -45,6 +45,10 @@ export function registerFileHandlers() {
     return await backend.file.list(resolved, pattern, directory)
   })
 
+  ipcMain.handle(CHANNELS.FILE_SEARCH, async (_event, query: string, directory?: string) => {
+    return await backend.file.search(query, directory)
+  })
+
   // Open file picker dialog and return file contents
   ipcMain.handle(CHANNELS.FILE_PICK, async (_event) => {
     const { dialog } = await import('electron')
