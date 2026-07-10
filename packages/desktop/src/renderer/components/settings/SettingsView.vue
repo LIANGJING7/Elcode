@@ -3,8 +3,7 @@
     <!-- Settings content (main area) -->
     <div class="settings-content flex-1 overflow-hidden" :class="section === 'models' || section === 'skills' || section === 'mcp' ? '' : 'p-6 overflow-y-auto'">
       <div :class="containerClass">
-        <SettingsAppearance v-if="section === 'appearance'" />
-        <SettingsModels v-else-if="section === 'models'" />
+        <SettingsModels v-if="section === 'models'" />
         <SettingsMcp v-else-if="section === 'mcp'" />
         <SettingsSkills v-else-if="section === 'skills'" />
       </div>

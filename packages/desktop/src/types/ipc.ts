@@ -90,6 +90,7 @@ export interface Conversation {
   createdAt: Date
   updatedAt: Date
   directory: string                     // 会话所属目录 (用于匹配 workspace)
+  parentID?: string                     // 父会话ID (子智能体会话有此字段)
 }
 
 export interface Workspace {

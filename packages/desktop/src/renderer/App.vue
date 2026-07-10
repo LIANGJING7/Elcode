@@ -5,30 +5,12 @@
       <!-- 左侧: 图标 + 应用名 (拖拽区域, 图标除外) -->
       <div class="drag flex items-center pl-3 flex-shrink-0" :style="{ width: sidebarWidth }">
         <button
-          class="no-drag w-8 h-8 rounded-lg bg-accent flex items-center justify-center cursor-pointer hover:bg-accent-hover transition-colors duration-fast"
+          class="no-drag w-8 h-8 rounded-lg bg-[#0a0a0a] flex items-center justify-center cursor-pointer hover:bg-[#1a1a1a] transition-colors duration-fast"
           @click="ui.toggleSidebar()"
           title="Toggle sidebar"
         >
-          <svg class="w-5 h-5 text-bg" viewBox="0 0 24 24" fill="none">
-            <defs>
-              <linearGradient id="sidebarIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#1A1A1A"/>
-                <stop offset="100%" stop-color="#F5F5F5"/>
-              </linearGradient>
-            </defs>
-            <!-- L 竖线碎片 -->
-            <polygon points="5,4 7,4 6.5,7 4.5,7" fill="url(#sidebarIconGradient)"/>
-            <polygon points="7.5,4.5 9.5,4 9,7.5 7,8" fill="url(#sidebarIconGradient)" opacity="0.9"/>
-            <polygon points="4,7.5 6.5,7 6,10.5 3.5,11" fill="url(#sidebarIconGradient)" opacity="0.85"/>
-            <polygon points="7,8 9,7.5 8.5,11 6.5,11.5" fill="url(#sidebarIconGradient)" opacity="0.8"/>
-            <polygon points="3.5,11.5 6,11 5.5,14.5 3,15" fill="url(#sidebarIconGradient)" opacity="0.9"/>
-            <polygon points="6.5,12 8.5,11.5 8,15 6,15.5" fill="url(#sidebarIconGradient)" opacity="0.85"/>
-            <!-- L 横线碎片 -->
-            <polygon points="6,15.5 8,15 8.5,17.5 6.5,18" fill="url(#sidebarIconGradient)"/>
-            <polygon points="8.5,15.5 11,16 12,18.5 9.5,18" fill="url(#sidebarIconGradient)" opacity="0.9"/>
-            <polygon points="11.5,16.5 14.5,17 15.5,19.5 12.5,19" fill="url(#sidebarIconGradient)" opacity="0.85"/>
-            <polygon points="15,17.5 17.5,16.5 18,19 15.5,20" fill="url(#sidebarIconGradient)" opacity="0.8"/>
-            <polygon points="18,17 20,16 19.5,19 17.5,20" fill="url(#sidebarIconGradient)" opacity="0.9"/>
+          <svg class="w-5 h-5 text-white" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M65 25 C65 25 75 25 75 35 L75 65 C75 75 65 75 65 75 M65 45 C65 45 55 45 55 55 C55 65 65 65 65 65 M35 25 C35 25 25 25 25 35 L25 65 C25 75 35 75 35 75 M35 45 C35 45 45 45 45 35" stroke="currentColor" stroke-width="8" stroke-linecap="round" fill="none"/>
           </svg>
         </button>
       </div>
@@ -50,22 +32,6 @@
           @blur="commitEditTitle"
         />
 
-        <button
-          class="no-drag px-2 py-1 rounded hover:bg-bg-hover text-text-muted flex-shrink-0"
-          @click.stop="titleMenuOpen = !titleMenuOpen"
-        >
-          ⋯
-        </button>
-
-        <ul
-          v-if="titleMenuOpen"
-          class="no-drag absolute left-[calc(var(--spacing-sidebar)+1rem)] top-11 bg-bg-surface border border-border rounded shadow-lg py-1 z-50 min-w-[160px]"
-        >
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doCopy; closeTitleMenu()">复制</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="startEditTitle; closeTitleMenu()">重命名</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-error hover:bg-bg-hover text-left" @click="handleDeleteSession; closeTitleMenu()">删除</button></li>
-          <li><button class="w-full px-4 py-2 text-sm text-text hover:bg-bg-hover text-left" @click="doExport; closeTitleMenu()">导出 Markdown</button></li>
-        </ul>
       </div>
       <div v-else class="drag flex-1"></div>
 
@@ -148,8 +114,6 @@ const hasCurrentWorkspace = computed(() => workspaceStore.hasCurrentWorkspace)
 // 标题栏 rename 状态
 const editingTitle = ref(false)
 const titleDraft = ref('')
-const titleMenuOpen = ref(false)
-
 function startEditTitle() {
   editingTitle.value = true
   titleDraft.value = currentConversation.value?.title ?? ''
@@ -160,18 +124,6 @@ function commitEditTitle() {
   if (titleDraft.value && titleDraft.value !== currentConversation.value?.title) {
     handleRename(titleDraft.value)
   }
-}
-
-function closeTitleMenu() {
-  titleMenuOpen.value = false
-}
-
-function doCopy() {
-  // 复制会话 — 占位
-}
-
-function doExport() {
-  // 导出 Markdown — 占位
 }
 
 // view 由业务状态决定默认页面，临时 UI 状态只表示用户操作。
