@@ -352,6 +352,22 @@ export function registerSessionHandlers() {
       if (p.type === 'text') {
         return { type: 'text', text: p.text! }
       }
+      if (p.type === 'file') {
+        return {
+          type: 'file',
+          url: p.url!,
+          filename: p.filename,
+          mime: p.mime || 'text/plain',
+          source: p.source
+        }
+      }
+      if (p.type === 'agent') {
+        return {
+          type: 'agent',
+          name: p.name!,
+          source: p.source
+        }
+      }
       return { type: 'tool_result', toolResult: p.toolResult }
     })
 

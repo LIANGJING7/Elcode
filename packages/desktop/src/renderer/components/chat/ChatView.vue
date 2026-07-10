@@ -60,7 +60,7 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
 </script>
 
 <template>
-  <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg overflow-hidden">
+    <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg">
     <ChatTimeline
       ref="timelineRef"
       :messages="messages"

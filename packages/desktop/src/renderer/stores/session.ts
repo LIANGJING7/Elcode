@@ -23,6 +23,87 @@ function parseModelId(modelId: string): ModelRef | undefined {
   return { providerID, modelID }
 }
 
+// Cache for agent names (populated on first use)
+let cachedAgentNames: Set<string> | null = null
+
+/**
+ * Parse @mentions in text and return PromptInput parts
+ * @param text - The input text containing @mentions
+ * @param directory - The workspace directory for resolving file paths
+ */
+async function parseMentions(text: string, directory?: string): Promise<PromptInput[]> {
+  const parts: PromptInput[] = []
+  
+  // Regex to find @mentions: @name or @path/to/file#10-20
+  const mentionRegex = /@([a-zA-Z0-9_\-./]+(?:#\d+(?:-\d+)?(?:-\d+)?)?)/g
+  
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  
+  // Get agent names if not cached
+  if (cachedAgentNames === null) {
+    try {
+      const agents = await window.desktop.session.agents(directory)
+      cachedAgentNames = new Set(agents.map((a: any) => a.name))
+    } catch {
+      cachedAgentNames = new Set()
+    }
+  }
+  
+  while ((match = mentionRegex.exec(text)) !== null) {
+    // Add text before this mention
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', text: text.slice(lastIndex, match.index) })
+    }
+    
+    const mentionValue = match[1]
+    const atIndex = mentionValue.indexOf('#')
+    const name = atIndex === -1 ? mentionValue : mentionValue.slice(0, atIndex)
+    
+    // Check if it's an agent
+    if (cachedAgentNames?.has(name)) {
+      parts.push({ type: 'agent', name })
+    } else {
+      // Treat as file path
+      const filePath = name
+      const fullPath = directory ? `${directory}/${filePath}` : filePath
+      
+      // Parse line range if present
+      let filename = filePath
+      let url = `file://${fullPath}`
+      
+      if (atIndex !== -1) {
+        const linePart = mentionValue.slice(atIndex + 1)
+        const [start, end] = linePart.split('-').map(Number)
+        filename = `${filePath}#${start}${end ? `-${end}` : ''}`
+        url = `file://${fullPath}?start=${start}${end ? `&end=${end}` : ''}`
+      }
+      
+      parts.push({
+        type: 'file',
+        url,
+        filename,
+        mime: 'text/plain',
+        source: { type: 'file', path: filePath }
+      })
+    }
+    
+    lastIndex = match.index + match[0].length
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', text: text.slice(lastIndex) })
+  }
+  
+  // If no mentions found, return original text as single part
+  if (parts.length === 0) {
+    parts.push({ type: 'text', text })
+  }
+  
+  return parts
+}
+
 /**
  * PendingMessage - Client-side queue for messages waiting to be sent.
  */
@@ -643,8 +724,8 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] streamingMessage computed:', streamingMessage.value ? 'exists' : 'null')
 
     try {
-      const prompt: PromptInput[] = [{ type: 'text', text: content }]
-      console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions)
+      const prompt = await parseMentions(content, workspaceStore.currentWorkspace?.path)
+      console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions, 'parts:', prompt.length)
       await window.desktop.session.prompt(
         currentSessionId.value,
         prompt,
@@ -754,7 +835,7 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
-      const prompt: PromptInput[] = [{ type: 'text', text: pending.content }]
+      const prompt = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
       await window.desktop.session.prompt(
         currentSessionId.value,
         prompt,

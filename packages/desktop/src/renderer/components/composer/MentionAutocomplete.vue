@@ -52,9 +52,9 @@ function getIcon(item: MentionItem): string {
 <template>
   <div
     v-if="state.visible"
-    class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg max-h-96 overflow-hidden absolute bottom-[calc(100%+6px)] left-0 right-0 z-[9999]"
+    class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg max-h-80 w-full max-w-lg overflow-hidden absolute bottom-full left-0 mb-1.5 z-[9999]"
   >
-    <div class="overflow-y-auto max-h-96">
+    <div class="overflow-y-auto max-h-80">
       <div
         v-for="(item, index) in items"
         :key="item.value + '-' + item.kind + '-' + index"
@@ -64,12 +64,15 @@ function getIcon(item: MentionItem): string {
         @mouseenter="selectedIndex = index"
       >
         <svg v-if="getIcon(item) === 'agent'" class="w-5 h-5 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 8V4H8"/>
-          <rect width="16" height="12" x="4" y="8" rx="2"/>
-          <path d="M2 14h2"/>
-          <path d="M20 14h2"/>
-          <path d="M15 13v2"/>
-          <path d="M9 13v2"/>
+          <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+          <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+          <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+          <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+          <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+          <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+          <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+          <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+          <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
         </svg>
         <svg v-else-if="getIcon(item) === 'file'" class="w-5 h-5 shrink-0 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
@@ -83,7 +86,6 @@ function getIcon(item: MentionItem): string {
           <line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
         <span class="text-sm text-text font-medium truncate">@{{ item.value }}</span>
-        <span v-if="item.description" class="text-xs text-text-muted ml-auto truncate max-w-[40%]">{{ item.description }}</span>
       </div>
       <div v-if="items.length === 0" class="px-4 py-6 text-center text-sm text-text-muted">
         {{ loading ? 'Searching...' : 'No matches found' }}

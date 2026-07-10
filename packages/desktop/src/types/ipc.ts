@@ -4,9 +4,22 @@ export interface LocationRef {
 }
 
 export interface PromptInput {
-  type: 'text' | 'tool_result'
+  type: 'text' | 'tool_result' | 'file' | 'agent'
   text?: string
   toolResult?: unknown
+  // file part
+  url?: string
+  filename?: string
+  mime?: string
+  source?: {
+    type: 'file' | 'resource'
+    path?: string
+    text?: { start: number; end: number; value: string }
+    clientName?: string
+    uri?: string
+  }
+  // agent part
+  name?: string
 }
 
 // Model reference matching backend's ModelRef
