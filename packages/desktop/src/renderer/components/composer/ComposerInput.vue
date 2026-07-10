@@ -15,6 +15,7 @@
     <!-- Mention Autocomplete -->
     <MentionAutocomplete
       ref="mentionAutocompleteRef"
+      :anchor-el="textareaRef"
       :state="mentionState"
       :loading="mentionLoading"
       @select="handleMentionSelect"
