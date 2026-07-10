@@ -63,10 +63,10 @@ function getIcon(item: MentionItem) {
 <template>
   <div
     v-if="state.visible"
-class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg"
-      style="position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; max-height: 400px; z-index: 9999; overflow: hidden;"
+class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg absolute left-0 right-0 max-h-96 overflow-hidden"
+      style="bottom: calc(100% + 6px); z-index: 9999;"
   >
-    <div class="overflow-y-auto" style="max-height: 400px;">
+    <div class="overflow-y-auto max-h-96">
       <div
         v-for="(item, index) in items"
         :key="item.value + '-' + item.kind + '-' + index"
@@ -99,7 +99,7 @@ class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shado
           <line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
         <span class="text-sm text-text font-medium truncate">@{{ item.value }}</span>
-        <span v-if="item.description" class="text-xs text-text-muted ml-auto truncate max-w-[200px]">{{ item.description }}</span>
+        <span v-if="item.description" class="text-xs text-text-muted ml-auto truncate max-w-[40%]">{{ item.description }}</span>
       </div>
 
       <div v-if="items.length === 0" class="px-4 py-6 text-center text-sm text-text-muted">
