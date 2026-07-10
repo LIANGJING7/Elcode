@@ -69,8 +69,16 @@ export const desktopAPI = {
     todo: (sessionID: string, directory?: string): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
 
-    agents: (directory?: string): Promise<Agent[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory),
+    agents: (directory?: string): Promise<Agent[]> => {
+      console.log('[PRELOAD] session.agents called', { directory })
+      return ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory).then(result => {
+        console.log('[PRELOAD] session.agents result:', result)
+        return result
+      }).catch(err => {
+        console.error('[PRELOAD] session.agents error:', err)
+        throw err
+      })
+    },
   },
 
   file: {
@@ -86,8 +94,16 @@ export const desktopAPI = {
     pick: (): Promise<{ filePath: string; content: string; name: string } | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK),
 
-    search: (query: string, directory?: string): Promise<FileMatch[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_SEARCH, query, directory)
+    search: (query: string, directory?: string): Promise<FileMatch[]> => {
+      console.log('[PRELOAD] file.search called', { query, directory })
+      return ipcRenderer.invoke(IPC_CHANNELS.FILE_SEARCH, query, directory).then(result => {
+        console.log('[PRELOAD] file.search result:', result)
+        return result
+      }).catch(err => {
+        console.error('[PRELOAD] file.search error:', err)
+        throw err
+      })
+    }
   },
 
   tool: {

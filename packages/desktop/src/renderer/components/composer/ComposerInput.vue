@@ -238,6 +238,7 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
 }
 
 function checkMentionTrigger(text: string, cursorPos: number) {
+  console.log('[MENTION] checkMentionTrigger called', { text, cursorPos })
   let atIndex = -1
   for (let i = cursorPos - 1; i >= 0; i--) {
     if (text[i] === '@') {
@@ -249,12 +250,14 @@ function checkMentionTrigger(text: string, cursorPos: number) {
     }
   }
 
+  console.log('[MENTION] atIndex:', atIndex)
   if (atIndex === -1) {
     hideMention()
     return
   }
 
   const query = text.slice(atIndex + 1, cursorPos)
+  console.log('[MENTION] query:', query)
 
   if (query.includes(' ') || query.includes('\n')) {
     hideMention()
@@ -265,24 +268,36 @@ function checkMentionTrigger(text: string, cursorPos: number) {
 }
 
 async function showMentionMenu(atIndex: number, query: string) {
+  console.log('[MENTION] showMentionMenu called', { atIndex, query })
   const seq = ++mentionQuerySeq
   mentionState.value.atIndex = atIndex
   mentionState.value.query = query
 
-  if (mentionAgents.value.length === 0) {
-    mentionAgents.value = await getAgents()
+  try {
+    if (mentionAgents.value.length === 0) {
+      console.log('[MENTION] fetching agents...')
+      mentionAgents.value = await getAgents()
+      console.log('[MENTION] agents result:', mentionAgents.value)
+    }
+    if (mentionResources.value.length === 0) {
+      console.log('[MENTION] fetching resources...')
+      mentionResources.value = await getResources()
+      console.log('[MENTION] resources result:', mentionResources.value)
+    }
+
+    console.log('[MENTION] searching files with query:', query)
+    const files = await searchFiles(query)
+    console.log('[MENTION] files result:', files)
+    
+    if (seq !== mentionQuerySeq) return
+
+    mentionState.value.items = files
+    mentionState.value.visible = true
+    mentionState.value.selectedIndex = 0
+    console.log('[MENTION] menu shown, state:', mentionState.value)
+  } catch (err) {
+    console.error('[MENTION] error:', err)
   }
-  if (mentionResources.value.length === 0) {
-    mentionResources.value = await getResources()
-  }
-
-  const files = await searchFiles(query)
-  if (seq !== mentionQuerySeq) return
-
-  mentionState.value.items = files
-
-  mentionState.value.visible = true
-  mentionState.value.selectedIndex = 0
 }
 
 function hideMention() {

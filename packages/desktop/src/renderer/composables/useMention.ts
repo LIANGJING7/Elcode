@@ -11,11 +11,14 @@ export function useMention() {
   const directory = computed(() => workspaceStore.currentWorkspace?.path)
   
   async function searchFiles(query: string): Promise<MentionItem[]> {
+    console.log('[useMention] searchFiles called', { query, directory: directory.value })
     if (!query || query.length < 1) return []
     
     try {
       loading.value = true
+      console.log('[useMention] calling window.desktop.file.search...')
       const files = await window.desktop.file.search(query, directory.value)
+      console.log('[useMention] file.search result:', files)
       
       return files.map(file => ({
         kind: 'file' as const,
@@ -26,6 +29,7 @@ export function useMention() {
         url: file.url
       }))
     } catch (err) {
+      console.error('[useMention] searchFiles error:', err)
       error.value = err instanceof Error ? err.message : 'Failed to search files'
       return []
     } finally {
@@ -34,19 +38,26 @@ export function useMention() {
   }
   
   async function getAgents(): Promise<MentionItem[]> {
+    console.log('[useMention] getAgents called', { directory: directory.value })
     try {
       loading.value = true
+      console.log('[useMention] calling window.desktop.session.agents...')
       const agents = await window.desktop.session.agents(directory.value)
+      console.log('[useMention] agents result:', agents)
+      console.log('[useMention] first agent:', agents[0])
+      console.log('[useMention] agent modes:', agents.map(a => a.mode))
       
-      return agents
-        .filter(a => a.mode === 'subagent')
-        .map(a => ({
-          kind: 'agent' as const,
-          value: a.name,
-          display: `@${a.name}`,
-          description: a.description
-        }))
+      const filtered = agents.filter(a => a.mode === 'subagent')
+      console.log('[useMention] filtered agents:', filtered.length, 'out of', agents.length)
+      
+      return filtered.map(a => ({
+        kind: 'agent' as const,
+        value: a.name,
+        display: `@${a.name}`,
+        description: a.description
+      }))
     } catch (err) {
+      console.error('[useMention] getAgents error:', err)
       error.value = err instanceof Error ? err.message : 'Failed to get agents'
       return []
     } finally {

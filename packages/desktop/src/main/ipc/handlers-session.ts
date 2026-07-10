@@ -446,7 +446,15 @@ export function registerSessionHandlers() {
   })
 
   ipcMain.handle(CHANNELS.SESSION_AGENTS, async (_event, directory?: string) => {
-    return await backend.session.agents(directory)
+    console.log('[HANDLER] SESSION_AGENTS called', { directory })
+    try {
+      const result = await backend.session.agents(directory)
+      console.log('[HANDLER] SESSION_AGENTS result:', result)
+      return result
+    } catch (err) {
+      console.error('[HANDLER] SESSION_AGENTS error:', err)
+      throw err
+    }
   })
 
   // Provider handlers
