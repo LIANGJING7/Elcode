@@ -4,6 +4,9 @@ import { backend } from '../backend-client'
 import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../../types/session'
 
+// Per-session unsubscribers — each removes its listener from the shared SSE connection.
+// The shared connection in backend-client.ts handles multiplexing so events are
+// delivered exactly once regardless of how many sessions are listening.
 const sessionStreams = new Map<string, () => void>()
 
 /**
@@ -416,7 +419,20 @@ export function registerSessionHandlers() {
     }
 
     // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
-    // Always set up SSE stream (remove existing if present) to ensure fresh connection
+    // Clean up stale SSE streams from ALL other sessions before creating a new one.
+    // This prevents duplicate event delivery: each new prompt would otherwise create
+    // an additional HTTP connection to the global /event endpoint, and all active
+    // connections receive the same events, causing the renderer to process them N times
+    // (once per connection) and producing duplicated text.
+    for (const [sid, unsub] of sessionStreams) {
+      if (sid !== sessionID) {
+        console.log('[PROMPT] cleaning up stale SSE stream for other session:', sid)
+        unsub()
+        sessionStreams.delete(sid)
+      }
+    }
+
+    // Remove existing stream for this sessionID if any (re-prompt case)
     if (sessionStreams.has(sessionID)) {
       const oldUnsub = sessionStreams.get(sessionID)
       if (oldUnsub) {
@@ -571,21 +587,6 @@ export function registerSessionHandlers() {
       return { success: false, error }
     }
   })
-}
-
-export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
-  if (!sessionStreams.has(sessionID)) {
-    const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
-      // Deep serialize event to ensure IPC compatibility
-      // Some events may contain non-serializable objects
-      const serializedEvent = JSON.parse(JSON.stringify(event))
-      webContents.send(CHANNELS.SESSION_STREAM_EVENT, {
-        sessionID,
-        event: serializedEvent
-      })
-    })
-    sessionStreams.set(sessionID, unsubscribe)
-  }
 }
 
 export function stopSessionStream(sessionID: string) {

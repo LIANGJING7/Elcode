@@ -345,15 +345,6 @@ export const backend = {
               try {
                 const payload = JSON.parse(trimmed.slice(5))
                 eventCount++
-                // DEBUG: Enhanced logging for all events including content events
-                if (payload.type?.startsWith('session.next.') || payload.type?.startsWith('message.part')) {
-                  console.log('[SSE RAW #' + eventCount + '] CONTENT:', payload.type, 'full:', JSON.stringify(payload).slice(0, 500))
-                } else if (payload.type && !payload.type.startsWith('server.')) {
-                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
-                  console.log('[SSE RAW #' + eventCount + '] full:', JSON.stringify(payload).slice(0, 500))
-                } else {
-                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
-                }
                 onEvent(payload)
               } catch (e) {
                 console.error('[SSE PARSE] failed:', trimmed.slice(0, 100), e)
@@ -363,15 +354,13 @@ export const backend = {
         })
         res.on("end", () => {
           console.log('[SSE] stream ended, total events:', eventCount)
-          // Notify renderer that stream is fully complete
-          onEvent({ type: 'stream.ended', sessionID })
         })
       })
       req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
       req.end()
       
       return () => {
-        console.log('[SSE] destroying request')
+        console.log('[SSE] destroying request for', sessionID)
         req.destroy()
       }
     },
