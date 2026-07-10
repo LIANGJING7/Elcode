@@ -56,7 +56,7 @@ function getIcon(item: MentionItem): string {
 <template>
   <div
     v-if="state.visible"
-    class="mention-autocomplete absolute bottom-full left-0 right-0 mb-2 max-h-96 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-50"
+    class="mention-autocomplete absolute bottom-full left-0 w-full mb-2 max-h-96 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-50"
   >
     <div class="overflow-y-auto max-h-80">
       <div
@@ -98,15 +98,6 @@ function getIcon(item: MentionItem): string {
       <div v-if="items.length === 0" class="px-4 py-6 text-center text-sm text-text-muted">
         {{ loading ? 'Searching...' : 'No matches found' }}
       </div>
-    </div>
-
-    <div
-      v-if="items.length > 0"
-      class="flex items-center justify-between px-4 py-1.5 border-t border-border text-xs text-text-muted"
-    >
-      <span>Navigate</span>
-      <span>Enter Select</span>
-      <span>Esc Close</span>
     </div>
   </div>
 </template>
