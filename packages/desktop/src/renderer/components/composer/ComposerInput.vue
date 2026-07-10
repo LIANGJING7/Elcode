@@ -16,8 +16,6 @@
     <MentionAutocomplete
       ref="mentionAutocompleteRef"
       :state="mentionState"
-      :agents="mentionAgents"
-      :resources="mentionResources"
       :loading="mentionLoading"
       @select="handleMentionSelect"
       @hide="hideMention"
@@ -44,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import MentionAutocomplete from './MentionAutocomplete.vue'
 import { useMention } from '../../composables/useMention'
 import type { MentionItem, MentionState } from '../../../types/mention'
@@ -88,9 +86,13 @@ const mentionState = ref<MentionState>({
   items: []
 })
 
-const { searchFiles, getAgents, getResources, loading: mentionLoading } = useMention()
-const mentionAgents = ref<MentionItem[]>([])
-const mentionResources = ref<MentionItem[]>([])
+const { searchAll, loadAgents, loadResources, loading: mentionLoading } = useMention()
+
+// Pre-cache agents and resources on mount
+onMounted(() => {
+  loadAgents()
+  loadResources()
+})
 
 // Dynamic placeholder: show queue hint when messages are queued
 const effectivePlaceholder = computed(() => {
@@ -270,28 +272,10 @@ async function showMentionMenu(atIndex: number, query: string) {
   mentionState.value.visible = true
   mentionState.value.selectedIndex = 0
 
-  const loadAgents = async () => {
-    if (mentionAgents.value.length === 0) {
-      const agents = await getAgents()
-      if (seq === mentionQuerySeq) mentionAgents.value = agents
-    }
+  const items = await searchAll(query)
+  if (seq === mentionQuerySeq) {
+    mentionState.value.items = items
   }
-
-  const loadResources = async () => {
-    if (mentionResources.value.length === 0) {
-      const resources = await getResources()
-      if (seq === mentionQuerySeq) mentionResources.value = resources
-    }
-  }
-
-  const loadFiles = async () => {
-    const files = await searchFiles(query)
-    if (seq === mentionQuerySeq) mentionState.value.items = files
-  }
-
-  loadAgents()
-  loadResources()
-  loadFiles()
 }
 
 function hideMention() {

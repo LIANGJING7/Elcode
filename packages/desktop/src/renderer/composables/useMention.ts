@@ -1,5 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useWorkspaceStore } from '../stores/workspace'
+import fuzzysort from 'fuzzysort'
 import type { MentionItem } from '../../types/mention'
 
 export function useMention() {
@@ -10,13 +11,58 @@ export function useMention() {
   
   const directory = computed(() => workspaceStore.currentWorkspace?.path)
   
+  const cachedAgents = ref<MentionItem[]>([])
+  const cachedResources = ref<MentionItem[]>([])
+  const agentsLoaded = ref(false)
+  const resourcesLoaded = ref(false)
+  
+  async function loadAgents() {
+    if (agentsLoaded.value) return
+    try {
+      loading.value = true
+      const agents = await window.desktop.session.agents(directory.value)
+      cachedAgents.value = agents
+        .filter((a: any) => a.mode !== 'primary')
+        .map((a: any) => ({
+          kind: 'agent' as const,
+          value: a.name,
+          display: `@${a.name}`,
+          description: a.description
+        }))
+      agentsLoaded.value = true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to get agents'
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  async function loadResources() {
+    if (resourcesLoaded.value) return
+    try {
+      loading.value = true
+      const resources = await window.desktop.mcp.resources(directory.value)
+      cachedResources.value = Object.entries(resources).map(([name, res]: [string, any]) => ({
+        kind: 'resource' as const,
+        value: name,
+        display: `@${name}`,
+        description: res.description,
+        mime: res.mimeType,
+        url: res.uri
+      }))
+      resourcesLoaded.value = true
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to get resources'
+    } finally {
+      loading.value = false
+    }
+  }
+  
   async function searchFiles(query: string): Promise<MentionItem[]> {
     if (!query || query.length < 1) return []
-    
     try {
       loading.value = true
       const files = await window.desktop.file.search(query, directory.value)
-      
       return files.map(file => ({
         kind: 'file' as const,
         value: file.relativePath,
@@ -33,64 +79,48 @@ export function useMention() {
     }
   }
   
-  async function getAgents(): Promise<MentionItem[]> {
-    try {
-      loading.value = true
-      const agents = await window.desktop.session.agents(directory.value)
-      
-      return agents
-        .filter(a => a.mode === 'subagent')
-        .map(a => ({
-          kind: 'agent' as const,
-          value: a.name,
-          display: `@${a.name}`,
-          description: a.description
-        }))
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to get agents'
-      return []
-    } finally {
-      loading.value = false
-    }
-  }
-  
-  async function getResources(): Promise<MentionItem[]> {
-    try {
-      loading.value = true
-      const resources = await window.desktop.mcp.resources(directory.value)
-      
-      return Object.entries(resources).map(([name, res]: [string, any]) => ({
-        kind: 'resource' as const,
-        value: name,
-        display: `@${name}`,
-        description: res.description,
-        mime: res.mimeType,
-        url: res.uri
-      }))
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to get resources'
-      return []
-    } finally {
-      loading.value = false
-    }
-  }
-  
   async function searchAll(query: string): Promise<MentionItem[]> {
-    const [files, agents, resources] = await Promise.all([
-      searchFiles(query),
-      query.length === 0 ? getAgents() : Promise.resolve([]),
-      query.length === 0 ? getResources() : Promise.resolve([])
-    ])
+    const nonFiles = [...cachedAgents.value, ...cachedResources.value]
     
-    return [...files, ...agents, ...resources]
+    const files = await searchFiles(query)
+    
+    if (!query) {
+      return [...nonFiles.slice(0, 5), ...files.slice(0, 5)]
+    }
+    
+    const fuzzied = fuzzysort.go(query, nonFiles, {
+      keys: ['value', 'description'],
+      limit: 5,
+      scoreFn: (objResults) => {
+        let score = objResults.score
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(query)) {
+          score *= 2
+        }
+        return score
+      },
+    }).map(r => r.obj)
+    
+    return [...fuzzied, ...files.slice(0, 5)]
   }
+  
+  watch(directory, () => {
+    agentsLoaded.value = false
+    resourcesLoaded.value = false
+    cachedAgents.value = []
+    cachedResources.value = []
+  })
   
   return {
     loading,
     error,
+    cachedAgents,
+    cachedResources,
+    agentsLoaded,
+    resourcesLoaded,
+    loadAgents,
+    loadResources,
     searchFiles,
-    getAgents,
-    getResources,
     searchAll
   }
 }
