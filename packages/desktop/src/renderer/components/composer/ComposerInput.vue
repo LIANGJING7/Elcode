@@ -75,6 +75,8 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1) // -1 = current input, 0+ = history position
+const blurTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+let mentionQuerySeq = 0
 
 const mentionState = ref<MentionState>({
   visible: false,
@@ -126,7 +128,12 @@ function handleInput(e: Event) {
 
 function handleKeydown(e: KeyboardEvent) {
   if (mentionState.value.visible) {
-    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+    if (e.key === 'Escape') {
+      hideMention()
+      e.preventDefault()
+      return
+    }
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) {
       return
     }
   }
@@ -258,6 +265,7 @@ function checkMentionTrigger(text: string, cursorPos: number) {
 }
 
 async function showMentionMenu(atIndex: number, query: string) {
+  const seq = ++mentionQuerySeq
   mentionState.value.atIndex = atIndex
   mentionState.value.query = query
 
@@ -269,6 +277,8 @@ async function showMentionMenu(atIndex: number, query: string) {
   }
 
   const files = await searchFiles(query)
+  if (seq !== mentionQuerySeq) return
+
   mentionState.value.items = files
 
   mentionState.value.visible = true
@@ -281,6 +291,11 @@ function hideMention() {
 }
 
 function handleMentionSelect(item: MentionItem) {
+  if (blurTimer.value) {
+    clearTimeout(blurTimer.value)
+    blurTimer.value = null
+  }
+
   const before = internalValue.value.slice(0, mentionState.value.atIndex)
   const after = internalValue.value.slice(textareaRef.value!.selectionStart)
   const insertText = `@${item.value} `
@@ -303,7 +318,8 @@ function handleMentionSelect(item: MentionItem) {
 }
 
 function handleBlur() {
-  setTimeout(() => hideMention(), 200)
+  if (blurTimer.value) clearTimeout(blurTimer.value)
+  blurTimer.value = setTimeout(() => hideMention(), 200)
   emit('blur')
 }
 
