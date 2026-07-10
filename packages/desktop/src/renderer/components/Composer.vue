@@ -277,13 +277,7 @@ function handleSlashCommand(command: string) {
 }
 
 function handleMention(item: MentionItem) {
-  attachments.value.push({
-    type: 'at',
-    name: item.value,
-    path: item.value,
-    url: item.url,
-    mime: item.mime
-  })
+  // 不需要添加到附件栏，只触发回复行为
 }
 
 function handleFlushQueued(pending: PendingMessage) {

@@ -85,12 +85,12 @@ export function useMention() {
     const files = await searchFiles(query)
     
     if (!query) {
-      return [...nonFiles.slice(0, 5), ...files.slice(0, 5)]
+      return [...nonFiles.slice(0, 10), ...files.slice(0, 10)]
     }
     
     const fuzzied = fuzzysort.go(query, nonFiles, {
       keys: ['value', 'description'],
-      limit: 5,
+      limit: 10,
       scoreFn: (objResults) => {
         let score = objResults.score
         const displayResult = objResults[0]
@@ -101,7 +101,7 @@ export function useMention() {
       },
     }).map(r => r.obj)
     
-    return [...fuzzied, ...files.slice(0, 5)]
+    return [...fuzzied, ...files.slice(0, 10)]
   }
   
   watch(directory, () => {
