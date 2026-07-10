@@ -63,9 +63,8 @@ function getIcon(item: MentionItem) {
 <template>
   <div
     v-if="state.visible"
-    class="mention-autocomplete"
-    style="position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; max-height: 400px; z-index: 9999; overflow: hidden;"
-      class="bg-bg-elevated border border-border rounded-lg shadow-lg"
+class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg"
+      style="position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; max-height: 400px; z-index: 9999; overflow: hidden;"
   >
     <div class="overflow-y-auto" style="max-height: 400px;">
       <div
