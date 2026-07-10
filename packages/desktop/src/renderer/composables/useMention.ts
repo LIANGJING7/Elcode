@@ -66,26 +66,19 @@ export function useMention() {
   }
   
   async function getResources(): Promise<MentionItem[]> {
-    console.log('[useMention] getResources called', { directory: directory.value })
     try {
       loading.value = true
-      console.log('[useMention] calling window.desktop.mcp.resources...')
       const resources = await window.desktop.mcp.resources(directory.value)
-      console.log('[useMention] mcp.resources result:', resources)
       
-      const entries = Object.entries(resources)
-      console.log('[useMention] resources entries count:', entries.length)
-      
-      return entries.map(([name, res]: [string, any]) => ({
+      return Object.entries(resources).map(([name, res]: [string, any]) => ({
         kind: 'resource' as const,
         value: name,
         display: `@${name}`,
-        description: res?.description,
-        mime: res?.mimeType,
-        url: res?.uri
+        description: res.description,
+        mime: res.mimeType,
+        url: res.uri
       }))
     } catch (err) {
-      console.error('[useMention] getResources error:', err)
       error.value = err instanceof Error ? err.message : 'Failed to get resources'
       return []
     } finally {

@@ -55,6 +55,14 @@ const filteredResources = computed(() => {
 })
 
 const allItems = computed(() => {
+  console.log('[MentionAutocomplete] computing allItems', {
+    agents: props.agents.length,
+    files: props.state.items.length,
+    resources: props.resources.length,
+    filteredAgents: filteredAgents.value.length,
+    filteredFiles: filteredFiles.value.length,
+    filteredResources: filteredResources.value.length,
+  })
   if (activeTab.value === 'all') {
     return [...filteredAgents.value, ...filteredFiles.value, ...filteredResources.value]
   }
@@ -112,10 +120,16 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 watch(allItems, () => {
+  console.log('[MentionAutocomplete] allItems changed:', allItems.value.length)
   selectedIndex.value = 0
 })
 
 onMounted(() => {
+  console.log('[MentionAutocomplete] mounted', {
+    stateVisible: props.state.visible,
+    agents: props.agents.length,
+    resources: props.resources.length
+  })
   nextTick(() => {
     searchInputRef.value?.focus()
   })
