@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, provide, onMounted } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import type { Message, ToolCall, PromptOptions } from '../../../types/ipc'
 import type { PendingMessage } from '../../stores/session'
 import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
 import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
-import MentionAutocomplete from '../composer/MentionAutocomplete.vue'
-import { useMention } from '../../composables/useMention'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore } from '../../stores/session'
-import type { MentionItem, MentionState } from '../../types/mention'
 
 const props = defineProps<{
   sessionId: string
@@ -28,44 +25,6 @@ const timelineRef = ref<ChatTimelineExpose>()
 const needInitialScroll = ref(false)
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
-
-const { searchAll, loadAgents, loadResources, loading: mentionLoading } = useMention()
-const mentionState = ref<MentionState>({
-  visible: false, query: '', atIndex: 0, selectedIndex: 0, items: []
-})
-let mentionQuerySeq = 0
-
-async function showMentionMenu(atIndex: number, query: string) {
-  const seq = ++mentionQuerySeq
-  mentionState.value.atIndex = atIndex
-  mentionState.value.query = query
-  mentionState.value.visible = true
-  mentionState.value.selectedIndex = 0
-  const items = await searchAll(query)
-  if (seq === mentionQuerySeq) mentionState.value.items = items
-}
-
-function hideMention() {
-  mentionState.value.visible = false
-  mentionState.value.items = []
-}
-
-function handleMentionSelect(item: MentionItem) {
-  hideMention()
-}
-
-onMounted(() => {
-  loadAgents()
-  loadResources()
-})
-
-const mentionVisible = ref(false)
-
-provide('mention', {
-  showMenu: showMentionMenu,
-  hideMenu: hideMention,
-  visible: mentionVisible,
-})
 
 async function handleSend(content: string, options: Record<string, unknown>, _attachments: unknown[]) {
   const mode = options.mode as string | undefined
@@ -122,12 +81,6 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @flush-queued="handleFlushQueued"
       @edit-queued="handleEditQueued"
       @remove-queued="handleRemoveQueued"
-    />
-    <MentionAutocomplete
-      :state="mentionState"
-      :loading="mentionLoading"
-      @select="handleMentionSelect"
-      @hide="hideMention"
     />
   </div>
 </template>

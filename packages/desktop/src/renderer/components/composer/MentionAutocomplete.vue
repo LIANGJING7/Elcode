@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { MentionItem, MentionState } from '../../../types/mention'
 
 const props = defineProps<{
@@ -14,7 +14,6 @@ const emit = defineEmits<{
 
 const selectedIndex = ref(0)
 const items = computed(() => props.state.items)
-const mentionCtx = inject<any>('mention')
 
 watch(items, () => { selectedIndex.value = 0 })
 
@@ -23,48 +22,37 @@ const selectedItem = computed(() => {
   return idx >= 0 && idx < items.value.length ? items.value[idx] : null
 })
 
-function onKeydown(e: KeyboardEvent) {
-  if (!props.state.visible) return
+function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    e.stopPropagation()
     selectedIndex.value = Math.min(selectedIndex.value + 1, items.value.length - 1)
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    e.stopPropagation()
     selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
   } else if (e.key === 'Enter' || e.key === 'Tab') {
     e.preventDefault()
-    e.stopPropagation()
-    if (selectedItem.value) emit('select', selectedItem.value)
+    if (selectedItem.value) {
+      emit('select', selectedItem.value)
+    }
   } else if (e.key === 'Escape') {
     e.preventDefault()
-    e.stopPropagation()
     emit('hide')
   }
 }
+
+defineExpose({ handleKeydown })
 
 function getIcon(item: MentionItem): string {
   if (item.kind === 'agent') return 'agent'
   if (item.kind === 'file') return item.directory ? 'folder' : 'file'
   return 'resource'
 }
-
-onMounted(() => {
-  if (mentionCtx) mentionCtx.visible = true
-  document.addEventListener('keydown', onKeydown, true)
-})
-
-onUnmounted(() => {
-  if (mentionCtx) mentionCtx.visible = false
-  document.removeEventListener('keydown', onKeydown, true)
-})
 </script>
 
 <template>
   <div
     v-if="state.visible"
-    class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg max-h-96 overflow-hidden"
+    class="mention-autocomplete bg-bg-elevated border border-border rounded-lg shadow-lg max-h-96 overflow-hidden absolute bottom-[calc(100%+6px)] left-0 right-0 z-[9999]"
   >
     <div class="overflow-y-auto max-h-96">
       <div

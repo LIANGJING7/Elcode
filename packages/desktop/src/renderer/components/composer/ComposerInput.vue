@@ -12,6 +12,16 @@
       @keydown="handleKeydown"
     />
 
+    <!-- Local Mention Autocomplete (fallback when no context provided) -->
+    <MentionAutocomplete
+      v-if="!mentionCtx"
+      ref="localMentionRef"
+      :state="localMentionState"
+      :loading="localMentionLoading"
+      @select="handleLocalMentionSelect"
+      @hide="hideLocalMention"
+    />
+
     <!-- Slash Command Menu -->
     <div
       v-if="showSlashMenu"
@@ -33,7 +43,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, inject } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, inject } from 'vue'
+import MentionAutocomplete from './MentionAutocomplete.vue'
+import { useMention } from '../../composables/useMention'
+import type { MentionItem, MentionState } from '../../../types/mention'
 
 const props = withDefaults(defineProps<{
   value?: string
@@ -57,24 +70,66 @@ const emit = defineEmits<{
   'blur': []
 }>()
 
-const mentionCtx = inject<any>('mention')
+const mentionCtx = inject<any>('mention', null)
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const localMentionRef = ref<InstanceType<typeof MentionAutocomplete> | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1)
 const blurTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+let mentionQuerySeq = 0
 
 const effectivePlaceholder = computed(() => {
-  if (props.queueCount > 0) {
-    return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
-  }
+  if (props.queueCount > 0) return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
   return props.placeholder
 })
 
 watch(() => props.value, (val) => {
   internalValue.value = val
   showSlashMenu.value = val === '/'
+})
+
+const { searchAll, loadAgents, loadResources, loading: localMentionLoading } = useMention()
+const localMentionState = ref<MentionState>({
+  visible: false, query: '', atIndex: 0, selectedIndex: 0, items: []
+})
+
+async function showLocalMentionMenu(atIndex: number, query: string) {
+  const seq = ++mentionQuerySeq
+  localMentionState.value.atIndex = atIndex
+  localMentionState.value.query = query
+  localMentionState.value.visible = true
+  localMentionState.value.selectedIndex = 0
+  const items = await searchAll(query)
+  if (seq === mentionQuerySeq) localMentionState.value.items = items
+}
+
+function hideLocalMention() {
+  localMentionState.value.visible = false
+  localMentionState.value.items = []
+}
+
+function handleLocalMentionSelect(item: MentionItem) {
+  const before = internalValue.value.slice(0, localMentionState.value.atIndex)
+  const after = internalValue.value.slice(textareaRef.value!.selectionStart)
+  const insertText = `@${item.value} `
+  internalValue.value = before + insertText + after
+  emit('update:value', internalValue.value)
+  hideLocalMention()
+  nextTick(() => {
+    if (textareaRef.value) {
+      const pos = before.length + insertText.length
+      textareaRef.value.selectionStart = pos
+      textareaRef.value.selectionEnd = pos
+      textareaRef.value.focus()
+    }
+  })
+}
+
+onMounted(() => {
+  loadAgents()
+  loadResources()
 })
 
 const slashCommands = [
@@ -95,28 +150,48 @@ function handleInput(e: Event) {
   checkMentionTrigger(newValue, target.selectionStart)
 }
 
+function checkMentionTrigger(text: string, cursorPos: number) {
+  let atIndex = -1
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    if (text[i] === '@') { atIndex = i; break }
+    if (text[i] === ' ' || text[i] === '\n') break
+  }
+  if (atIndex === -1) {
+    mentionCtx ? mentionCtx.hideMenu() : hideLocalMention()
+    return
+  }
+  const query = text.slice(atIndex + 1, cursorPos)
+  if (query.includes(' ') || query.includes('\n')) {
+    mentionCtx ? mentionCtx.hideMenu() : hideLocalMention()
+    return
+  }
+  if (mentionCtx) {
+    mentionCtx.showMenu(atIndex, query)
+  } else {
+    showLocalMentionMenu(atIndex, query)
+  }
+}
+
 function handleKeydown(e: KeyboardEvent) {
-  if (mentionCtx?.visible) {
-    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
-      return
+  const isMentionVisible = mentionCtx ? mentionCtx.visible.value : localMentionState.value.visible
+  if (isMentionVisible) {
+    if (mentionCtx) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return
+      if (e.key === 'Escape') { e.preventDefault(); mentionCtx.hideMenu(); return }
+    } else {
+      if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+        e.preventDefault()
+        localMentionRef.value?.handleKeydown(e)
+        return
+      }
     }
   }
 
-  // Slash command menu navigation
   if (showSlashMenu.value) {
-    if (e.key === 'Escape') {
-      showSlashMenu.value = false
-      e.preventDefault()
-      return
-    }
-    if (e.key === 'Tab' || e.key === 'Enter') {
-      selectSlashCommand(slashCommands[0])
-      e.preventDefault()
-      return
-    }
+    if (e.key === 'Escape') { showSlashMenu.value = false; e.preventDefault(); return }
+    if (e.key === 'Tab' || e.key === 'Enter') { selectSlashCommand(slashCommands[0]); e.preventDefault(); return }
   }
 
-  // History navigation
   if (!showSlashMenu.value && props.history.length > 0) {
     if (e.key === 'ArrowUp' && !e.shiftKey) {
       const textarea = textareaRef.value
@@ -124,38 +199,33 @@ function handleKeydown(e: KeyboardEvent) {
       if (internalValue.value === '' || atStart) {
         if (historyIndex.value < props.history.length - 1) {
           historyIndex.value++
-          const historyValue = props.history[props.history.length - 1 - historyIndex.value]
-          internalValue.value = historyValue
-          emit('update:value', historyValue)
+          const hv = props.history[props.history.length - 1 - historyIndex.value]
+          internalValue.value = hv; emit('update:value', hv)
           nextTick(() => {
             if (textareaRef.value) {
-              textareaRef.value.value = historyValue
-              textareaRef.value.selectionStart = historyValue.length
-              textareaRef.value.selectionEnd = historyValue.length
+              textareaRef.value.value = hv
+              textareaRef.value.selectionStart = hv.length
+              textareaRef.value.selectionEnd = hv.length
             }
           })
         }
-        e.preventDefault()
-        return
+        e.preventDefault(); return
       }
     }
-
     if (e.key === 'ArrowDown' && !e.shiftKey) {
       if (historyIndex.value > -1) {
         historyIndex.value--
         if (historyIndex.value === -1) {
-          internalValue.value = ''
-          emit('update:value', '')
+          internalValue.value = ''; emit('update:value', '')
           nextTick(() => { if (textareaRef.value) textareaRef.value.value = '' })
         } else {
-          const historyValue = props.history[props.history.length - 1 - historyIndex.value]
-          internalValue.value = historyValue
-          emit('update:value', historyValue)
+          const hv = props.history[props.history.length - 1 - historyIndex.value]
+          internalValue.value = hv; emit('update:value', hv)
           nextTick(() => {
             if (textareaRef.value) {
-              textareaRef.value.value = historyValue
-              textareaRef.value.selectionStart = historyValue.length
-              textareaRef.value.selectionEnd = historyValue.length
+              textareaRef.value.value = hv
+              textareaRef.value.selectionStart = hv.length
+              textareaRef.value.selectionEnd = hv.length
             }
           })
         }
@@ -165,42 +235,29 @@ function handleKeydown(e: KeyboardEvent) {
     }
   }
 
-  // Enter: send (without shift), newline (with shift)
   if (e.key === 'Enter') {
     if (e.shiftKey) return
     if (internalValue.value.trim()) {
       emit('send', internalValue.value)
-      internalValue.value = ''
-      emit('update:value', '')
-      showSlashMenu.value = false
-      historyIndex.value = -1
+      internalValue.value = ''; emit('update:value', '')
+      showSlashMenu.value = false; historyIndex.value = -1
       nextTick(() => { if (textareaRef.value) textareaRef.value.value = '' })
     }
     e.preventDefault()
   }
 }
 
-function checkMentionTrigger(text: string, cursorPos: number) {
-  let atIndex = -1
-  for (let i = cursorPos - 1; i >= 0; i--) {
-    if (text[i] === '@') { atIndex = i; break }
-    if (text[i] === ' ' || text[i] === '\n') break
-  }
-  if (atIndex === -1) { mentionCtx?.hideMenu(); return }
-  const query = text.slice(atIndex + 1, cursorPos)
-  if (query.includes(' ') || query.includes('\n')) { mentionCtx?.hideMenu(); return }
-  mentionCtx?.showMenu(atIndex, query)
-}
-
 function handleBlur() {
-  blurTimer.value = setTimeout(() => mentionCtx?.hideMenu(), 200)
+  blurTimer.value = setTimeout(() => {
+    if (mentionCtx) mentionCtx.hideMenu()
+    else hideLocalMention()
+  }, 200)
   emit('blur')
 }
 
 function selectSlashCommand(cmd: { name: string; description: string }) {
   emit('slashCommand', cmd.name)
-  internalValue.value = ''
-  emit('update:value', '')
+  internalValue.value = ''; emit('update:value', '')
   showSlashMenu.value = false
 }
 
@@ -208,8 +265,5 @@ defineExpose({ focus: () => textareaRef.value?.focus() })
 </script>
 
 <style scoped>
-.slash-command-menu {
-  min-width: 200px;
-  max-width: 300px;
-}
+.slash-command-menu { min-width: 200px; max-width: 300px; }
 </style>
