@@ -164,7 +164,7 @@ onMounted(() => {
           class="mention-item w-full px-3 py-2 text-left text-sm hover:bg-accent-muted transition-colors flex items-center gap-2"
           :class="{ 'bg-accent-muted': isSelected('agent', index) }"
           @click="selectItem(item)"
-          @mouseenter="selectedIndex = index"
+          @mouseenter="selectedIndex = getGlobalIndex('agent', index)"
         >
           <span class="text-accent font-mono">@</span>
           <span class="flex-1 truncate">{{ item.value }}</span>
