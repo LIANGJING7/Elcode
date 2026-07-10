@@ -325,8 +325,8 @@ export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
 export interface Agent {
   name: string
   description?: string
-  hidden?: boolean
-  mode?: 'primary' | 'plan' | 'build' | 'review'
+  mode: 'subagent' | 'primary' | 'all'
+  builtIn: boolean
 }
 
 export interface FileMatch {

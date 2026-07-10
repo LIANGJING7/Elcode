@@ -319,7 +319,7 @@ export const backend = {
 
     agents: async (directory?: string): Promise<unknown[]> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      return request("GET", `/api/agent?${params}`) as Promise<unknown[]>
+      return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
@@ -402,10 +402,18 @@ export const backend = {
       return request("GET", `/file/list?${params.toString()}`) as Promise<unknown[]>
     },
 
-    search: async (query: string, directory?: string): Promise<unknown[]> => {
+    search: async (query: string, directory?: string): Promise<{ path: string; relativePath: string; isDirectory: boolean; url: string; mimeType: string }[]> => {
       const params = new URLSearchParams({ query })
       if (directory) params.set("directory", storagePath(directory))
-      return request("GET", `/find/file?${params.toString()}`) as Promise<unknown[]>
+      const paths = await request("GET", `/find/file?${params.toString()}`) as string[]
+      const dir = directory || process.cwd()
+      return paths.map(p => ({
+        path: p,
+        relativePath: p,
+        isDirectory: false,
+        url: `file://${require('path').join(dir, p)}`,
+        mimeType: 'text/plain'
+      }))
     },
   },
   

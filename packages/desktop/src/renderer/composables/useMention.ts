@@ -39,7 +39,7 @@ export function useMention() {
       const agents = await window.desktop.session.agents(directory.value)
       
       return agents
-        .filter(a => !a.hidden && a.mode !== 'primary')
+        .filter(a => a.mode === 'subagent')
         .map(a => ({
           kind: 'agent' as const,
           value: a.name,
