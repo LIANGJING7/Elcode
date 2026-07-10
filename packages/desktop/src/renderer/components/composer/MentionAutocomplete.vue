@@ -13,9 +13,12 @@ const emit = defineEmits<{
 }>()
 
 const selectedIndex = ref(0)
+
 const items = computed(() => props.state.items)
 
-watch(items, () => { selectedIndex.value = 0 })
+watch(items, () => {
+  selectedIndex.value = 0
+})
 
 const selectedItem = computed(() => {
   if (selectedIndex.value >= 0 && selectedIndex.value < items.value.length) {
@@ -42,11 +45,17 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-defineExpose({ handleKeydown })
+defineExpose({
+  handleKeydown
+})
 
-function getIcon(item: MentionItem): string {
-  if (item.kind === 'agent') return 'agent'
-  if (item.kind === 'file') return item.directory ? 'folder' : 'file'
+function getIcon(item: MentionItem) {
+  if (item.kind === 'agent') {
+    return 'agent'
+  }
+  if (item.kind === 'file') {
+    return item.directory ? 'folder' : 'file'
+  }
   return 'resource'
 }
 </script>
@@ -55,21 +64,28 @@ function getIcon(item: MentionItem): string {
   <div
     v-if="state.visible"
     class="mention-autocomplete"
-    style="position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; max-height: 360px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 9999; overflow: hidden; box-sizing: border-box;"
+    style="position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; max-height: 400px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 9999; overflow: hidden;"
   >
-    <div style="max-height: 360px; overflow-y: auto;">
+    <div style="max-height: 400px; overflow-y: auto;">
       <div
         v-for="(item, index) in items"
         :key="item.value + '-' + item.kind + '-' + index"
-        class="flex items-center gap-3 px-3 py-2 cursor-pointer"
         :style="{
-          background: index === selectedIndex ? 'var(--bg-hover)' : 'transparent',
-          transition: 'background 0.1s'
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '10px 16px',
+          cursor: 'pointer',
+          background: index === selectedIndex ? '#2a2a3e' : 'transparent',
+          transition: 'background 0.15s',
+          borderRadius: '8px',
+          margin: '2px 4px',
         }"
         @click="emit('select', item)"
         @mouseenter="selectedIndex = index"
       >
-        <svg v-if="getIcon(item) === 'agent'" class="w-4 h-4 shrink-0" :style="{ color: 'var(--accent)' }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Agent icon -->
+        <svg v-if="getIcon(item) === 'agent'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 8V4H8"/>
           <rect width="16" height="12" x="4" y="8" rx="2"/>
           <path d="M2 14h2"/>
@@ -77,21 +93,25 @@ function getIcon(item: MentionItem): string {
           <path d="M15 13v2"/>
           <path d="M9 13v2"/>
         </svg>
-        <svg v-else-if="getIcon(item) === 'file'" class="w-4 h-4 shrink-0" style="color: #60a5fa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- File icon -->
+        <svg v-else-if="getIcon(item) === 'file'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
         </svg>
-        <svg v-else-if="getIcon(item) === 'folder'" class="w-4 h-4 shrink-0" style="color: #fbbf24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Folder icon -->
+        <svg v-else-if="getIcon(item) === 'folder'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
         </svg>
-        <svg v-else class="w-4 h-4 shrink-0" style="color: #34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Resource icon -->
+        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect width="20" height="14" x="2" y="5" rx="2"/>
           <line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
-        <span style="font-size: 13px; color: var(--text); font-weight: 500;" class="truncate">@{{ item.value }}</span>
-        <span v-if="item.description" style="font-size: 12px; color: var(--text-muted);" class="ml-auto truncate max-w-[200px]">{{ item.description }}</span>
+        <span style="color: #e2e8f0; font-size: 14px; font-weight: 500;">@{{ item.value }}</span>
+        <span v-if="item.description" style="color: #64748b; font-size: 12px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">{{ item.description }}</span>
       </div>
-      <div v-if="items.length === 0" style="padding: 20px; text-align: center; font-size: 13px; color: var(--text-muted);">
+
+      <div v-if="items.length === 0" style="padding: 24px; text-align: center; color: #64748b; font-size: 14px;">
         {{ loading ? 'Searching...' : 'No matches found' }}
       </div>
     </div>
