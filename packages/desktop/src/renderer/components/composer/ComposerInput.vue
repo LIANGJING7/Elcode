@@ -12,16 +12,6 @@
       @keydown="handleKeydown"
     />
 
-    <!-- Local Mention Autocomplete (fallback when no context provided) -->
-    <MentionAutocomplete
-      v-if="!mentionCtx"
-      ref="localMentionRef"
-      :state="localMentionState"
-      :loading="localMentionLoading"
-      @select="handleLocalMentionSelect"
-      @hide="hideLocalMention"
-    />
-
     <!-- Slash Command Menu -->
     <div
       v-if="showSlashMenu"
@@ -43,10 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, inject } from 'vue'
-import MentionAutocomplete from './MentionAutocomplete.vue'
-import { useMention } from '../../composables/useMention'
-import type { MentionItem, MentionState } from '../../../types/mention'
+import { ref, computed, watch, nextTick } from 'vue'
 
 const props = withDefaults(defineProps<{
   value?: string
@@ -54,12 +41,14 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   history?: string[]
   queueCount?: number
+  mentionVisible?: boolean
 }>(), {
   value: '',
   placeholder: 'Ask anything... (Shift+Enter for new line)',
   disabled: false,
   history: () => [],
-  queueCount: 0
+  queueCount: 0,
+  mentionVisible: false
 })
 
 const emit = defineEmits<{
@@ -68,17 +57,15 @@ const emit = defineEmits<{
   'slashCommand': [command: string]
   'focus': []
   'blur': []
+  'mention-check': [text: string, cursorPos: number]
+  'mention-key': [e: KeyboardEvent]
 }>()
 
-const mentionCtx = inject<any>('mention', null)
-
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const localMentionRef = ref<InstanceType<typeof MentionAutocomplete> | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1)
 const blurTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-let mentionQuerySeq = 0
 
 const effectivePlaceholder = computed(() => {
   if (props.queueCount > 0) return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
@@ -88,48 +75,6 @@ const effectivePlaceholder = computed(() => {
 watch(() => props.value, (val) => {
   internalValue.value = val
   showSlashMenu.value = val === '/'
-})
-
-const { searchAll, loadAgents, loadResources, loading: localMentionLoading } = useMention()
-const localMentionState = ref<MentionState>({
-  visible: false, query: '', atIndex: 0, selectedIndex: 0, items: []
-})
-
-async function showLocalMentionMenu(atIndex: number, query: string) {
-  const seq = ++mentionQuerySeq
-  localMentionState.value.atIndex = atIndex
-  localMentionState.value.query = query
-  localMentionState.value.visible = true
-  localMentionState.value.selectedIndex = 0
-  const items = await searchAll(query)
-  if (seq === mentionQuerySeq) localMentionState.value.items = items
-}
-
-function hideLocalMention() {
-  localMentionState.value.visible = false
-  localMentionState.value.items = []
-}
-
-function handleLocalMentionSelect(item: MentionItem) {
-  const before = internalValue.value.slice(0, localMentionState.value.atIndex)
-  const after = internalValue.value.slice(textareaRef.value!.selectionStart)
-  const insertText = `@${item.value} `
-  internalValue.value = before + insertText + after
-  emit('update:value', internalValue.value)
-  hideLocalMention()
-  nextTick(() => {
-    if (textareaRef.value) {
-      const pos = before.length + insertText.length
-      textareaRef.value.selectionStart = pos
-      textareaRef.value.selectionEnd = pos
-      textareaRef.value.focus()
-    }
-  })
-}
-
-onMounted(() => {
-  loadAgents()
-  loadResources()
 })
 
 const slashCommands = [
@@ -147,43 +92,15 @@ function handleInput(e: Event) {
   emit('update:value', newValue)
   historyIndex.value = -1
   showSlashMenu.value = newValue === '/'
-  checkMentionTrigger(newValue, target.selectionStart)
-}
-
-function checkMentionTrigger(text: string, cursorPos: number) {
-  let atIndex = -1
-  for (let i = cursorPos - 1; i >= 0; i--) {
-    if (text[i] === '@') { atIndex = i; break }
-    if (text[i] === ' ' || text[i] === '\n') break
-  }
-  if (atIndex === -1) {
-    mentionCtx ? mentionCtx.hideMenu() : hideLocalMention()
-    return
-  }
-  const query = text.slice(atIndex + 1, cursorPos)
-  if (query.includes(' ') || query.includes('\n')) {
-    mentionCtx ? mentionCtx.hideMenu() : hideLocalMention()
-    return
-  }
-  if (mentionCtx) {
-    mentionCtx.showMenu(atIndex, query)
-  } else {
-    showLocalMentionMenu(atIndex, query)
-  }
+  emit('mention-check', newValue, target.selectionStart)
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  const isMentionVisible = mentionCtx ? mentionCtx.visible.value : localMentionState.value.visible
-  if (isMentionVisible) {
-    if (mentionCtx) {
-      if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return
-      if (e.key === 'Escape') { e.preventDefault(); mentionCtx.hideMenu(); return }
-    } else {
-      if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
-        e.preventDefault()
-        localMentionRef.value?.handleKeydown(e)
-        return
-      }
+  if (props.mentionVisible) {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+      e.preventDefault()
+      emit('mention-key', e)
+      return
     }
   }
 
@@ -248,10 +165,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function handleBlur() {
-  blurTimer.value = setTimeout(() => {
-    if (mentionCtx) mentionCtx.hideMenu()
-    else hideLocalMention()
-  }, 200)
+  blurTimer.value = setTimeout(() => emit('mention-check', '', 0), 200)
   emit('blur')
 }
 
@@ -261,7 +175,7 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
   showSlashMenu.value = false
 }
 
-defineExpose({ focus: () => textareaRef.value?.focus() })
+defineExpose({ focus: () => textareaRef.value?.focus(), textareaRef })
 </script>
 
 <style scoped>

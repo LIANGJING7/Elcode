@@ -18,7 +18,7 @@
       </div>
 
       <div
-        class="composer bg-bg-elevated border border-border rounded-2xl shadow transition-all duration-200 flex flex-col min-h-[120px]"
+        class="composer bg-bg-elevated border border-border rounded-2xl shadow transition-all duration-200 flex flex-col min-h-[120px] relative"
         :class="isFocused
           ? 'border-border-light shadow-sm'
           : 'border-border hover:border-border-light'"
@@ -30,7 +30,14 @@
       />
 
       <!-- Composer Input (top, takes remaining space) -->
-      <div class="flex-1 min-h-0 px-3 pt-3 pb-1">
+      <div class="flex-1 min-h-0 px-3 pt-3 pb-1 relative">
+        <!-- Mention Autocomplete -->
+        <MentionAutocomplete
+          ref="mentionAutocompleteRef"
+          :state="mentionState"
+          @select="handleMentionSelect"
+          @hide="hideMention"
+        />
         <ComposerInput
           ref="inputRef"
           v-model:value="inputValue"
@@ -38,9 +45,11 @@
           :placeholder="placeholder"
           :history="inputHistory"
           :queue-count="queueCount"
+          :mention-visible="mentionState.visible"
           @send="handleSend"
           @slash-command="handleSlashCommand"
-          @mention="handleMention"
+          @mention-check="checkMentionTrigger"
+          @mention-key="(e: KeyboardEvent) => mentionAutocompleteRef?.handleKeydown(e)"
           @focus="isFocused = true"
           @blur="isFocused = false"
         />
@@ -129,9 +138,11 @@ import ComposerInput from './composer/ComposerInput.vue'
 import AttachmentBar from './composer/AttachmentBar.vue'
 import SessionOptions from './composer/SessionOptions.vue'
 import QueuedMessageChip from './composer/QueuedMessageChip.vue'
+import MentionAutocomplete from './composer/MentionAutocomplete.vue'
+import { useMention } from '../composables/useMention'
 import { useModelsStore } from '../stores/models'
 import type { PendingMessage } from '../stores/session'
-import type { MentionItem } from '../../types/mention'
+import type { MentionItem, MentionState } from '../../types/mention'
 
 interface Attachment {
   type: 'file' | 'at'
@@ -276,8 +287,49 @@ function handleSlashCommand(command: string) {
   }
 }
 
-function handleMention(item: MentionItem) {
-  // 不需要添加到附件栏，只触发回复行为
+const { searchAll, loadAgents, loadResources } = useMention()
+const mentionAutocompleteRef = ref<InstanceType<typeof MentionAutocomplete> | null>(null)
+const mentionState = ref<MentionState>({
+  visible: false, query: '', atIndex: 0, selectedIndex: 0, items: []
+})
+let mentionQuerySeq = 0
+
+onMounted(() => {
+  loadAgents()
+  loadResources()
+})
+
+async function showMentionMenu(atIndex: number, query: string) {
+  const seq = ++mentionQuerySeq
+  mentionState.value = { visible: true, query, atIndex, selectedIndex: 0, items: [] }
+  const items = await searchAll(query)
+  if (seq === mentionQuerySeq) mentionState.value.items = items
+}
+
+function hideMention() {
+  mentionState.value.visible = false
+}
+
+function handleMentionSelect(item: MentionItem) {
+  const before = inputValue.value.slice(0, mentionState.value.atIndex)
+  const textarea = inputRef.value as any
+  const selStart = textarea?.textareaRef?.selectionStart ?? inputValue.value.length
+  const after = inputValue.value.slice(selStart)
+  const insertText = `@${item.value} `
+  inputValue.value = before + insertText + after
+  hideMention()
+}
+
+function checkMentionTrigger(text: string, cursorPos: number) {
+  let atIndex = -1
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    if (text[i] === '@') { atIndex = i; break }
+    if (text[i] === ' ' || text[i] === '\n') break
+  }
+  if (atIndex === -1) { hideMention(); return }
+  const query = text.slice(atIndex + 1, cursorPos)
+  if (query.includes(' ') || query.includes('\n')) { hideMention(); return }
+  showMentionMenu(atIndex, query)
 }
 
 function handleFlushQueued(pending: PendingMessage) {
