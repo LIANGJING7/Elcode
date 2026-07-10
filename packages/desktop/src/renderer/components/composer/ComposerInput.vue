@@ -14,6 +14,7 @@
 
     <!-- Mention Autocomplete -->
     <MentionAutocomplete
+      ref="mentionAutocompleteRef"
       :state="mentionState"
       :agents="mentionAgents"
       :resources="mentionResources"
@@ -72,6 +73,7 @@ const emit = defineEmits<{
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const mentionAutocompleteRef = ref<InstanceType<typeof MentionAutocomplete> | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1) // -1 = current input, 0+ = history position
@@ -128,12 +130,9 @@ function handleInput(e: Event) {
 
 function handleKeydown(e: KeyboardEvent) {
   if (mentionState.value.visible) {
-    if (e.key === 'Escape') {
-      hideMention()
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
       e.preventDefault()
-      return
-    }
-    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) {
+      mentionAutocompleteRef.value?.handleKeydown(e)
       return
     }
   }

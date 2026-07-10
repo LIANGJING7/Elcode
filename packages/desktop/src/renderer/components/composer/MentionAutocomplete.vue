@@ -89,12 +89,12 @@ function selectItem(item: MentionItem) {
   emit('select', item)
 }
 
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
+function handleExternalKeydown(e: KeyboardEvent) {
+  handleKeydown(e)
+}
 
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
+defineExpose({
+  handleKeydown: handleExternalKeydown
 })
 </script>
 
