@@ -267,24 +267,31 @@ async function showMentionMenu(atIndex: number, query: string) {
   const seq = ++mentionQuerySeq
   mentionState.value.atIndex = atIndex
   mentionState.value.query = query
+  mentionState.value.visible = true
+  mentionState.value.selectedIndex = 0
 
-  try {
+  const loadAgents = async () => {
     if (mentionAgents.value.length === 0) {
-      mentionAgents.value = await getAgents()
+      const agents = await getAgents()
+      if (seq === mentionQuerySeq) mentionAgents.value = agents
     }
-    if (mentionResources.value.length === 0) {
-      mentionResources.value = await getResources()
-    }
-
-    const files = await searchFiles(query)
-    if (seq !== mentionQuerySeq) return
-
-    mentionState.value.items = files
-    mentionState.value.visible = true
-    mentionState.value.selectedIndex = 0
-  } catch (err) {
-    console.error('[MENTION] error:', err)
   }
+
+  const loadResources = async () => {
+    if (mentionResources.value.length === 0) {
+      const resources = await getResources()
+      if (seq === mentionQuerySeq) mentionResources.value = resources
+    }
+  }
+
+  const loadFiles = async () => {
+    const files = await searchFiles(query)
+    if (seq === mentionQuerySeq) mentionState.value.items = files
+  }
+
+  loadAgents()
+  loadResources()
+  loadFiles()
 }
 
 function hideMention() {
