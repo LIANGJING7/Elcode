@@ -319,3 +319,18 @@ export const IPC_CHANNELS = {
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
+
+export interface Agent {
+  name: string
+  description?: string
+  hidden?: boolean
+  mode?: 'primary' | 'plan' | 'build' | 'review'
+}
+
+export interface FileMatch {
+  path: string
+  relativePath: string
+  isDirectory: boolean
+  url: string
+  mimeType: string
+}

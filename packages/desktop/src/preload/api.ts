@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../types/ipc'
-import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef, McpServerConfig, ConfigPatch, LCodeGlobalConfig, CustomProviderConfig } from '../types/ipc'
+import type { Message, Conversation, LocationRef, PromptInput, PromptOptions, Workspace, SkillInfo, MCPStatus, MCPAddPayload, AuthMethod, AuthorizationResult, ConsoleState, ModelRef, McpServerConfig, ConfigPatch, LCodeGlobalConfig, CustomProviderConfig, Agent, FileMatch } from '../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../types/session'
 import type { FooterSubagentTab, FooterSubagentDetail, SubagentSnapshot, TabsPatch, DetailPatch } from '../types/subagent'
 
@@ -68,6 +68,9 @@ export const desktopAPI = {
 
     todo: (sessionID: string, directory?: string): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_TODO, sessionID, directory),
+
+    agents: (directory?: string): Promise<Agent[]> =>
+      ipcRenderer.invoke('session:agents', directory),
   },
 
   file: {
@@ -81,7 +84,10 @@ export const desktopAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, cwd, pattern, directory),
 
     pick: (): Promise<{ filePath: string; content: string; name: string } | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK)
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_PICK),
+
+    search: (query: string, directory?: string): Promise<FileMatch[]> =>
+      ipcRenderer.invoke('file:search', query, directory)
   },
 
   tool: {
