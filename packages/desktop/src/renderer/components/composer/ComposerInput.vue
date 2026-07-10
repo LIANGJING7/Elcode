@@ -8,8 +8,18 @@
       class="flex-1 min-h-0 w-full bg-transparent text-text text-sm leading-relaxed resize-none outline-none placeholder:text-text-muted disabled:opacity-50"
       @input="handleInput"
       @focus="emit('focus')"
-      @blur="emit('blur')"
+      @blur="handleBlur"
       @keydown="handleKeydown"
+    />
+
+    <!-- Mention Autocomplete -->
+    <MentionAutocomplete
+      :state="mentionState"
+      :agents="mentionAgents"
+      :resources="mentionResources"
+      :loading="mentionLoading"
+      @select="handleMentionSelect"
+      @hide="hideMention"
     />
 
     <!-- Slash Command Menu -->
@@ -34,6 +44,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import MentionAutocomplete from './MentionAutocomplete.vue'
+import { useMention } from '../../composables/useMention'
+import type { MentionItem, MentionState } from '../../../types/mention'
 
 const props = withDefaults(defineProps<{
   value?: string
@@ -55,12 +68,25 @@ const emit = defineEmits<{
   'slashCommand': [command: string]
   'focus': []
   'blur': []
+  'mention': [item: MentionItem]
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1) // -1 = current input, 0+ = history position
+
+const mentionState = ref<MentionState>({
+  visible: false,
+  query: '',
+  atIndex: 0,
+  selectedIndex: 0,
+  items: []
+})
+
+const { searchFiles, getAgents, getResources, loading: mentionLoading } = useMention()
+const mentionAgents = ref<MentionItem[]>([])
+const mentionResources = ref<MentionItem[]>([])
 
 // Dynamic placeholder: show queue hint when messages are queued
 const effectivePlaceholder = computed(() => {
@@ -94,9 +120,17 @@ function handleInput(e: Event) {
   historyIndex.value = -1
   // Show slash menu if input is '/'
   showSlashMenu.value = newValue === '/'
+
+  checkMentionTrigger(newValue, target.selectionStart)
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (mentionState.value.visible) {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+      return
+    }
+  }
+
   // Slash command menu navigation
   if (showSlashMenu.value) {
     if (e.key === 'Escape') {
@@ -194,6 +228,83 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
   internalValue.value = ''
   emit('update:value', '')
   showSlashMenu.value = false
+}
+
+function checkMentionTrigger(text: string, cursorPos: number) {
+  let atIndex = -1
+  for (let i = cursorPos - 1; i >= 0; i--) {
+    if (text[i] === '@') {
+      atIndex = i
+      break
+    }
+    if (text[i] === ' ' || text[i] === '\n') {
+      break
+    }
+  }
+
+  if (atIndex === -1) {
+    hideMention()
+    return
+  }
+
+  const query = text.slice(atIndex + 1, cursorPos)
+
+  if (query.includes(' ') || query.includes('\n')) {
+    hideMention()
+    return
+  }
+
+  showMentionMenu(atIndex, query)
+}
+
+async function showMentionMenu(atIndex: number, query: string) {
+  mentionState.value.atIndex = atIndex
+  mentionState.value.query = query
+
+  if (mentionAgents.value.length === 0) {
+    mentionAgents.value = await getAgents()
+  }
+  if (mentionResources.value.length === 0) {
+    mentionResources.value = await getResources()
+  }
+
+  const files = await searchFiles(query)
+  mentionState.value.items = files
+
+  mentionState.value.visible = true
+  mentionState.value.selectedIndex = 0
+}
+
+function hideMention() {
+  mentionState.value.visible = false
+  mentionState.value.items = []
+}
+
+function handleMentionSelect(item: MentionItem) {
+  const before = internalValue.value.slice(0, mentionState.value.atIndex)
+  const after = internalValue.value.slice(textareaRef.value!.selectionStart)
+  const insertText = `@${item.value} `
+
+  internalValue.value = before + insertText + after
+  emit('update:value', internalValue.value)
+
+  emit('mention', item)
+
+  hideMention()
+
+  nextTick(() => {
+    if (textareaRef.value) {
+      const newPos = before.length + insertText.length
+      textareaRef.value.selectionStart = newPos
+      textareaRef.value.selectionEnd = newPos
+      textareaRef.value.focus()
+    }
+  })
+}
+
+function handleBlur() {
+  setTimeout(() => hideMention(), 200)
+  emit('blur')
 }
 
 // Expose for parent to focus
