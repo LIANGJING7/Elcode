@@ -82,6 +82,11 @@ ${prompt}
 <!-- Created: ${timestamp} -->
 <!-- Reason: ${reason} -->`
 
+      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.create", {
+        skillName: sanitizedName,
+        path: skillPath,
+        reason,
+      })
       yield* fs.ensureDir(skillDir)
       yield* fs.writeFileString(skillPath, content)
 
@@ -113,6 +118,10 @@ ${newPrompt}
 <!-- Updated: ${timestamp} -->
 <!-- Reason: ${reason} -->`
 
+      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.update", {
+        skillName: sanitizedName,
+        reason,
+      })
       yield* fs.writeFileString(skill.location, updatedContent)
       yield* usageTracker.recordUse(sanitizedName)
     })
@@ -131,6 +140,10 @@ ${newPrompt}
       const archivePath = join(archiveDir, sanitizedName)
 
       yield* fs.ensureDir(archiveDir)
+      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.delete", {
+        skillName: sanitizedName,
+        archivePath,
+      })
       yield* Effect.tryPromise({
         try: async () => {
           const { rename } = await import("fs/promises")

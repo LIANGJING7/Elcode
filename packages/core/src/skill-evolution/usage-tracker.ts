@@ -35,6 +35,8 @@ export const layer: Layer.Layer<Service, never, Database.Service | Clock.Clock> 
     const recordUse = Effect.fn("UsageTracker.recordUse")(function* (skillName: string) {
       const now = yield* Clock.currentTimeMillis
 
+      yield* Effect.logDebug("[SkillEvolution] UsageTracker.recordUse", { skillName })
+
       yield* db
         .insert(skill_usage)
         .values({
@@ -63,6 +65,8 @@ export const layer: Layer.Layer<Service, never, Database.Service | Clock.Clock> 
 
     const markArchived = Effect.fn("UsageTracker.markArchived")(function* (skillName: string) {
       const now = yield* Clock.currentTimeMillis
+
+      yield* Effect.logDebug("[SkillEvolution] UsageTracker.markArchived", { skillName })
 
       yield* db
         .update(skill_usage)
