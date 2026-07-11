@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart } from '../../types/ipc'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
@@ -33,13 +33,13 @@ let cachedAgentNames: Set<string> | null = null
  */
 async function parseMentions(text: string, directory?: string): Promise<PromptInput[]> {
   const parts: PromptInput[] = []
-  
+
   // Regex to find @mentions: @name or @path/to/file#10-20
   const mentionRegex = /@([a-zA-Z0-9_\-./]+(?:#\d+(?:-\d+)?(?:-\d+)?)?)/g
-  
+
   let lastIndex = 0
   let match: RegExpExecArray | null
-  
+
   // Get agent names if not cached
   if (cachedAgentNames === null) {
     try {
@@ -50,17 +50,17 @@ async function parseMentions(text: string, directory?: string): Promise<PromptIn
       cachedAgentNames = new Set()
     }
   }
-  
+
   while ((match = mentionRegex.exec(text)) !== null) {
     // Add text before this mention
     if (match.index > lastIndex) {
       parts.push({ type: 'text', text: text.slice(lastIndex, match.index) })
     }
-    
+
     const mentionValue = match[1]
     const atIndex = mentionValue.indexOf('#')
     const name = atIndex === -1 ? mentionValue : mentionValue.slice(0, atIndex)
-    
+
     // Check if it's an agent (try both original and space-replaced versions)
     const agentName = name.replace(/-/g, ' ')
     console.log('[parseMentions] Checking mention:', name, 'agentName:', agentName, 'hasOriginal:', cachedAgentNames?.has(name), 'hasSpaced:', cachedAgentNames?.has(agentName))
@@ -72,18 +72,18 @@ async function parseMentions(text: string, directory?: string): Promise<PromptIn
       // Treat as file path
       const filePath = name
       const fullPath = directory ? `${directory}/${filePath}` : filePath
-      
+
       // Parse line range if present
       let filename = filePath
       let url = `file://${fullPath}`
-      
+
       if (atIndex !== -1) {
         const linePart = mentionValue.slice(atIndex + 1)
         const [start, end] = linePart.split('-').map(Number)
         filename = `${filePath}#${start}${end ? `-${end}` : ''}`
         url = `file://${fullPath}?start=${start}${end ? `&end=${end}` : ''}`
       }
-      
+
       parts.push({
         type: 'file',
         url,
@@ -92,20 +92,20 @@ async function parseMentions(text: string, directory?: string): Promise<PromptIn
         source: { type: 'file', path: filePath }
       })
     }
-    
+
     lastIndex = match.index + match[0].length
   }
-  
+
   // Add remaining text
   if (lastIndex < text.length) {
     parts.push({ type: 'text', text: text.slice(lastIndex) })
   }
-  
+
   // If no mentions found, return original text as single part
   if (parts.length === 0) {
     parts.push({ type: 'text', text })
   }
-  
+
   return parts
 }
 
@@ -117,6 +117,7 @@ export interface PendingMessage {
   content: string
   createdAt: number
   agent?: string  // 'plan' or 'build'
+  inputs?: PromptInput[]  // Full prompt inputs including files
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -632,15 +633,20 @@ export const useSessionStore = defineStore('session', () => {
   // Actions - 消息发送
   // ========================================
 
-  async function sendMessage(content: string, options?: PromptOptions) {
+  async function sendMessage(inputs: PromptInput[], options?: PromptOptions) {
     console.log('[DEBUG sendMessage] === START ===')
+    console.log('[DEBUG sendMessage] inputs:', inputs.length, 'types:', inputs.map(i => i.type))
     console.log('[DEBUG sendMessage] manuallyInterrupted:', manuallyInterrupted)
     console.log('[DEBUG sendMessage] content:', content.slice(0, 50))
     console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
     console.log('[DEBUG sendMessage] isPendingNewSession:', isPendingNewSession.value)
 
-    if (!content.trim()) return
+    // Extract text content for UI display and validation
+    const textContent = inputs.filter(i => i.type === 'text').map(i => i.text).join(' ')
+    const hasFiles = inputs.some(i => i.type === 'file')
+
+    if (!textContent.trim() && !hasFiles) return
     state.error = null
 
     // 如果正在流式，将消息加入队列（不调用 backend）
@@ -651,9 +657,10 @@ export const useSessionStore = defineStore('session', () => {
 
       const pending: PendingMessage = {
         id: queueId,
-        content,
+        content: textContent,
         createdAt: Date.now(),
-        agent: options?.agent
+        agent: options?.agent,
+        inputs
       }
 
       // Push to current session's queue
@@ -700,11 +707,21 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] isCurrentStreaming:', streamingStore.isCurrentStreaming.value)
 
     // Create user message AFTER streaming started
+    const fileParts: FilePart[] = inputs
+      .filter((i): i is FilePromptInput => i.type === 'file')
+      .map(i => ({
+        type: 'file',
+        mime: i.mime,
+        name: i.filename,
+        url: i.url
+      }))
+
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content,
-      timestamp: new Date()
+      content: textContent,
+      timestamp: new Date(),
+      files: fileParts.length > 0 ? fileParts : undefined
     }
 
     console.log('[DEBUG sendMessage] currentConversation:', currentConversation.value ? 'exists' : 'null')
@@ -733,11 +750,12 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] streamingMessage computed:', streamingMessage.value ? 'exists' : 'null')
 
     try {
+      console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions)
       const prompt = await parseMentions(content, workspaceStore.currentWorkspace?.path)
       console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions, 'parts:', prompt.length)
       await window.desktop.session.prompt(
         currentSessionId.value,
-        prompt,
+        inputs,
         promptOptions,
         workspaceStore.currentWorkspace?.path
       )
@@ -818,11 +836,21 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // Create user message AFTER streaming started
+    const fileParts: FilePart[] = (pending.inputs ?? [])
+      .filter((i): i is FilePromptInput => i.type === 'file')
+      .map(i => ({
+        type: 'file',
+        mime: i.mime,
+        name: i.filename,
+        url: i.url
+      }))
+
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
       content: pending.content,
-      timestamp: new Date()
+      timestamp: new Date(),
+      files: fileParts.length > 0 ? fileParts : undefined
     }
 
     if (!currentConversation.value) {
@@ -844,10 +872,14 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
+
+      // Use pending.inputs if available, otherwise construct from content
+      const inputs: PromptInput[] = pending.inputs ?? [{ type: 'text', text: pending.content }]
+
       const prompt = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
       await window.desktop.session.prompt(
         currentSessionId.value,
-        prompt,
+        inputs,
         promptOptions,
         workspaceStore.currentWorkspace?.path
       )

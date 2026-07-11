@@ -1,6 +1,6 @@
 <template>
-  <div class="pb-6 pt-4">
-    <div class="max-w-chat-max mx-auto px-6">
+  <div class="pt-0 pb-6 mx-6">
+    <div class="max-w-chat-max mx-auto">
       <!-- Queued messages chips (above input box) -->
       <div
         v-if="pendingQueue.length > 0"
@@ -23,9 +23,15 @@
           ? 'border-border-light shadow-sm'
           : 'border-border hover:border-border-light'"
       >
-      <!-- Attachment Bar (chips row) -->
+      <!-- Attachment Preview (images) -->
+      <AttachmentPreview
+        :attachments="imageAttachments"
+        @remove="handleRemoveImageAttachment"
+      />
+
+      <!-- Attachment Bar (non-image files) -->
       <AttachmentBar
-        :attachments="attachments"
+        :attachments="nonImageAttachments"
         @remove="handleRemoveAttachment"
       />
 
@@ -48,6 +54,7 @@
           :mention-visible="mentionState.visible"
           @send="handleSend"
           @slash-command="handleSlashCommand"
+          @paste-image="handlePasteImage"
           @mention-check="checkMentionTrigger"
           @mention-key="(e: KeyboardEvent) => mentionAutocompleteRef?.handleKeydown(e)"
           @focus="isFocused = true"
@@ -56,11 +63,12 @@
       </div>
 
       <!-- Bottom bar: Plus + Options + Send -->
-      <div class="flex items-center gap-2 px-3 py-2 flex-shrink-0">
+      <div :class="compact ? 'flex items-center gap-2 px-3 py-1 flex-shrink-0' : 'flex items-center gap-2 px-3 py-2 flex-shrink-0'">
         <!-- Plus Button (left) -->
         <button
           class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-bg-hover hover:bg-bg-tertiary text-text-muted transition-colors"
           :disabled="disabled || isStreaming"
+          title="添加文件或图片"
           @click="handleAttach"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -136,6 +144,7 @@
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import ComposerInput from './composer/ComposerInput.vue'
 import AttachmentBar from './composer/AttachmentBar.vue'
+import AttachmentPreview from './composer/AttachmentPreview.vue'
 import SessionOptions from './composer/SessionOptions.vue'
 import QueuedMessageChip from './composer/QueuedMessageChip.vue'
 import MentionAutocomplete from './composer/MentionAutocomplete.vue'
@@ -144,14 +153,25 @@ import { useModelsStore } from '../stores/models'
 import type { PendingMessage } from '../stores/session'
 import type { MentionItem, MentionState } from '../../types/mention'
 
-interface Attachment {
+interface FileAttachment {
   type: 'file' | 'at'
   name: string
   path: string
   content?: string
   url?: string
   mime?: string
+  isBase64?: boolean
 }
+
+interface ImageAttachment {
+  type: 'image'
+  name: string
+  path: string
+  mime: string
+  url: string
+}
+
+type Attachment = FileAttachment | ImageAttachment
 
 const props = withDefaults(defineProps<{
   disabled?: boolean
@@ -160,13 +180,15 @@ const props = withDefaults(defineProps<{
   hasActiveSession?: boolean
   queueCount?: number
   pendingQueue?: PendingMessage[]
+  compact?: boolean
 }>(), {
   disabled: false,
   placeholder: 'Ask anything... (Shift+Enter for new line)',
   isStreaming: false,
   hasActiveSession: true,
   queueCount: 0,
-  pendingQueue: () => []
+  pendingQueue: () => [],
+  compact: false
 })
 
 const emit = defineEmits<{
@@ -188,6 +210,15 @@ const isFocused = ref(false)
 const attachments = ref<Attachment[]>([])
 const sessionOptions = ref<Record<string, unknown>>({ mode: 'build', model: '' })
 
+// Computed: separate image and non-image attachments
+const imageAttachments = computed(() =>
+  attachments.value.filter((a): a is ImageAttachment => a.type === 'image')
+)
+
+const nonImageAttachments = computed(() =>
+  attachments.value.filter((a): a is FileAttachment => a.type !== 'image')
+)
+
 // 初始化模型选择 - 从持久化配置恢复
 onMounted(() => {
   if (modelsStore.selectedModel) {
@@ -205,7 +236,7 @@ watch(() => modelsStore.selectedModel, (newModel) => {
 // History of sent messages (for up-arrow navigation)
 const inputHistory = ref<string[]>([])
 
-const canSend = computed(() => !props.disabled && inputValue.value.trim().length > 0)
+const canSend = computed(() => !props.disabled && (inputValue.value.trim().length > 0 || attachments.value.length > 0))
 
 watch(() => props.disabled, (val) => {
   if (!val && !props.isStreaming) {
@@ -214,60 +245,98 @@ watch(() => props.disabled, (val) => {
 })
 
 function handleSend(content: string) {
-    console.log('[DEBUG Composer] === handleSend CALLED ===')
-    console.log('[DEBUG Composer] Content:', content.slice(0, 50))
-    console.log('[DEBUG Composer] sessionOptions:', JSON.stringify(sessionOptions.value))
-    console.log('[DEBUG Composer] attachments:', attachments.value.length)
+  console.log('[DEBUG Composer] === handleSend CALLED ===')
+  console.log('[DEBUG Composer] Content:', content.slice(0, 50))
+  console.log('[DEBUG Composer] sessionOptions:', JSON.stringify(sessionOptions.value))
+  console.log('[DEBUG Composer] attachments:', attachments.value.length)
 
-    console.log('[DEBUG Composer] Emitting send event')
+  emit('send', content, sessionOptions.value, attachments.value)
 
-    emit('send', content, sessionOptions.value, attachments.value)
-
-    // Add to history
-    if (content.trim()) {
-      inputHistory.value.push(content.trim())
-      if (inputHistory.value.length > 50) {
-        inputHistory.value.shift()
-      }
+  // Add to history
+  if (content.trim()) {
+    inputHistory.value.push(content.trim())
+    if (inputHistory.value.length > 50) {
+      inputHistory.value.shift()
     }
-    // Clear attachments after sending
-    attachments.value = []
-    console.log('[DEBUG Composer] ✓ send event emitted')
   }
+  // Clear attachments after sending
+  attachments.value = []
+  console.log('[DEBUG Composer] ✓ send event emitted')
+}
 
 function handleManualSend() {
-    console.log('[DEBUG Composer] === handleManualSend CALLED ===')
-    console.log('[DEBUG Composer] canSend:', canSend.value)
-    console.log('[DEBUG Composer] inputValue:', inputValue.value.slice(0, 50))
+  console.log('[DEBUG Composer] === handleManualSend CALLED ===')
+  console.log('[DEBUG Composer] canSend:', canSend.value)
+  console.log('[DEBUG Composer] inputValue:', inputValue.value.slice(0, 50))
 
-    if (canSend.value) {
-      handleSend(inputValue.value)
-      inputValue.value = ''
-      console.log('[DEBUG Composer] ✓ inputValue cleared')
-      nextTick(() => inputRef.value?.focus())
-    } else {
-      console.log('[DEBUG Composer] ✗ Cannot send - canSend is false')
-    }
+  if (canSend.value) {
+    handleSend(inputValue.value)
+    inputValue.value = ''
+    console.log('[DEBUG Composer] ✓ inputValue cleared')
+    nextTick(() => inputRef.value?.focus())
+  } else {
+    console.log('[DEBUG Composer] ✗ Cannot send - canSend is false')
   }
+}
 
 function handleInterrupt() {
   emit('interrupt')
 }
 
+interface PickResult {
+  filePath: string
+  name: string
+  content: string
+  mime: string
+  isBase64: boolean
+}
+
 async function handleAttach() {
   try {
-    const result = await window.desktop.file.pick()
-    if (result) {
-      attachments.value.push({
-        type: 'file',
-        name: result.name,
-        path: result.filePath,
-        content: result.content
-      })
+    const result = await window.desktop.file.pick() as PickResult | { files: PickResult[] } | null
+    if (!result) return
+
+    const fileList = 'files' in result ? result.files : [result]
+
+    for (const file of fileList) {
+      const url = file.isBase64
+        ? `data:${file.mime};base64,${file.content}`
+        : `data:${file.mime};utf8,${encodeURIComponent(file.content)}`
+
+      if (file.mime.startsWith('image/')) {
+        attachments.value.push({
+          type: 'image',
+          name: file.name,
+          path: file.filePath,
+          mime: file.mime,
+          url
+        })
+      } else {
+        attachments.value.push({
+          type: 'file',
+          name: file.name,
+          path: file.filePath,
+          content: file.content,
+          mime: file.mime,
+          isBase64: file.isBase64
+        })
+      }
     }
   } catch (err) {
     console.error('Failed to pick file:', err)
   }
+}
+
+function handlePasteImage(image: { name: string; mime: string; url: string }) {
+  console.log('[DEBUG Composer] handlePasteImage called:', image.name, image.mime)
+  attachments.value.push({
+    type: 'image',
+    name: image.name,
+    path: image.name,
+    mime: image.mime,
+    url: image.url
+  })
+  console.log('[DEBUG Composer] attachments count:', attachments.value.length)
 }
 
 function handleAtFile() {
@@ -275,7 +344,20 @@ function handleAtFile() {
 }
 
 function handleRemoveAttachment(index: number) {
-  attachments.value.splice(index, 1)
+  // Find the index in the full array
+  const nonImage = nonImageAttachments.value[index]
+  const fullIndex = attachments.value.indexOf(nonImage)
+  if (fullIndex !== -1) {
+    attachments.value.splice(fullIndex, 1)
+  }
+}
+
+function handleRemoveImageAttachment(index: number) {
+  const image = imageAttachments.value[index]
+  const fullIndex = attachments.value.indexOf(image)
+  if (fullIndex !== -1) {
+    attachments.value.splice(fullIndex, 1)
+  }
 }
 
 function handleSlashCommand(command: string) {

@@ -4,6 +4,9 @@ import { backend } from '../backend-client'
 import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../../types/session'
 
+// Per-session unsubscribers — each removes its listener from the shared SSE connection.
+// The shared connection in backend-client.ts handles multiplexing so events are
+// delivered exactly once regardless of how many sessions are listening.
 const sessionStreams = new Map<string, () => void>()
 
 /**
@@ -202,6 +205,7 @@ function toMessage(msg: BackendMessage): Message | null {
     const textParts = msg.parts.filter(p => p.type === 'text' && p.text)
     const toolParts = msg.parts.filter(p => p.type === 'tool')
     const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
+    const fileParts = msg.parts.filter(p => p.type === 'file')
 
     const content = textParts.map(p => p.text!).join('\n')
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
@@ -218,6 +222,15 @@ function toMessage(msg: BackendMessage): Message | null {
       })
       : undefined
 
+    const files = fileParts.length > 0
+      ? fileParts.map(p => ({
+          type: 'file' as const,
+          mime: (p as any).mime || 'application/octet-stream',
+          name: (p as any).filename || (p as any).name,
+          url: (p as any).url || ''
+        }))
+      : undefined
+
     return {
       id: msg.info.id,
       role: msg.info.role,
@@ -225,6 +238,7 @@ function toMessage(msg: BackendMessage): Message | null {
       timestamp: new Date(msg.info.timestamp),
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
+      ...(files && files.length > 0 ? { files } : {}),
     }
   }
 
@@ -233,12 +247,22 @@ function toMessage(msg: BackendMessage): Message | null {
     const textParts = msg.content.filter(p => p.type === 'text' && p.text)
     const reasoningParts = msg.content.filter(p => p.type === 'reasoning' && p.text)
     const toolParts = msg.content.filter(p => p.type === 'tool')
+    const fileParts = msg.content.filter(p => p.type === 'file')
 
     const content = textParts.map(p => p.text!).join('\n')
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
       ? toolParts.map(p => toToolCall(p.id || '', p.name || '', p.state, p.time))
+      : undefined
+
+    const files = fileParts.length > 0
+      ? fileParts.map(p => ({
+          type: 'file' as const,
+          mime: (p as any).mime || 'application/octet-stream',
+          name: (p as any).filename || (p as any).name,
+          url: (p as any).url || ''
+        }))
       : undefined
 
     // Calculate duration from time.completed - time.created
@@ -254,16 +278,33 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
+      ...(files && files.length > 0 ? { files } : {}),
     }
   }
 
   if (msg.type === 'user') {
     const text = Array.isArray(msg.text) ? msg.text.join('\n') : (msg.text || '')
+
+    // V2 user message may have files in msg.content or msg.files
+    const fileParts = (msg.content || []).filter(p => p.type === 'file')
+    const msgFiles = (msg as any).files || []
+    const allFiles = [...fileParts, ...msgFiles]
+
+    const files = allFiles.length > 0
+      ? allFiles.map(p => ({
+          type: 'file' as const,
+          mime: (p as any).mime || 'application/octet-stream',
+          name: (p as any).filename || (p as any).name,
+          url: (p as any).url || ''
+        }))
+      : undefined
+
     return {
       id: msg.id,
       role: 'user',
       content: text,
       timestamp: new Date(msg.time.created),
+      ...(files && files.length > 0 ? { files } : {}),
     }
   }
 

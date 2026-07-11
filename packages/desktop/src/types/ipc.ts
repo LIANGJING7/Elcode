@@ -6,6 +6,20 @@ export interface LocationRef {
 export interface PromptInput {
   type: 'text' | 'tool_result' | 'file' | 'agent'
   text?: string
+export interface TextPromptInput {
+  type: 'text'
+  text: string
+}
+
+export interface FilePromptInput {
+  type: 'file'
+  mime: string
+  filename?: string
+  url: string
+}
+
+export interface ToolResultPromptInput {
+  type: 'tool_result'
   toolResult?: unknown
   // file part
   url?: string
@@ -21,6 +35,8 @@ export interface PromptInput {
   // agent part
   name?: string
 }
+
+export type PromptInput = TextPromptInput | FilePromptInput | ToolResultPromptInput
 
 // Model reference matching backend's ModelRef
 export interface ModelRef {
@@ -46,6 +62,13 @@ export interface Session {
   createdAt: Date
 }
 
+export interface FilePart {
+  type: 'file'
+  mime: string
+  name?: string
+  url: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -53,6 +76,8 @@ export interface Message {
   timestamp: Date
   toolCalls?: ToolCall[]
   reasoning?: string
+  /** File attachments (images, PDFs, etc.) */
+  files?: FilePart[]
   /** Response duration in milliseconds (for assistant messages) */
   duration?: number
   /** Reasoning duration in milliseconds */
@@ -256,13 +281,14 @@ export const IPC_CHANNELS = {
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   SESSION_TODO: 'session:todo',
   SESSION_AGENTS: 'session:agents',
-  
+
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
   FILE_LIST: 'file:list',
   FILE_PICK: 'file:pick',
+  FILE_PICK_IMAGE: 'file:pick-image',
   FILE_SEARCH: 'file:search',
-  
+
   TOOL_EXECUTE: 'tool:execute',
   TOOL_LIST: 'tool:list',
   

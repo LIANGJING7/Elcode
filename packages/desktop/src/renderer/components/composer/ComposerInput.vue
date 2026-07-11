@@ -10,6 +10,7 @@
       @focus="emit('focus')"
       @blur="handleBlur"
       @keydown="handleKeydown"
+      @paste="handlePaste"
     />
 
     <!-- Slash Command Menu -->
@@ -55,6 +56,7 @@ const emit = defineEmits<{
   'update:value': [value: string]
   'send': [content: string]
   'slashCommand': [command: string]
+  'pasteImage': [image: { name: string; mime: string; url: string }]
   'focus': []
   'blur': []
   'mention-check': [text: string, cursorPos: number]
@@ -175,6 +177,43 @@ function selectSlashCommand(cmd: { name: string; description: string }) {
   showSlashMenu.value = false
 }
 
+function handlePaste(e: ClipboardEvent) {
+  console.log('[DEBUG ComposerInput] paste event fired')
+  const items = e.clipboardData?.items
+  if (!items) {
+    console.log('[DEBUG ComposerInput] no clipboard items')
+    return
+  }
+
+  console.log('[DEBUG ComposerInput] clipboard items:', items.length)
+  for (const item of items) {
+    console.log('[DEBUG ComposerInput] item type:', item.type)
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        console.log('[DEBUG ComposerInput] image file found:', file.name, file.type)
+        const reader = new FileReader()
+        reader.onload = () => {
+          const url = reader.result as string
+          console.log('[DEBUG ComposerInput] emitting pasteImage, url length:', url.length)
+          emit('pasteImage', {
+            name: `image-${Date.now()}`,
+            mime: file.type,
+            url
+          })
+        }
+        reader.readAsDataURL(file)
+        e.preventDefault()
+        return
+      }
+    }
+  }
+}
+
+// Expose for parent to focus
+defineExpose({
+  focus: () => textareaRef.value?.focus()
+})
 defineExpose({ focus: () => textareaRef.value?.focus(), textareaRef })
 </script>
 
