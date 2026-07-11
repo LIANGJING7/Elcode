@@ -311,14 +311,16 @@ function hideMention() {
 }
 
 function handleMentionSelect(item: MentionItem) {
-  const before = inputValue.value.slice(0, mentionState.value.atIndex)
-  const textarea = inputRef.value as any
-  const selStart = textarea?.textareaRef?.selectionStart ?? inputValue.value.length
-  const after = inputValue.value.slice(selStart)
-  const insertText = `@${item.value} `
-  inputValue.value = before + insertText + after
-  hideMention()
-}
+    const before = inputValue.value.slice(0, mentionState.value.atIndex)
+    const textarea = inputRef.value as any
+    const selStart = textarea?.textareaRef?.selectionStart ?? inputValue.value.length
+    const after = inputValue.value.slice(selStart)
+    // Replace spaces with hyphens for agent names to work with parseMentions regex
+    const mentionValue = item.kind === 'agent' ? item.value.replace(/ /g, '-') : item.value
+    const insertText = `@${mentionValue} `
+    inputValue.value = before + insertText + after
+    hideMention()
+  }
 
 function checkMentionTrigger(text: string, cursorPos: number) {
   let atIndex = -1

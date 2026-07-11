@@ -353,20 +353,38 @@ export function registerSessionHandlers() {
         return { type: 'text', text: p.text! }
       }
       if (p.type === 'file') {
-        return {
+        const filePart: any = {
           type: 'file',
           url: p.url!,
           filename: p.filename,
-          mime: p.mime || 'text/plain',
-          source: p.source
+          mime: p.mime || 'text/plain'
         }
+        // Only add source if it's properly formatted (has text field with start/end/value)
+        if (p.source?.text && typeof p.source.text === 'object' &&
+            'start' in p.source.text && 'end' in p.source.text && 'value' in p.source.text) {
+          filePart.source = {
+            start: p.source.text.start,
+            end: p.source.text.end,
+            text: p.source.text.value
+          }
+        }
+        return filePart
       }
       if (p.type === 'agent') {
-        return {
+        const agentPart: any = {
           type: 'agent',
-          name: p.name!,
-          source: p.source
+          name: p.name!
         }
+        // Only add source if it's properly formatted
+        if (p.source?.text && typeof p.source.text === 'object' &&
+            'start' in p.source.text && 'end' in p.source.text && 'value' in p.source.text) {
+          agentPart.source = {
+            start: p.source.text.start,
+            end: p.source.text.end,
+            text: p.source.text.value
+          }
+        }
+        return agentPart
       }
       return { type: 'tool_result', toolResult: p.toolResult }
     })

@@ -45,6 +45,7 @@ async function parseMentions(text: string, directory?: string): Promise<PromptIn
     try {
       const agents = await window.desktop.session.agents(directory)
       cachedAgentNames = new Set(agents.map((a: any) => a.name))
+      console.log('[parseMentions] Cached agents:', Array.from(cachedAgentNames))
     } catch {
       cachedAgentNames = new Set()
     }
@@ -60,9 +61,13 @@ async function parseMentions(text: string, directory?: string): Promise<PromptIn
     const atIndex = mentionValue.indexOf('#')
     const name = atIndex === -1 ? mentionValue : mentionValue.slice(0, atIndex)
     
-    // Check if it's an agent
-    if (cachedAgentNames?.has(name)) {
-      parts.push({ type: 'agent', name })
+    // Check if it's an agent (try both original and space-replaced versions)
+    const agentName = name.replace(/-/g, ' ')
+    console.log('[parseMentions] Checking mention:', name, 'agentName:', agentName, 'hasOriginal:', cachedAgentNames?.has(name), 'hasSpaced:', cachedAgentNames?.has(agentName))
+    if (cachedAgentNames?.has(name) || cachedAgentNames?.has(agentName)) {
+      const finalName = cachedAgentNames?.has(agentName) ? agentName : name
+      console.log('[parseMentions] Matched agent:', finalName)
+      parts.push({ type: 'agent', name: finalName })
     } else {
       // Treat as file path
       const filePath = name
@@ -476,7 +481,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function interrupt(sessionId: string) {
+    console.log('[DEBUG interrupt] CALLED - sessionId:', sessionId, 'previous manuallyInterrupted:', manuallyInterrupted)
+    console.log('[DEBUG interrupt] CALL STACK:', new Error().stack)
     manuallyInterrupted = true
+    console.log('[DEBUG interrupt] manuallyInterrupted set to TRUE')
     try {
       await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
     } catch (e) {
@@ -626,6 +634,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function sendMessage(content: string, options?: PromptOptions) {
     console.log('[DEBUG sendMessage] === START ===')
+    console.log('[DEBUG sendMessage] manuallyInterrupted:', manuallyInterrupted)
     console.log('[DEBUG sendMessage] content:', content.slice(0, 50))
     console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
@@ -943,6 +952,7 @@ export const useSessionStore = defineStore('session', () => {
         // session.idle: V1 idle status event (interrupt completion)
         // Skip if flushInProgress (race condition protection)
         // Skip if manuallyInterrupted (user clicked interrupt button - persists until user clicks "立即")
+        console.log('[SSE STREAM_DONE] Event received:', eventType, 'manuallyInterrupted:', manuallyInterrupted, 'flushInProgress:', flushInProgress)
         if (eventType === 'stream.ended' || eventType === 'session.idle') {
           if (flushInProgress) {
             console.log('[SSE STREAM_DONE] Skipping processQueue - flushInProgress')
