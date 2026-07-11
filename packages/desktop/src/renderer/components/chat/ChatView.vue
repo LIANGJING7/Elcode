@@ -7,7 +7,8 @@ import ChatTimeline from './ChatTimeline.vue'
 import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
 import { useStreamingStore } from '../../stores/streaming'
-import { useSessionStore } from '../../stores/session'
+import { useSessionStore, parseMentions } from '../../stores/session'
+import { useWorkspaceStore } from '../../stores/workspace'
 
 const props = defineProps<{
   sessionId: string
@@ -25,18 +26,25 @@ const timelineRef = ref<ChatTimelineExpose>()
 const needInitialScroll = ref(false)
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
+const workspaceStore = useWorkspaceStore()
 
 async function handleSend(content: string, options: Record<string, unknown>, attachments: Array<{ type: string; name?: string; path?: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>) {
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
 
-  // Build PromptInput array from content and attachments
-  const inputs: PromptInput[] = []
-
-  // Add text content
-  if (content.trim()) {
-    inputs.push({ type: 'text', text: content })
+// Parse @mentions in content
+  let inputs: PromptInput[] = []
+  let rawText: string | undefined
+  try {
+    const result = await parseMentions(content, workspaceStore.currentWorkspace?.path)
+    inputs = result.parts
+    rawText = result.rawText
+  } catch (error) {
+    console.error('[ChatView] parseMentions error:', error)
+    // Fallback to plain text
+    inputs = [{ type: 'text', text: content.trim() }]
+    rawText = content.trim()
   }
 
   // Add file/image attachments
@@ -57,7 +65,7 @@ async function handleSend(content: string, options: Record<string, unknown>, att
     }
   }
 
-  sessionStore.sendMessage(inputs, promptOptions)
+  sessionStore.sendMessage(inputs, promptOptions, rawText)
 
   // 用户发送消息时平滑滚动到底部
   await nextTick()

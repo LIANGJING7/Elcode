@@ -286,7 +286,7 @@ export const backend = {
       return request("GET", `/session/${sessionID}/message?${params.toString()}`) as Promise<unknown[]>
     },
     
-    prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; id: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
+    prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; modelID: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       await request("POST", `/session/${sessionID}/prompt_async?${params}`, payload)
     },

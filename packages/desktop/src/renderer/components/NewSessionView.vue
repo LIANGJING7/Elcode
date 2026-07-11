@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { onMounted, nextTick } from 'vue'
 import { watch } from 'vue'
-import { useSessionStore } from '../stores/session'
+import { useSessionStore, parseMentions } from '../stores/session'
+import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
 import type { PromptInput, PromptOptions } from '../../types/ipc'
 import Composer from './Composer.vue'
 import WorkspaceSelector from './composer/WorkspaceSelector.vue'
 
 const sessionStore = useSessionStore()
+const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
 
 onMounted(() => nextTick())
@@ -48,12 +50,18 @@ async function handleComposerSend(
   const mode = options.mode as string
   const agent = mode === 'plan' ? 'plan' : 'build'
 
-  // 构建 PromptInput 数组
-  const inputs: PromptInput[] = []
-
-  // 添加文本内容
-  if (content.trim()) {
-    inputs.push({ type: 'text', text: content.trim() })
+  // Parse @mentions in content
+  let inputs: PromptInput[] = []
+  let rawText: string | undefined
+  try {
+    const result = await parseMentions(content, workspaceStore.currentWorkspace?.path)
+    inputs = result.parts
+    rawText = result.rawText
+  } catch (error) {
+    console.error('[NewSessionView] parseMentions error:', error)
+    // Fallback to plain text
+    inputs = [{ type: 'text', text: content.trim() }]
+    rawText = content.trim()
   }
 
   // 添加图片附件
@@ -76,7 +84,7 @@ async function handleComposerSend(
 
   // 调用 sendMessage
   const promptOptions: PromptOptions = { agent }
-  await sessionStore.sendMessage(inputs, promptOptions)
+  await sessionStore.sendMessage(inputs, promptOptions, rawText)
 
   console.log('[DEBUG NewSessionView] ✓ sendMessage completed')
   console.log('[DEBUG NewSessionView] currentSessionId after:', sessionStore.currentSessionId)

@@ -202,10 +202,12 @@ function safeParseToolArgs(raw: string): Record<string, unknown> {
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
     // V1 format: SessionV1.WithParts
-    const textParts = msg.parts.filter(p => p.type === 'text' && p.text)
+    // Filter out synthetic text parts (e.g., expanded agent prompts)
+    const textParts = msg.parts.filter(p => p.type === 'text' && p.text && !(p as any).synthetic)
     const toolParts = msg.parts.filter(p => p.type === 'tool')
     const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
     const fileParts = msg.parts.filter(p => p.type === 'file')
+    const agentParts = msg.parts.filter(p => p.type === 'agent')
 
     const content = textParts.map(p => p.text!).join('\n')
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
@@ -214,7 +216,6 @@ function toMessage(msg: BackendMessage): Message | null {
       ? toolParts.map(p => {
         console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
         console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.output:', p.state?.output ? (typeof p.state.output === 'string' ? p.state.output.slice(0, 200) : JSON.stringify(p.state.output).slice(0, 200)) : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
@@ -231,6 +232,14 @@ function toMessage(msg: BackendMessage): Message | null {
         }))
       : undefined
 
+    const agents = agentParts.length > 0
+      ? agentParts.map(p => ({
+          type: 'agent' as const,
+          name: (p as any).name || '',
+          source: (p as any).source
+        }))
+      : undefined
+
     return {
       id: msg.info.id,
       role: msg.info.role,
@@ -239,6 +248,7 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(files && files.length > 0 ? { files } : {}),
+      ...(agents && agents.length > 0 ? { agents } : {}),
     }
   }
 
@@ -400,13 +410,17 @@ export function registerSessionHandlers() {
           filename: p.filename,
           mime: p.mime || 'text/plain'
         }
-        // Only add source if it's properly formatted (has text field with start/end/value)
+        // Backend expects: source: { type: "file", path: string, text: { value, start, end } }
         if (p.source?.text && typeof p.source.text === 'object' &&
             'start' in p.source.text && 'end' in p.source.text && 'value' in p.source.text) {
           filePart.source = {
-            start: p.source.text.start,
-            end: p.source.text.end,
-            text: p.source.text.value
+            type: p.source.type || 'file',
+            path: p.source.path || '',
+            text: {
+              value: p.source.text.value,
+              start: p.source.text.start,
+              end: p.source.text.end
+            }
           }
         }
         return filePart
@@ -416,13 +430,12 @@ export function registerSessionHandlers() {
           type: 'agent',
           name: p.name!
         }
-        // Only add source if it's properly formatted
-        if (p.source?.text && typeof p.source.text === 'object' &&
-            'start' in p.source.text && 'end' in p.source.text && 'value' in p.source.text) {
+        // Backend expects: source: { value, start, end }
+        if (p.source && 'value' in p.source && 'start' in p.source && 'end' in p.source) {
           agentPart.source = {
-            start: p.source.text.start,
-            end: p.source.text.end,
-            text: p.source.text.value
+            value: p.source.value,
+            start: p.source.start,
+            end: p.source.end
           }
         }
         return agentPart
@@ -431,7 +444,6 @@ export function registerSessionHandlers() {
     })
 
     // 构建 prompt payload，包含 model 和 agent
-    // 注意：后端期望的字段名是 modelID，不是 id
     const payload: { parts: unknown[]; model?: { providerID: string; modelID: string; variant?: string }; agent?: string } = { parts }
     if (options?.model) {
       payload.model = {
@@ -462,15 +474,16 @@ export function registerSessionHandlers() {
       const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
         const e = evt as Record<string, unknown>
         eventCount++
-        if (e?.type) {
-          console.log('[SSE MAIN #' + eventCount + '] type:', e.type, 'keys:', Object.keys(e).slice(0, 5))
+        const eventType = e?.type as string | undefined
+        if (eventType) {
+          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'keys:', Object.keys(e).slice(0, 5))
           // Log first event structure in detail
           if (!loggedFirstEvent) {
             console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
             loggedFirstEvent = true
           }
           // Log session events with more detail
-          if (e.type.startsWith('session.next.')) {
+          if (eventType.startsWith('session.next.')) {
             console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
           }
         }

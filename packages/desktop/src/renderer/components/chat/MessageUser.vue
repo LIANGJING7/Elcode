@@ -1,8 +1,56 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { Message, FilePart } from '../../../types/ipc'
+import { ref, computed, watch } from 'vue'
+import type { Message, FilePart, AgentPart } from '../../../types/ipc'
 
-defineProps<{ message: Message }>()
+const props = defineProps<{ message: Message }>()
+
+// Debug log when message changes
+watch(() => props.message, (msg) => {
+  console.log('[MessageUser] === Message props ===')
+  console.log('[MessageUser]   message.id:', msg.id)
+  console.log('[MessageUser]   message.content:', msg.content?.slice(0, 50))
+  console.log('[MessageUser]   message.files:', msg.files?.length, msg.files?.map(f => f.name))
+  console.log('[MessageUser]   message.agents:', msg.agents?.length, msg.agents?.map(a => a.name))
+}, { immediate: true })
+
+// Compute highlighted segments based on agent mentions
+const highlightedContent = computed(() => {
+  const text = props.message.content || ''
+  const agents = props.message.agents || []
+
+  if (agents.length === 0) {
+    return [{ text, type: undefined }] as { text: string; type?: 'agent' }[]
+  }
+
+  // Sort agents by start position
+  const sortedAgents = agents
+    .filter(a => a.source?.start !== undefined && a.source?.end !== undefined)
+    .sort((a, b) => (a.source!.start || 0) - (b.source!.start || 0))
+
+  const segments: { text: string; type?: 'agent' }[] = []
+  let lastIndex = 0
+
+  for (const agent of sortedAgents) {
+    const start = agent.source!.start
+    const end = agent.source!.end
+
+    // Add text before this mention
+    if (start > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, start) })
+    }
+
+    // Add the @mention
+    segments.push({ text: text.slice(start, end), type: 'agent' })
+    lastIndex = end
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex) })
+  }
+
+  return segments
+})
 
 const previewImage = ref<FilePart | null>(null)
 const previewOpen = ref(false)
@@ -82,13 +130,20 @@ function handleKeydown(e: KeyboardEvent) {
           <span class="truncate max-w-[120px]">{{ file.name }}</span>
         </div>
       </div>
-      
-      <!-- Text bubble -->
+
+      <!-- Text bubble (only show if there's actual text content) -->
       <div
+        v-if="message.content && message.content.trim()"
         data-testid="user-bubble"
         class="bg-accent-muted text-surface px-4 py-2 rounded-lg"
       >
-        {{ message.content }}
+        <span
+          v-for="(segment, index) in highlightedContent"
+          :key="index"
+          :class="segment.type === 'agent' ? 'text-yellow-400 font-medium' : ''"
+        >
+          {{ segment.text }}
+        </span>
       </div>
     </div>
   </div>

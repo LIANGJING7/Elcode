@@ -44,6 +44,11 @@ export interface ToolResultPromptInput {
 export interface AgentPromptInput {
   type: 'agent'
   name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
 }
 
 export type PromptInput = TextPromptInput | FilePromptInput | ToolResultPromptInput | AgentPromptInput
@@ -79,6 +84,16 @@ export interface FilePart {
   url: string
 }
 
+export interface AgentPart {
+  type: 'agent'
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -88,6 +103,8 @@ export interface Message {
   reasoning?: string
   /** File attachments (images, PDFs, etc.) */
   files?: FilePart[]
+  /** Agent mentions in the message */
+  agents?: AgentPart[]
   /** Response duration in milliseconds (for assistant messages) */
   duration?: number
   /** Reasoning duration in milliseconds */

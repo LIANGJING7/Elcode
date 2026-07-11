@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart } from '../../types/ipc'
+import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart, AgentPart, AgentPromptInput } from '../../types/ipc'
 import type { SessionListQuery } from '../../types/session'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
@@ -26,88 +26,157 @@ function parseModelId(modelId: string): ModelRef | undefined {
 
 // Cache for agent names (populated on first use)
 let cachedAgentNames: Set<string> | null = null
+let cacheTimestamp = 0
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
- * Parse @mentions in text and return PromptInput parts
+ * Result of parsing @mentions in text
+ */
+export interface ParseResult {
+  parts: PromptInput[]  // Structured parts for backend
+  rawText: string       // Original text for UI display
+}
+
+/**
+ * Parse @mentions in text and return structured result
  * @param text - The input text containing @mentions
  * @param directory - The workspace directory for resolving file paths
  */
-async function parseMentions(text: string, directory?: string): Promise<PromptInput[]> {
-  const parts: PromptInput[] = []
+export async function parseMentions(text: string, directory?: string): Promise<ParseResult> {
+  try {
+    const parts: PromptInput[] = []
 
-  // Regex to find @mentions: @name or @path/to/file#10-20
-  const mentionRegex = /@([a-zA-Z0-9_\-./]+(?:#\d+(?:-\d+)?(?:-\d+)?)?)/g
+    // Regex to find @mentions: @name or @path/to/file#10-20
+    const mentionRegex = /@([a-zA-Z0-9_\-./]+(?:#\d+(?:-\d+)*)?)/g
 
-  let lastIndex = 0
-  let match: RegExpExecArray | null
+    let lastIndex = 0
+    let match: RegExpExecArray | null
 
-  // Get agent names if not cached
-  if (cachedAgentNames === null) {
-    try {
-      const agents = await window.desktop.session.agents(directory)
-      cachedAgentNames = new Set(agents.map((a: any) => a.name))
-      console.log('[parseMentions] Cached agents:', Array.from(cachedAgentNames))
-    } catch {
-      cachedAgentNames = new Set()
-    }
-  }
-
-  while ((match = mentionRegex.exec(text)) !== null) {
-    // Add text before this mention
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', text: text.slice(lastIndex, match.index) })
-    }
-
-    const mentionValue = match[1]
-    const atIndex = mentionValue.indexOf('#')
-    const name = atIndex === -1 ? mentionValue : mentionValue.slice(0, atIndex)
-
-    // Check if it's an agent (try both original and space-replaced versions)
-    const agentName = name.replace(/-/g, ' ')
-    console.log('[parseMentions] Checking mention:', name, 'agentName:', agentName, 'hasOriginal:', cachedAgentNames?.has(name), 'hasSpaced:', cachedAgentNames?.has(agentName))
-    if (cachedAgentNames?.has(name) || cachedAgentNames?.has(agentName)) {
-      const finalName = cachedAgentNames?.has(agentName) ? agentName : name
-      console.log('[parseMentions] Matched agent:', finalName)
-      parts.push({ type: 'agent', name: finalName })
+    // Refresh agent cache if expired or empty
+    const now = Date.now()
+    if (!cachedAgentNames || now - cacheTimestamp > CACHE_TTL) {
+      try {
+        console.log('[parseMentions] Loading agents from backend, directory:', directory)
+        const agents = await window.desktop.session.agents(directory)
+        console.log('[parseMentions] Backend returned agents count:', agents.length)
+        console.log('[parseMentions] Backend agents:', agents.map((a: any) => ({
+          name: a.name,
+          mode: a.mode,
+          hidden: a.hidden,
+          description: a.description?.slice(0, 50)
+        })))
+        
+        cachedAgentNames = new Set(agents.map((a: any) => a.name))
+        cacheTimestamp = now
+        console.log('[parseMentions] Cached agent names:', Array.from(cachedAgentNames))
+        console.log('[parseMentions] Cache will expire at:', new Date(now + CACHE_TTL).toLocaleTimeString())
+      } catch (error) {
+        console.error('[parseMentions] Failed to load agents:', error)
+        if (!cachedAgentNames) cachedAgentNames = new Set()
+      }
     } else {
-      // Treat as file path
-      const filePath = name
-      const fullPath = directory ? `${directory}/${filePath}` : filePath
+      console.log('[parseMentions] Using cached agents, age:', Math.round((now - cacheTimestamp) / 1000), 's')
+    }
 
-      // Parse line range if present
-      let filename = filePath
-      let url = `file://${fullPath}`
-
-      if (atIndex !== -1) {
-        const linePart = mentionValue.slice(atIndex + 1)
-        const [start, end] = linePart.split('-').map(Number)
-        filename = `${filePath}#${start}${end ? `-${end}` : ''}`
-        url = `file://${fullPath}?start=${start}${end ? `&end=${end}` : ''}`
+    while ((match = mentionRegex.exec(text)) !== null) {
+      // Add text before this mention
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', text: text.slice(lastIndex, match.index) })
       }
 
-      parts.push({
-        type: 'file',
-        url,
-        filename,
-        mime: 'text/plain',
-        source: { type: 'file', path: filePath }
-      })
+      const mentionValue = match[1]
+      const hashIndex = mentionValue.indexOf('#')
+      const name = hashIndex === -1 ? mentionValue : mentionValue.slice(0, hashIndex)
+
+      // Check if it's an agent (try both original and hyphen-to-space)
+      const normalizedAgentName = name.replace(/-/g, ' ')
+      console.log('[parseMentions] === Checking mention ===')
+      console.log('[parseMentions]   Raw text:', match[0])
+      console.log('[parseMentions]   Extracted name:', name)
+      console.log('[parseMentions]   Normalized:', normalizedAgentName)
+      console.log('[parseMentions]   Cache size:', cachedAgentNames?.size)
+      console.log('[parseMentions]   Cache contents:', cachedAgentNames ? Array.from(cachedAgentNames) : 'null')
+      console.log('[parseMentions]   Has exact match?', cachedAgentNames?.has(name))
+      console.log('[parseMentions]   Has normalized match?', cachedAgentNames?.has(normalizedAgentName))
+      
+      if (cachedAgentNames?.has(name) || cachedAgentNames?.has(normalizedAgentName)) {
+        const finalName = cachedAgentNames?.has(normalizedAgentName) ? normalizedAgentName : name
+        console.log('[parseMentions] ✓ MATCHED as agent:', finalName)
+        parts.push({
+          type: 'agent',
+          name: finalName,
+          source: {
+            value: match[0],
+            start: match.index,
+            end: match.index + match[0].length
+          }
+        })
+      } else {
+        console.log('[parseMentions] ✗ NOT matched, treating as file path')
+        console.log('[parseMentions]   File path:', name)
+
+        // Build file path and URL
+        const filePath = name
+        const fullPath = directory ? `${directory}/${name}` : name
+
+        // Parse line range if present
+        let filename = filePath
+        let url = `file://${fullPath}`
+
+        if (hashIndex !== -1) {
+          const linePart = mentionValue.slice(hashIndex + 1)
+          const [start, end] = linePart.split('-').map(Number)
+          filename = `${filePath}#${start}${end ? `-${end}` : ''}`
+          url = `file://${fullPath}?start=${start}${end ? `&end=${end}` : ''}`
+        }
+
+        parts.push({
+          type: 'file',
+          url,
+          filename,
+          mime: 'text/plain',
+          source: { 
+            type: 'file', 
+            path: filePath,
+            text: {
+              start: match.index,
+              end: match.index + match[0].length,
+              value: match[0]
+            }
+          }
+        })
+      }
+
+      lastIndex = match.index + match[0].length
     }
 
-    lastIndex = match.index + match[0].length
-  }
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push({ type: 'text', text: text.slice(lastIndex) })
+    }
 
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push({ type: 'text', text: text.slice(lastIndex) })
-  }
+    // Log final result
+    console.log('[parseMentions] === FINAL RESULT ===')
+    console.log('[parseMentions]   Input text:', text)
+    console.log('[parseMentions]   Parts count:', parts.length)
+    console.log('[parseMentions]   Parts:', parts.map(p => ({
+      type: p.type,
+      name: (p as any).name || (p as any).filename || (p as any).text?.slice(0, 30)
+    })))
 
-  // If no mentions found, return original text as single part
-  if (parts.length === 0) {
-    parts.push({ type: 'text', text })
+    // Return structured result with parts and rawText
+    return {
+      parts: parts.length > 0 ? parts : [{ type: 'text', text }],
+      rawText: text
+    }
+  } catch (error) {
+    console.error('[parseMentions] Error parsing mentions:', error)
+    // Fallback to plain text on any error
+    return {
+      parts: [{ type: 'text', text }],
+      rawText: text
+    }
   }
-
-  return parts
 }
 
 /**
@@ -119,6 +188,8 @@ export interface PendingMessage {
   createdAt: number
   agent?: string  // 'plan' or 'build'
   inputs?: PromptInput[]  // Full prompt inputs including files
+  files?: FilePart[]  // Extracted file attachments
+  agents?: AgentPart[]  // Extracted agent mentions
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -634,34 +705,74 @@ export const useSessionStore = defineStore('session', () => {
   // Actions - 消息发送
   // ========================================
 
-  async function sendMessage(inputs: PromptInput[], options?: PromptOptions) {
+  async function sendMessage(inputs: PromptInput[], options?: PromptOptions, rawText?: string) {
     console.log('[DEBUG sendMessage] === START ===')
     console.log('[DEBUG sendMessage] inputs:', inputs.length, 'types:', inputs.map(i => i.type))
     console.log('[DEBUG sendMessage] manuallyInterrupted:', manuallyInterrupted)
     console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
     console.log('[DEBUG sendMessage] isPendingNewSession:', isPendingNewSession.value)
+    console.log('[DEBUG sendMessage] isCurrentStreaming:', streamingStore.isCurrentStreaming.value)
+    console.log('[DEBUG sendMessage] workspaceStore.currentWorkspace:', workspaceStore.currentWorkspace?.path)
 
     // Extract text content for UI display and validation
     const textContent = inputs.filter(i => i.type === 'text').map(i => i.text).join(' ')
     const hasFiles = inputs.some(i => i.type === 'file')
+    const hasAgents = inputs.some(i => i.type === 'agent')
 
-    if (!textContent.trim() && !hasFiles) return
+    // Use rawText if provided, otherwise fall back to textContent
+    const displayText = rawText || textContent
+
+    console.log('[DEBUG sendMessage] textContent:', textContent)
+    console.log('[DEBUG sendMessage] rawText:', rawText)
+    console.log('[DEBUG sendMessage] displayText:', displayText)
+    console.log('[DEBUG sendMessage] hasFiles:', hasFiles)
+    console.log('[DEBUG sendMessage] hasAgents:', hasAgents)
+
+    // Allow message if has text, files, or agents (e.g., @mention-only messages)
+    if (!textContent.trim() && !hasFiles && !hasAgents) {
+      console.log('[DEBUG sendMessage] ❌ RETURN: empty text and no files/agents')
+      return
+    }
     state.error = null
 
     // 如果正在流式，将消息加入队列（不调用 backend）
     if (streamingStore.isCurrentStreaming.value && currentSessionId.value) {
       console.log('[DEBUG] === Streaming active - enqueueing message ===')
 
+      // Extract file and agent parts for UI display
+      const pendingFiles: FilePart[] = inputs
+        .filter((i): i is FilePromptInput => i.type === 'file')
+        .map(i => ({
+          type: 'file',
+          mime: i.mime,
+          name: i.filename,
+          url: i.url
+        }))
+
+      const pendingAgents: AgentPart[] = inputs
+        .filter((i): i is AgentPromptInput => i.type === 'agent')
+        .map(i => ({
+          type: 'agent',
+          name: i.name,
+          source: i.source
+        }))
+
       const queueId = `queue-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
       const pending: PendingMessage = {
         id: queueId,
-        content: textContent,
+        content: displayText,  // Use display text for UI
         createdAt: Date.now(),
         agent: options?.agent,
-        inputs
+        inputs,
+        files: pendingFiles.length > 0 ? pendingFiles : undefined,
+        agents: pendingAgents.length > 0 ? pendingAgents : undefined
       }
+
+      console.log('[DEBUG] Pending message created:')
+      console.log('[DEBUG]   files:', pending.files?.length, pending.files?.map(f => f.name))
+      console.log('[DEBUG]   agents:', pending.agents?.length, pending.agents?.map(a => a.name))
 
       // Push to current session's queue
       const queue = getQueue(currentSessionId.value)
@@ -716,13 +827,32 @@ export const useSessionStore = defineStore('session', () => {
         url: i.url
       }))
 
+    const agentParts: AgentPart[] = inputs
+      .filter((i): i is AgentPromptInput => i.type === 'agent')
+      .map(i => ({
+        type: 'agent',
+        name: i.name,
+        source: i.source
+      }))
+
+    console.log('[DEBUG sendMessage] === Extracted parts ===')
+    console.log('[DEBUG sendMessage]   inputs count:', inputs.length)
+    console.log('[DEBUG sendMessage]   inputs types:', inputs.map(i => i.type))
+    console.log('[DEBUG sendMessage]   fileParts:', fileParts.length, fileParts.map(f => f.name))
+    console.log('[DEBUG sendMessage]   agentParts:', agentParts.length, agentParts.map(a => a.name))
+
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content: textContent,
+      content: displayText,  // Use display text for UI (contains @mentions)
       timestamp: new Date(),
-      files: fileParts.length > 0 ? fileParts : undefined
+      files: fileParts.length > 0 ? fileParts : undefined,
+      agents: agentParts.length > 0 ? agentParts : undefined
     }
+
+    console.log('[DEBUG sendMessage] === userMessage created ===')
+    console.log('[DEBUG sendMessage]   userMessage.files:', userMessage.files?.length, userMessage.files?.map(f => f.name))
+    console.log('[DEBUG sendMessage]   userMessage.agents:', userMessage.agents?.length, userMessage.agents?.map(a => a.name))
 
     console.log('[DEBUG sendMessage] currentConversation:', currentConversation.value ? 'exists' : 'null')
     if (!currentConversation.value) {
@@ -871,10 +1001,15 @@ export const useSessionStore = defineStore('session', () => {
     try {
       console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
 
-      // Use pending.inputs if available, otherwise construct from content
-      const inputs: PromptInput[] = pending.inputs ?? [{ type: 'text', text: pending.content }]
-
-      const prompt = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
+      // Use pending.inputs if available (already parsed), otherwise parse mentions
+      let inputs: PromptInput[]
+      if (pending.inputs) {
+        inputs = pending.inputs
+      } else {
+        const result = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
+        inputs = result.parts
+      }
+      
       await window.desktop.session.prompt(
         currentSessionId.value,
         inputs,
