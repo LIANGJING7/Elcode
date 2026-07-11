@@ -210,10 +210,7 @@ function handlePaste(e: ClipboardEvent) {
   }
 }
 
-// Expose for parent to focus
-defineExpose({
-  focus: () => textareaRef.value?.focus()
-})
+
 defineExpose({ focus: () => textareaRef.value?.focus(), textareaRef })
 </script>
 

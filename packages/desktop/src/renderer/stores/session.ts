@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart } from '../../types/ipc'
+import type { SessionListQuery } from '../../types/session'
 import { useWorkspaceStore } from './workspace'
 import { useStreamingStore } from './streaming'
 import { useModelsStore } from './models'
@@ -129,7 +130,7 @@ export const useSessionStore = defineStore('session', () => {
   // ========================================
   // Query Layer - 查询参数
   // ========================================
-  const query = reactive({
+  const query = reactive<SessionListQuery>({
     directory: '',
     workspace: '',
     search: '',
@@ -141,7 +142,7 @@ export const useSessionStore = defineStore('session', () => {
   // Pagination Layer - 分页状态
   // ========================================
   const pagination = reactive({
-    nextCursor: null as number | null,
+    nextCursor: undefined as number | undefined,
   })
 
   // ========================================
@@ -192,7 +193,7 @@ export const useSessionStore = defineStore('session', () => {
   // ========================================
   // Computed
   // ========================================
-  const hasMore = computed(() => pagination.nextCursor !== null)
+  const hasMore = computed(() => pagination.nextCursor !== undefined)
 
   // 当前会话的 pending queue
   const currentPendingQueue = computed(() => {
@@ -262,7 +263,7 @@ export const useSessionStore = defineStore('session', () => {
       state.isLoading = true
       state.conversations = []
     }
-    pagination.nextCursor = null
+    pagination.nextCursor = undefined
     state.error = null
 
     try {
@@ -302,7 +303,7 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       state.conversations = result.conversations
-      pagination.nextCursor = result.nextCursor ?? null
+      pagination.nextCursor = result.nextCursor ?? undefined
       
       console.log('[SESSION_STORE_RELOAD] State updated - conversations:', state.conversations.length, 'nextCursor:', pagination.nextCursor)
     } catch (e) {
@@ -387,7 +388,7 @@ export const useSessionStore = defineStore('session', () => {
           state.conversations.push(item)
         }
       }
-      pagination.nextCursor = result.nextCursor ?? null
+      pagination.nextCursor = result.nextCursor ?? undefined
     } catch (e) {
       if (currentGen !== generation) return
       state.error = e instanceof Error ? e.message : 'Failed to load more'
@@ -637,7 +638,6 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[DEBUG sendMessage] === START ===')
     console.log('[DEBUG sendMessage] inputs:', inputs.length, 'types:', inputs.map(i => i.type))
     console.log('[DEBUG sendMessage] manuallyInterrupted:', manuallyInterrupted)
-    console.log('[DEBUG sendMessage] content:', content.slice(0, 50))
     console.log('[DEBUG sendMessage] options:', options)
     console.log('[DEBUG sendMessage] currentSessionId:', currentSessionId.value)
     console.log('[DEBUG sendMessage] isPendingNewSession:', isPendingNewSession.value)
@@ -751,8 +751,6 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions)
-      const prompt = await parseMentions(content, workspaceStore.currentWorkspace?.path)
-      console.log('[DEBUG sendMessage] Calling backend prompt with options:', promptOptions, 'parts:', prompt.length)
       await window.desktop.session.prompt(
         currentSessionId.value,
         inputs,
@@ -1107,7 +1105,7 @@ export const useSessionStore = defineStore('session', () => {
       } else {
         // No workspace: clear everything
         state.conversations = []
-        pagination.nextCursor = null
+        pagination.nextCursor = undefined
         state.isLoading = false
         state.isLoadingMore = false
         state.error = null

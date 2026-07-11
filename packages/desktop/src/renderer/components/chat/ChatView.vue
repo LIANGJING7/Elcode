@@ -30,7 +30,6 @@ async function handleSend(content: string, options: Record<string, unknown>, att
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
-  sessionStore.sendMessage(content, promptOptions)
 
   // Build PromptInput array from content and attachments
   const inputs: PromptInput[] = []

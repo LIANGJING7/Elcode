@@ -45,7 +45,7 @@ export const desktopAPI = {
     
     onStreamEvent: (callback: (data: { sessionID: string; event: unknown }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { sessionID: string; event: unknown }) => {
-        const e = data.event as Record<string, unknown>
+        const e = data.event as { type?: string } & Record<string, unknown>
         // Log all events with more detail for session events
         if (e?.type) {
           // DEBUG: Enhanced logging for content events

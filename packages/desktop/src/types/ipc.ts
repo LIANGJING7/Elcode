@@ -3,9 +3,7 @@ export interface LocationRef {
   workspaceID?: string
 }
 
-export interface PromptInput {
-  type: 'text' | 'tool_result' | 'file' | 'agent'
-  text?: string
+
 export interface TextPromptInput {
   type: 'text'
   text: string
@@ -16,6 +14,13 @@ export interface FilePromptInput {
   mime: string
   filename?: string
   url: string
+  source?: {
+    type: 'file' | 'resource'
+    path?: string
+    text?: { start: number; end: number; value: string }
+    clientName?: string
+    uri?: string
+  }
 }
 
 export interface ToolResultPromptInput {
@@ -36,7 +41,12 @@ export interface ToolResultPromptInput {
   name?: string
 }
 
-export type PromptInput = TextPromptInput | FilePromptInput | ToolResultPromptInput
+export interface AgentPromptInput {
+  type: 'agent'
+  name: string
+}
+
+export type PromptInput = TextPromptInput | FilePromptInput | ToolResultPromptInput | AgentPromptInput
 
 // Model reference matching backend's ModelRef
 export interface ModelRef {

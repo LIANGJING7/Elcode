@@ -19,6 +19,6 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.vue", "src/renderer/**/*.d.ts"],
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.vue", "src/renderer/**/*.d.ts", "src/types/**/*.d.ts"],
   "exclude": ["node_modules", "dist", "src/main", "src/preload"]
 }
