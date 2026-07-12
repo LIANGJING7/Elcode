@@ -16,9 +16,11 @@ const isImage = computed(() => props.vm.variant === 'image')
 
 // Extract file name from path
 const fileName = computed(() => {
-  if (!props.vm.filePath) return ''
-  const parts = props.vm.filePath.split(/[\\/]/)
-  return parts[parts.length - 1] || props.vm.filePath
+  // Only file and image variants have filePath
+  if (props.vm.variant !== 'file' && props.vm.variant !== 'image') return ''
+  const filePath = props.vm.filePath
+  const parts = filePath.split(/[\\/]/)
+  return parts[parts.length - 1] || filePath
 })
 
 // Build numbered lines for the file variant
@@ -47,8 +49,6 @@ const fileVm = computed(() => props.vm as Extract<ReadViewModel, { variant: 'fil
       <div class="flex items-center gap-2 text-text-muted mb-2 font-mono">
         <span class="text-text flex-shrink-0">读取</span>
         <span class="font-medium text-text" :title="fileVm.filePath">{{ fileName }}</span>
-        <span v-if="fileVm.options?.offset != null" class="text-text-muted">offset={{ fileVm.options.offset }}</span>
-        <span v-if="fileVm.options?.limit != null" class="text-text-muted">limit={{ fileVm.options.limit }}</span>
       </div>
       <div class="bg-code-bg rounded overflow-x-auto max-h-96 overflow-y-auto font-mono">
         <div
@@ -84,7 +84,7 @@ const fileVm = computed(() => props.vm as Extract<ReadViewModel, { variant: 'fil
     <template v-else-if="isImage">
       <div class="flex items-center gap-2 text-text-muted mb-2 font-mono">
         <span class="text-text flex-shrink-0">读取</span>
-        <span class="font-medium text-text">{{ imgVm.fileName }}</span>
+        <span class="font-medium text-text">{{ fileName }}</span>
       </div>
       <img :src="imgVm.dataUrl" :alt="imgVm.filePath" class="max-w-full rounded border border-border" />
     </template>

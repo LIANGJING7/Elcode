@@ -27,11 +27,11 @@ watch(
       console.log('[SIDEBAR_SESSIONS] First conversation:', JSON.stringify(convs[0]).slice(0, 150))
       
       // Check for child sessions (should not exist)
-      const childSessions = convs.filter(c => c.parent_id !== null && c.parent_id !== undefined)
+      const childSessions = convs.filter(c => c.parentID !== null && c.parentID !== undefined)
       console.log('[SIDEBAR_SESSIONS] Child sessions in list (SHOULD BE 0):', childSessions.length)
       if (childSessions.length > 0) {
         console.error('[SIDEBAR_SESSIONS] BUG: Child sessions appearing in Sidebar!', 
-          childSessions.map(c => ({ id: c.id, title: c.title, parent_id: c.parent_id })))
+          childSessions.map(c => ({ id: c.id, title: c.title, parentID: c.parentID })))
       }
     }
   },

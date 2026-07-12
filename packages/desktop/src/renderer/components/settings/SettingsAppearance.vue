@@ -35,7 +35,7 @@ const currentTheme = computed(() => themeStore.theme)
 const themeOptions = [
   { value: 'dark', label: '暗色' },
   { value: 'light', label: '亮色' }
-]
+] as const
 
 function handleThemeChange(theme: 'dark' | 'light') {
   themeStore.setTheme(theme)

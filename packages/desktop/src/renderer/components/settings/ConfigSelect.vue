@@ -42,10 +42,10 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-async function handleChange(value: string) {
+async function handleChange(value: unknown) {
+  if (typeof value !== 'string') return
   emit('update:modelValue', value)
   
-  // If configKey is provided, persist to config
   if (props.configKey) {
     await window.desktop.config.set(props.configKey, value, props.directory)
   }

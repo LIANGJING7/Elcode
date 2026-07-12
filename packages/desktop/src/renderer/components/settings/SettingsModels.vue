@@ -390,7 +390,7 @@ import ModelSelectDialog from './ModelSelectDialog.vue'
 import AddProviderModal from './AddProviderModal.vue'
 import EditProviderModal from './EditProviderModal.vue'
 import AddModelModal from './AddModelModal.vue'
-import type { AuthorizationResult } from '../../types/ipc'
+import type { AuthorizationResult } from '../../../types/ipc'
 import type { CustomProviderConfig } from '../../../types/custom-provider'
 
 const workspaceStore = useWorkspaceStore()
@@ -679,7 +679,7 @@ async function confirmDelete() {
     if (providers.value.length > 0) {
       selectedProviderId.value = providers.value[0].id
     } else {
-      selectedProviderId.value = null
+      selectedProviderId.value =''
     }
   }
 }

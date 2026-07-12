@@ -57,5 +57,6 @@ export function makeWebSearchMeta(component: ToolMeta['component']): ToolMeta<We
     defaultInteraction: 'panel',
     summary: (tool) => truncate(firstArgString(tool.args, ['query'])),
     createViewModel: createWebSearchViewModel,
+    category: 'query',
   }
 }

@@ -17,7 +17,8 @@ import TableToken from './tokens/TableToken.vue'
 import QuoteToken from './tokens/QuoteToken.vue'
 import ListToken from './tokens/ListToken.vue'
 import ImageToken from './tokens/ImageToken.vue'
-import type Token from 'markdown-it'
+
+type Token = ReturnType<MarkdownIt['parse']>[number]
 
 const props = defineProps<{
   content: string

@@ -45,7 +45,7 @@ export function createIpcMessageRepository(): MessageRepository {
         handler(data.event as StreamEvent)
       }),
     prompt: (sessionId, prompt, directory) =>
-      window.desktop.session.prompt(sessionId, prompt, directory),
+      window.desktop.session.prompt(sessionId, prompt, undefined, directory),
     interrupt: (sessionId, directory) =>
       window.desktop.session.interrupt(sessionId, directory),
     deleteMessage: (sessionId, directory) =>
