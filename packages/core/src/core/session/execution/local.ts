@@ -15,6 +15,12 @@ export const layer = Layer.effect(
     const locations = yield* LocationServiceMap
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, void, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, mode) {
+        console.log("\n" + "●".repeat(80))
+        console.log("●●● [SessionExecution] DRAIN CALLED - MESSAGE SENT ●●●")
+        console.log("   sessionID:", sessionID)
+        console.log("   mode:", mode)
+        console.log("●".repeat(80) + "\n")
+        
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
         return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force: mode === "run" })).pipe(
