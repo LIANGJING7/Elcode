@@ -249,7 +249,7 @@ function toMessage(msg: BackendMessage): Message | null {
     const toolParts = msg.parts.filter(p => p.type === 'tool')
     const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
     const fileParts = msg.parts.filter(p => p.type === 'file')
-    const agentParts = msg.parts.filter(p => p.type === 'agent')
+    const agentParts = msg.parts.filter(p => p.type === 'agent') as Array<{ type: 'agent'; name?: string; source?: { value?: string; start: number; end: number } }>
 
     let content: string
     if (agentParts.length > 0) {
