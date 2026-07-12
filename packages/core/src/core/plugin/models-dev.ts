@@ -128,7 +128,6 @@ export const ModelsDevPlugin = PluginV2.define({
         }
       })
     })
-    yield* refresh()
     yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() => refresh()),
       Effect.forkScoped({ startImmediately: true }),

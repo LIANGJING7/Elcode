@@ -49,9 +49,9 @@ function cancelDelete() {
   <div class="sidebar-workspaces px-2 py-2">
     <ul class="space-y-0.5">
       <li v-for="ws in workspaces" :key="ws.id">
-        <button
+        <div
           :data-workspace-id="ws.id"
-          class="workspace-row group w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-xs transition-colors duration-fast"
+          class="workspace-row group w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left text-xs transition-colors duration-fast cursor-pointer"
           :class="currentWorkspace?.id === ws.id
             ? 'is-current bg-accent-muted text-accent ring-1 ring-accent/20'
             : 'text-text-secondary hover:bg-bg-hover hover:text-text'"
@@ -69,7 +69,7 @@ function cancelDelete() {
           >
             <X class="w-3.5 h-3.5" />
           </button>
-        </button>
+        </div>
       </li>
     </ul>
 

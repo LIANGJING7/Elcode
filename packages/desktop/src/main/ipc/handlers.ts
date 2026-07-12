@@ -24,10 +24,6 @@ export async function registerIPCHandlers() {
   registerSubagentHandlers()
   registerLcodeConfigHandlers()
 
-  ipcMain.handle(CHANNELS.WORKSPACE_GET_CWD, () => {
-    return process.cwd()
-  })
-
   ipcMain.on('ipc-request', (event, channel: string) => {
     if (!isValidChannel(channel)) {
       console.error(`Blocked unauthorized IPC channel: ${channel}`)
