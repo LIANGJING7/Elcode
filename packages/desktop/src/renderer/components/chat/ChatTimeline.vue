@@ -189,8 +189,8 @@ async function handleOpenSubagentPanel(sessionId: string) {
 </script>
 
 <template>
-  <div ref="timelineContainerRef" class="chat-timeline flex-1 min-h-0 h-0 overflow-y-auto overflow-x-hidden py-4 mt-6 mb-2">
-    <div class="max-w-chat-max mx-auto px-6">
+  <div ref="timelineContainerRef" class="chat-timeline flex-1 min-h-0 h-0 overflow-y-auto overflow-x-hidden py-4 mt-6 mb-0">
+    <div class="max-w-chat-max mx-auto">
     <!-- 空态 placeholder -->
     <div v-if="messages.length === 0 && !streamingMessage" class="empty-state text-center py-8 text-accent-muted">
       开始新对话或选择一个会话

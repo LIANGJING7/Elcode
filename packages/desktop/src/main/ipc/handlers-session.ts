@@ -4,6 +4,9 @@ import { backend } from '../backend-client'
 import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../../types/session'
 
+// Per-session unsubscribers — each removes its listener from the shared SSE connection.
+// The shared connection in backend-client.ts handles multiplexing so events are
+// delivered exactly once regardless of how many sessions are listening.
 const sessionStreams = new Map<string, () => void>()
 
 /**
@@ -193,30 +196,138 @@ function safeParseToolArgs(raw: string): Record<string, unknown> {
 }
 
 /**
- * Convert backend message (V1 or V2) to desktop Message format.
+ * Reconstruct original text from text parts and agent parts
+ * 
+ * Algorithm:
+ * - Agent parts have source.start/end positions relative to original text
+ * - Text parts fill the gaps between agents
+ * - We assume text parts are ordered to match the gaps
+ * 
+ * Example:
+ * Original: "@AI-Engineer 111 @Account-Strategist"
+ * Agent 1: start=0, end=12 → "@AI-Engineer"
+ * Text: " 111 "
+ * Agent 2: start=17, end=36 → "@Account-Strategist"
+ * 
+ * Reconstructed: "@AI-Engineer" + " 111 " + "@Account-Strategist"
+ */
+function reconstructOriginalText(
+  textParts: Array<{ text?: string }>,
+  agentParts: Array<{ type: 'agent'; name?: string; source?: { value?: string; start: number; end: number } }>
+): string {
+  const segments: string[] = []
+  const textContent = textParts.map(p => p.text || '').join('')
+  
+  // Sort agents by position
+  const sortedAgents = agentParts
+    .filter(a => a.source?.start !== undefined)
+    .sort((a, b) => a.source!.start - b.source!.start)
+  
+  if (sortedAgents.length === 0) {
+    return textContent
+  }
+  
+  // Strategy: alternate between agent mentions and user text
+  // First agent: insert its @mention
+  // Then insert user text (from textParts)
+  // Then next agent: insert its @mention
+  // etc.
+  
+  let textIndex = 0
+  const textSegments = textParts.map(p => p.text || '')
+  
+  for (let i = 0; i < sortedAgents.length; i++) {
+    const agent = sortedAgents[i]
+    
+    // Add @agent mention
+    const agentText = agent.source?.value || `@${(agent.name || '').replace(/ /g, '-')}`
+    segments.push(agentText)
+    
+    // Add user text after this agent (before next agent or end)
+    if (textIndex < textSegments.length) {
+      segments.push(textSegments[textIndex])
+      textIndex++
+    }
+  }
+  
+  // Add any remaining text
+  while (textIndex < textSegments.length) {
+    segments.push(textSegments[textIndex])
+    textIndex++
+  }
+  
+  return segments.join('')
+}
+
+/**
+ * Convert backend message to renderer Message shape.
  * Returns null for non-displayable types (compaction, agent-switched, etc.).
  */
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
     // V1 format: SessionV1.WithParts
-    const textParts = msg.parts.filter(p => p.type === 'text' && p.text)
+    // Filter out synthetic text parts (expanded agent prompts)
+    console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
+    console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
+    
+    const allTextParts = msg.parts.filter(p => p.type === 'text')
+    console.log('[toMessage V1] Text parts:', allTextParts.length, 
+      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: (p as any).synthetic })))
+    
+    const textParts = msg.parts.filter(p => 
+      p.type === 'text' && p.text && !(p as any).synthetic
+    )
     const toolParts = msg.parts.filter(p => p.type === 'tool')
     const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
+    const fileParts = msg.parts.filter(p => p.type === 'file')
+    const agentParts = msg.parts.filter(p => p.type === 'agent')
 
-    const content = textParts.map(p => p.text!).join('\n')
+    console.log('[toMessage V1] Filtered text parts:', textParts.length)
+    console.log('[toMessage V1] Agent parts:', agentParts.length, 
+      agentParts.map(p => ({ name: (p as any).name, source: (p as any).source })))
+
+    // Reconstruct original text with @agent mentions
+    let content: string
+    if (agentParts.length > 0) {
+      console.log('[toMessage V1] === RECONSTRUCTING ORIGINAL TEXT ===')
+      content = reconstructOriginalText(textParts, agentParts)
+      console.log('[toMessage V1] Reconstructed content:', JSON.stringify(content))
+    } else {
+      content = textParts.map(p => p.text!).join('\n')
+    }
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
       ? toolParts.map(p => {
         console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
         console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.output:', p.state?.output ? (typeof p.state.output === 'string' ? p.state.output.slice(0, 200) : JSON.stringify(p.state.output).slice(0, 200)) : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
         console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
         return toToolCall(p.callID || '', p.tool || '', p.state)
       })
       : undefined
+
+    const files = fileParts.length > 0
+      ? fileParts.map(p => ({
+          type: 'file' as const,
+          mime: (p as any).mime || 'application/octet-stream',
+          name: (p as any).filename || (p as any).name,
+          url: (p as any).url || ''
+        }))
+      : undefined
+
+    // Extract agent mentions for highlighting
+    const agents = agentParts.length > 0
+      ? agentParts.map(p => ({
+          type: 'agent' as const,
+          name: (p as any).name,
+          source: (p as any).source
+        }))
+      : undefined
+
+    console.log('[toMessage V1] Result content:', content.slice(0, 100))
+    console.log('[toMessage V1] Result agents:', agents?.length || 0)
 
     return {
       id: msg.info.id,
@@ -225,6 +336,8 @@ function toMessage(msg: BackendMessage): Message | null {
       timestamp: new Date(msg.info.timestamp),
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
+      ...(files && files.length > 0 ? { files } : {}),
+      ...(agents && agents.length > 0 ? { agents } : {}),
     }
   }
 
@@ -233,12 +346,22 @@ function toMessage(msg: BackendMessage): Message | null {
     const textParts = msg.content.filter(p => p.type === 'text' && p.text)
     const reasoningParts = msg.content.filter(p => p.type === 'reasoning' && p.text)
     const toolParts = msg.content.filter(p => p.type === 'tool')
+    const fileParts = msg.content.filter(p => p.type === 'file')
 
     const content = textParts.map(p => p.text!).join('\n')
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
       ? toolParts.map(p => toToolCall(p.id || '', p.name || '', p.state, p.time))
+      : undefined
+
+    const files = fileParts.length > 0
+      ? fileParts.map(p => ({
+          type: 'file' as const,
+          mime: (p as any).mime || 'application/octet-stream',
+          name: (p as any).filename || (p as any).name,
+          url: (p as any).url || ''
+        }))
       : undefined
 
     // Calculate duration from time.completed - time.created
@@ -254,16 +377,151 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
+      ...(files && files.length > 0 ? { files } : {}),
     }
   }
 
   if (msg.type === 'user') {
+    // V2 User message: text is already filtered (no synthetic), files/agents at top level
+    console.log('[toMessage V2 User] ========================================')
+    console.log('[toMessage V2 User] Processing message:', msg.id)
+    console.log('[toMessage V2 User] Raw message type:', msg.type)
+    
+    // CRITICAL: Log the entire raw message structure
+    console.log('[toMessage V2 User] === RAW MESSAGE STRUCTURE ===')
+    console.log('[toMessage V2 User] msg keys:', Object.keys(msg))
+    console.log('[toMessage V2 User] msg.text:', JSON.stringify(msg.text))
+    console.log('[toMessage V2 User] msg.parts:', (msg as any).parts?.length)
+    if ((msg as any).parts) {
+      console.log('[toMessage V2 User] === PARTS DETAIL ===')
+      ;(msg as any).parts.forEach((part: any, idx: number) => {
+        console.log(`[toMessage V2 User] Part ${idx}:`, JSON.stringify(part))
+      })
+    }
+    
     const text = Array.isArray(msg.text) ? msg.text.join('\n') : (msg.text || '')
+    
+    console.log('[toMessage V2 User] joined text (full):', JSON.stringify(text))
+    console.log('[toMessage V2 User] text length:', text.length)
+    
+    const msgFiles = (msg as any).files || []
+    const msgAgents = (msg as any).agents || []
+    
+    console.log('[toMessage V2 User] files count:', msgFiles.length)
+    console.log('[toMessage V2 User] agents count:', msgAgents.length)
+    
+    if (msgAgents.length > 0) {
+      console.log('[toMessage V2 User] === AGENTS DETAIL ===')
+      msgAgents.forEach((a: any, idx: number) => {
+        console.log(`[toMessage V2 User] Agent ${idx}:`)
+        console.log(`[toMessage V2 User]   name: "${a.name}"`)
+        console.log(`[toMessage V2 User]   source.start: ${a.source?.start}`)
+        console.log(`[toMessage V2 User]   source.end: ${a.source?.end}`)
+        console.log(`[toMessage V2 User]   source.value: "${a.source?.value}"`)
+        console.log(`[toMessage V2 User]   source.text: "${a.source?.text}"`)
+      })
+      
+      // Try to reconstruct original text
+      console.log('[toMessage V2 User] === RECONSTRUCTION ATTEMPT ===')
+      const sorted = [...msgAgents]
+        .filter(a => a.source?.start !== undefined && a.source?.end !== undefined)
+        .sort((a, b) => a.source!.start - b.source!.start)
+      
+      console.log('[toMessage V2 User] Sorted agents:', sorted.map((a: any) => ({
+        name: a.name,
+        start: a.source!.start,
+        end: a.source!.end,
+        value: a.source!.value || a.source!.text
+      })))
+      
+      // Method 1: Assume text is filtered (no @mentions), use source positions as-is
+      console.log('[toMessage V2 User] --- Method 1: Use source positions directly ---')
+      let reconstructed1 = ''
+      let lastEnd1 = 0
+      for (const agent of sorted) {
+        const start = agent.source!.start
+        const end = agent.source!.end
+        
+        console.log(`[toMessage V2 User] Processing agent "${agent.name}":`)
+        console.log(`[toMessage V2 User]   start=${start}, end=${end}, lastEnd=${lastEnd1}`)
+        
+        // Add text before this agent
+        if (start > lastEnd1 && lastEnd1 < text.length) {
+          const segment = text.slice(lastEnd1, Math.min(start, text.length))
+          console.log(`[toMessage V2 User]   Adding pre-text [${lastEnd1}:${Math.min(start, text.length)}]: "${segment}"`)
+          reconstructed1 += segment
+        }
+        
+        // Add @agent
+        const agentText = agent.source?.value || agent.source?.text || `@${agent.name.replace(/ /g, '-')}`
+        console.log(`[toMessage V2 User]   Adding agent text: "${agentText}"`)
+        reconstructed1 += agentText
+        lastEnd1 = end
+        
+        console.log(`[toMessage V2 User]   Current reconstructed: "${reconstructed1}"`)
+      }
+      
+      // Add remaining text
+      if (lastEnd1 < text.length) {
+        const segment = text.slice(lastEnd1)
+        console.log(`[toMessage V2 User] Adding remaining text [${lastEnd1}:${text.length}]: "${segment}"`)
+        reconstructed1 += segment
+      }
+      
+      console.log('[toMessage V2 User] Method 1 result:', JSON.stringify(reconstructed1))
+      
+      // Method 2: Assume text has @mentions removed, need to recalculate positions
+      console.log('[toMessage V2 User] --- Method 2: Assume @mentions removed from text ---')
+      // This method would need to recalculate positions based on how many mentions were before
+      // For now, let's just compare source.value with actual @mention
+      
+      // Let's check if we can find @mention in source positions
+      console.log('[toMessage V2 User] --- Checking source.value positions in text ---')
+      for (const agent of sorted) {
+        const agentText = agent.source?.value || agent.source?.text
+        if (agentText) {
+          // Check if agentText exists in joined text
+          const posInText = text.indexOf(agentText)
+          console.log(`[toMessage V2 User] Agent "${agent.name}" text "${agentText}" found at position ${posInText} in text`)
+        }
+      }
+      
+      // For now, use the original text field as-is
+      console.log('[toMessage V2 User] === USING ORIGINAL TEXT (NO RECONSTRUCTION) ===')
+    }
+    
+    // Files are at top level in V2 format (uri field, not url)
+    const files = msgFiles.length > 0
+      ? msgFiles.map((p: any) => ({
+          type: 'file' as const,
+          mime: p.mime || 'application/octet-stream',
+          name: p.name,
+          url: p.uri || ''
+        }))
+      : undefined
+
+    // Agent mentions are at top level in V2 format
+    const agents = msgAgents.length > 0
+      ? msgAgents.map((a: any) => ({
+          type: 'agent' as const,
+          name: a.name,
+          source: a.source
+        }))
+      : undefined
+
+    console.log('[toMessage V2 User] === FINAL RESULT ===')
+    console.log('[toMessage V2 User]   content length:', text.length)
+    console.log('[toMessage V2 User]   content:', JSON.stringify(text))
+    console.log('[toMessage V2 User]   agents:', agents?.length || 0)
+    console.log('[toMessage V2 User] ========================================')
+
     return {
       id: msg.id,
       role: 'user',
       content: text,
       timestamp: new Date(msg.time.created),
+      ...(files && files.length > 0 ? { files } : {}),
+      ...(agents && agents.length > 0 ? { agents } : {}),
     }
   }
 
@@ -352,11 +610,47 @@ export function registerSessionHandlers() {
       if (p.type === 'text') {
         return { type: 'text', text: p.text! }
       }
+      if (p.type === 'file') {
+        const filePart: any = {
+          type: 'file',
+          url: p.url!,
+          filename: p.filename,
+          mime: p.mime || 'text/plain'
+        }
+        // Backend expects: source: { type: "file", path: string, text: { value, start, end } }
+        if (p.source?.text && typeof p.source.text === 'object' &&
+            'start' in p.source.text && 'end' in p.source.text && 'value' in p.source.text) {
+          filePart.source = {
+            type: p.source.type || 'file',
+            path: p.source.path || '',
+            text: {
+              value: p.source.text.value,
+              start: p.source.text.start,
+              end: p.source.text.end
+            }
+          }
+        }
+        return filePart
+      }
+      if (p.type === 'agent') {
+        const agentPart: any = {
+          type: 'agent',
+          name: p.name!
+        }
+        // Backend expects: source: { value, start, end }
+        if (p.source && 'value' in p.source && 'start' in p.source && 'end' in p.source) {
+          agentPart.source = {
+            value: p.source.value,
+            start: p.source.start,
+            end: p.source.end
+          }
+        }
+        return agentPart
+      }
       return { type: 'tool_result', toolResult: p.toolResult }
     })
 
     // 构建 prompt payload，包含 model 和 agent
-    // 注意：后端期望的字段名是 modelID，不是 id
     const payload: { parts: unknown[]; model?: { providerID: string; modelID: string; variant?: string }; agent?: string } = { parts }
     if (options?.model) {
       payload.model = {
@@ -387,15 +681,16 @@ export function registerSessionHandlers() {
       const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
         const e = evt as Record<string, unknown>
         eventCount++
-        if (e?.type) {
-          console.log('[SSE MAIN #' + eventCount + '] type:', e.type, 'keys:', Object.keys(e).slice(0, 5))
+        const eventType = e?.type as string | undefined
+        if (eventType) {
+          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'keys:', Object.keys(e).slice(0, 5))
           // Log first event structure in detail
           if (!loggedFirstEvent) {
             console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
             loggedFirstEvent = true
           }
           // Log session events with more detail
-          if (e.type.startsWith('session.next.')) {
+          if (eventType.startsWith('session.next.')) {
             console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
           }
         }
@@ -443,6 +738,10 @@ export function registerSessionHandlers() {
 
   ipcMain.handle(CHANNELS.SESSION_TODO, async (_event, sessionID: string, directory?: string) => {
     return await backend.session.todo(sessionID, directory)
+  })
+
+  ipcMain.handle(CHANNELS.SESSION_AGENTS, async (_event, directory?: string) => {
+    return await backend.session.agents(directory)
   })
 
   // Provider handlers

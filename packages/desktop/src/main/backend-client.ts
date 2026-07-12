@@ -286,7 +286,7 @@ export const backend = {
       return request("GET", `/session/${sessionID}/message?${params.toString()}`) as Promise<unknown[]>
     },
     
-    prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; id: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
+    prompt: async (sessionID: string, payload: { parts: unknown[]; model?: { providerID: string; modelID: string; variant?: string }; agent?: string }, directory?: string): Promise<void> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       await request("POST", `/session/${sessionID}/prompt_async?${params}`, payload)
     },
@@ -315,6 +315,11 @@ export const backend = {
     todo: async (sessionID: string, directory?: string): Promise<unknown[]> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/session/${sessionID}/todo?${params}`) as Promise<unknown[]>
+    },
+
+    agents: async (directory?: string): Promise<unknown[]> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
@@ -345,15 +350,6 @@ export const backend = {
               try {
                 const payload = JSON.parse(trimmed.slice(5))
                 eventCount++
-                // DEBUG: Enhanced logging for all events including content events
-                if (payload.type?.startsWith('session.next.') || payload.type?.startsWith('message.part')) {
-                  console.log('[SSE RAW #' + eventCount + '] CONTENT:', payload.type, 'full:', JSON.stringify(payload).slice(0, 500))
-                } else if (payload.type && !payload.type.startsWith('server.')) {
-                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
-                  console.log('[SSE RAW #' + eventCount + '] full:', JSON.stringify(payload).slice(0, 500))
-                } else {
-                  console.log('[SSE RAW #' + eventCount + '] type:', payload.type)
-                }
                 onEvent(payload)
               } catch (e) {
                 console.error('[SSE PARSE] failed:', trimmed.slice(0, 100), e)
@@ -363,15 +359,13 @@ export const backend = {
         })
         res.on("end", () => {
           console.log('[SSE] stream ended, total events:', eventCount)
-          // Notify renderer that stream is fully complete
-          onEvent({ type: 'stream.ended', sessionID })
         })
       })
       req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
       req.end()
       
       return () => {
-        console.log('[SSE] destroying request')
+        console.log('[SSE] destroying request for', sessionID)
         req.destroy()
       }
     },
@@ -395,6 +389,20 @@ export const backend = {
       if (pattern) params.set("pattern", pattern)
       if (directory) params.set("directory", storagePath(directory))
       return request("GET", `/file/list?${params.toString()}`) as Promise<unknown[]>
+    },
+
+    search: async (query: string, directory?: string): Promise<{ path: string; relativePath: string; isDirectory: boolean; url: string; mimeType: string }[]> => {
+      const params = new URLSearchParams({ query })
+      if (directory) params.set("directory", storagePath(directory))
+      const paths = await request("GET", `/find/file?${params.toString()}`) as string[]
+      const dir = directory || process.cwd()
+      return paths.map(p => ({
+        path: p,
+        relativePath: p,
+        isDirectory: false,
+        url: `file://${require('path').join(dir, p)}`,
+        mimeType: 'text/plain'
+      }))
     },
   },
   

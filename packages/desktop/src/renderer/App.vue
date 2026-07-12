@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container h-screen flex flex-col bg-bg overflow-hidden">
+  <div class="app-container h-screen flex flex-col bg-bg">
     <!-- 全宽标题栏: 图标切换侧边栏 + 应用名 + 会话标题 + 菜单 + 拖拽 -->
     <div class="titlebar h-12 flex items-center bg-bg-elevated border-b border-border/60 flex-shrink-0">
       <!-- 左侧: 图标 + 应用名 (拖拽区域, 图标除外) -->
@@ -46,7 +46,7 @@
         <Sidebar v-show="ui.sidebarOpen" />
       </Transition>
 
-      <main class="main-content flex-1 flex flex-col min-w-0 bg-bg overflow-hidden">
+      <main class="main-content flex-1 flex flex-col min-w-0 bg-bg">
         <WelcomeView v-if="effectiveView === 'welcome'" key="welcome" @open-folder="handleAddWorkspace" />
         <NewSessionView v-else-if="effectiveView === 'newSession'" key="newSession" />
         <ChatView
