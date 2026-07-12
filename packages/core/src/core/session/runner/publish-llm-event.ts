@@ -50,14 +50,10 @@ type ToolOutput =
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
 const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
-  console.log('[DEBUG settledOutput] result.type:', result.type, 'result.value:', typeof result.value === 'string' ? result.value.slice(0, 200) : result.value)
-  console.log('[DEBUG settledOutput] value (LLM ToolOutput):', value ? { structured: typeof value.structured === 'string' ? value.structured.slice(0, 200) : value.structured } : 'undefined')
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
   const settled = value ?? LLMToolOutput.fromResultValue(result)
-  console.log('[DEBUG settledOutput] settled (after fromResultValue):', settled ? { structured: typeof settled.structured === 'string' ? JSON.stringify(settled.structured).slice(0, 200) : settled.structured, contentCount: settled.content?.length } : 'undefined')
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
   const output = { structured: record(settled.structured), content: settled.content }
-  console.log('[DEBUG settledOutput] final output.structured:', JSON.stringify(output.structured).slice(0, 500))
   return output
 }
 
@@ -232,15 +228,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     event: LLMEvent,
     outputPaths: ReadonlyArray<string> = [],
   ) {
-    // DEBUG: Log all LLM events before processing
-    console.log('[DEBUG LLMEvent] type:', event.type, 'id:', event.id || 'none', 'sessionID:', input.sessionID)
-    
     switch (event.type) {
       case "step-start":
-        console.log('[DEBUG LLMEvent] step-start - skipping (not published)')
         return
       case "text-start":
-        console.log('[DEBUG LLMEvent] text-start - publishing SessionEvent.Text.Started')
         yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
@@ -250,7 +241,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         })
         return
       case "text-delta":
-        console.log('[DEBUG LLMEvent] text-delta - publishing SessionEvent.Text.Delta, text length:', event.text?.length)
         yield* text.append(event.id, event.text)
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,

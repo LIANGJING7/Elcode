@@ -33,12 +33,6 @@ function eventResponse(events: EventV2.Interface) {
     yield* Effect.addFinalizer(() => unsubscribe)
     const stream = Stream.fromQueue(queue).pipe(
       Stream.tap((event) =>
-        Effect.sync(() => {
-          // DEBUG: Log all events before filtering
-          console.log('[DEBUG SSE Handler] event received:', event.type, 'eventDir:', event.location?.directory, 'instanceDir:', instance.directory, 'eventWS:', event.location?.workspaceID, 'currentWS:', workspaceID)
-        })
-      ),
-      Stream.tap((event) =>
         Effect.logDebug("SSE event received", {
           type: event.type,
           eventDirectory: event.location?.directory,
@@ -48,19 +42,8 @@ function eventResponse(events: EventV2.Interface) {
         })
       ),
       Stream.filter(
-        (event) => {
-          const passes = event.location?.directory === instance.directory &&
-            (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID)
-          // DEBUG: Log filter result
-          console.log('[DEBUG SSE Handler] filter result:', passes, 'for type:', event.type)
-          return passes
-        },
-      ),
-      Stream.tap((event) =>
-        Effect.sync(() => {
-          // DEBUG: Log events that passed filter
-          console.log('[DEBUG SSE Handler] event PASSED filter:', event.type, 'will be sent to SSE stream')
-        })
+        (event) => event.location?.directory === instance.directory &&
+          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID)
       ),
       Stream.tap((event) =>
         Effect.logDebug("SSE event passed filter", { type: event.type })
