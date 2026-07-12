@@ -161,6 +161,11 @@ Guidelines:
       const reviewInBackground = Effect.fn("BackgroundReviewer.reviewInBackground")(function* (
         messages: Array<{ role: string; content: string }>,
       ): void {
+        console.log("\n" + "▲".repeat(70))
+        console.log("▲▲▲ [BackgroundReviewer] reviewInBackground CALLED ▲▲▲")
+        console.log("   messages count:", messages.length)
+        console.log("▲".repeat(70) + "\n")
+        
         yield* review(messages).pipe(
           Effect.catchCause((cause) =>
             Effect.logError("Background skill review failed", { cause })

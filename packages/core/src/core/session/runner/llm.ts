@@ -91,6 +91,10 @@ const MAX_STEPS = 25
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    console.log("\n" + "★".repeat(80))
+    console.log("★★★ [SessionRunnerLLM] LAYER CREATED ★★★")
+    console.log("★".repeat(80) + "\n")
+    
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
@@ -104,6 +108,10 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const reviewer = yield* BackgroundReviewer.Service
+    
+    console.log("\n" + "☆".repeat(60))
+    console.log("☆☆☆ [SessionRunnerLLM] BackgroundReviewer injected successfully ☆☆☆")
+    console.log("☆".repeat(60) + "\n")
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -375,6 +383,11 @@ export const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
     }) {
+      console.log("\n" + "▶".repeat(70))
+      console.log(">>> [SessionRunner.run] RUN CALLED <<<")
+      console.log("   sessionID:", input.sessionID)
+      console.log("▶".repeat(70) + "\n")
+      
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (input.force !== true && !hasSteer && !hasQueue) return
@@ -410,7 +423,14 @@ export const layer = Layer.effect(
             })),
         ),
       )
+      console.log("\n" + "◆".repeat(60))
+      console.log("◆◆◆ [SessionRunner.run] CALLING reviewInBackground ◆◆◆")
+      console.log("   messages count:", messages.length)
+      console.log("◆".repeat(60) + "\n")
       yield* reviewer.reviewInBackground(messages)
+      console.log("\n" + "◇".repeat(60))
+      console.log("◇◇◇ [SessionRunner.run] reviewInBackground RETURNED ◇◇◇")
+      console.log("◇".repeat(60) + "\n")
     })
 
     return Service.of({
