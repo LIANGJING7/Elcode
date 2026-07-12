@@ -8,8 +8,9 @@
       class="flex-1 min-h-0 w-full bg-transparent text-text text-sm leading-relaxed resize-none outline-none placeholder:text-text-muted disabled:opacity-50"
       @input="handleInput"
       @focus="emit('focus')"
-      @blur="emit('blur')"
+      @blur="handleBlur"
       @keydown="handleKeydown"
+      @paste="handlePaste"
     />
 
     <!-- Slash Command Menu -->
@@ -41,39 +42,40 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   history?: string[]
   queueCount?: number
+  mentionVisible?: boolean
 }>(), {
   value: '',
   placeholder: 'Ask anything... (Shift+Enter for new line)',
   disabled: false,
   history: () => [],
-  queueCount: 0
+  queueCount: 0,
+  mentionVisible: false
 })
 
 const emit = defineEmits<{
   'update:value': [value: string]
   'send': [content: string]
   'slashCommand': [command: string]
+  'pasteImage': [image: { name: string; mime: string; url: string }]
   'focus': []
   'blur': []
+  'mention-check': [text: string, cursorPos: number]
+  'mention-key': [e: KeyboardEvent]
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
-const historyIndex = ref(-1) // -1 = current input, 0+ = history position
+const historyIndex = ref(-1)
+const blurTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
-// Dynamic placeholder: show queue hint when messages are queued
 const effectivePlaceholder = computed(() => {
-  if (props.queueCount > 0) {
-    return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
-  }
+  if (props.queueCount > 0) return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
   return props.placeholder
 })
 
-// Sync internal value with prop
 watch(() => props.value, (val) => {
   internalValue.value = val
-  // Show slash menu when input is just '/'
   showSlashMenu.value = val === '/'
 })
 
@@ -90,73 +92,59 @@ function handleInput(e: Event) {
   const newValue = target.value
   internalValue.value = newValue
   emit('update:value', newValue)
-  // Reset history navigation when user types
   historyIndex.value = -1
-  // Show slash menu if input is '/'
   showSlashMenu.value = newValue === '/'
+  emit('mention-check', newValue, target.selectionStart)
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  // Slash command menu navigation
-  if (showSlashMenu.value) {
-    if (e.key === 'Escape') {
-      showSlashMenu.value = false
+  if (props.mentionVisible) {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
       e.preventDefault()
-      return
-    }
-    // Tab or Enter selects first command
-    if (e.key === 'Tab' || e.key === 'Enter') {
-      selectSlashCommand(slashCommands[0])
-      e.preventDefault()
+      emit('mention-key', e)
       return
     }
   }
 
-  // History navigation (only when not showing slash menu and textarea is empty or at start)
+  if (showSlashMenu.value) {
+    if (e.key === 'Escape') { showSlashMenu.value = false; e.preventDefault(); return }
+    if (e.key === 'Tab' || e.key === 'Enter') { selectSlashCommand(slashCommands[0]); e.preventDefault(); return }
+  }
+
   if (!showSlashMenu.value && props.history.length > 0) {
     if (e.key === 'ArrowUp' && !e.shiftKey) {
-      // Only navigate history if textarea is empty or cursor is at start
       const textarea = textareaRef.value
       const atStart = textarea && textarea.selectionStart === 0 && textarea.selectionEnd === 0
       if (internalValue.value === '' || atStart) {
         if (historyIndex.value < props.history.length - 1) {
           historyIndex.value++
-          const historyValue = props.history[props.history.length - 1 - historyIndex.value]
-          internalValue.value = historyValue
-          emit('update:value', historyValue)
+          const hv = props.history[props.history.length - 1 - historyIndex.value]
+          internalValue.value = hv; emit('update:value', hv)
           nextTick(() => {
             if (textareaRef.value) {
-              textareaRef.value.value = historyValue
-              textareaRef.value.selectionStart = historyValue.length
-              textareaRef.value.selectionEnd = historyValue.length
+              textareaRef.value.value = hv
+              textareaRef.value.selectionStart = hv.length
+              textareaRef.value.selectionEnd = hv.length
             }
           })
         }
-        e.preventDefault()
-        return
+        e.preventDefault(); return
       }
     }
-
     if (e.key === 'ArrowDown' && !e.shiftKey) {
       if (historyIndex.value > -1) {
         historyIndex.value--
         if (historyIndex.value === -1) {
-          internalValue.value = ''
-          emit('update:value', '')
-          nextTick(() => {
-            if (textareaRef.value) {
-              textareaRef.value.value = ''
-            }
-          })
+          internalValue.value = ''; emit('update:value', '')
+          nextTick(() => { if (textareaRef.value) textareaRef.value.value = '' })
         } else {
-          const historyValue = props.history[props.history.length - 1 - historyIndex.value]
-          internalValue.value = historyValue
-          emit('update:value', historyValue)
+          const hv = props.history[props.history.length - 1 - historyIndex.value]
+          internalValue.value = hv; emit('update:value', hv)
           nextTick(() => {
             if (textareaRef.value) {
-              textareaRef.value.value = historyValue
-              textareaRef.value.selectionStart = historyValue.length
-              textareaRef.value.selectionEnd = historyValue.length
+              textareaRef.value.value = hv
+              textareaRef.value.selectionStart = hv.length
+              textareaRef.value.selectionEnd = hv.length
             }
           })
         }
@@ -166,45 +154,66 @@ function handleKeydown(e: KeyboardEvent) {
     }
   }
 
-  // Enter: send (without shift), newline (with shift)
   if (e.key === 'Enter') {
-    if (e.shiftKey) {
-      // Allow newline
-      return
-    }
-    // Send message
+    if (e.shiftKey) return
     if (internalValue.value.trim()) {
       emit('send', internalValue.value)
-      internalValue.value = ''
-      emit('update:value', '')
-      showSlashMenu.value = false
-      historyIndex.value = -1
-      nextTick(() => {
-        if (textareaRef.value) {
-          textareaRef.value.value = ''
-        }
-      })
+      internalValue.value = ''; emit('update:value', '')
+      showSlashMenu.value = false; historyIndex.value = -1
+      nextTick(() => { if (textareaRef.value) textareaRef.value.value = '' })
     }
     e.preventDefault()
   }
 }
 
+function handleBlur() {
+  blurTimer.value = setTimeout(() => emit('mention-check', '', 0), 200)
+  emit('blur')
+}
+
 function selectSlashCommand(cmd: { name: string; description: string }) {
   emit('slashCommand', cmd.name)
-  internalValue.value = ''
-  emit('update:value', '')
+  internalValue.value = ''; emit('update:value', '')
   showSlashMenu.value = false
 }
 
-// Expose for parent to focus
-defineExpose({
-  focus: () => textareaRef.value?.focus()
-})
+function handlePaste(e: ClipboardEvent) {
+  console.log('[DEBUG ComposerInput] paste event fired')
+  const items = e.clipboardData?.items
+  if (!items) {
+    console.log('[DEBUG ComposerInput] no clipboard items')
+    return
+  }
+
+  console.log('[DEBUG ComposerInput] clipboard items:', items.length)
+  for (const item of items) {
+    console.log('[DEBUG ComposerInput] item type:', item.type)
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        console.log('[DEBUG ComposerInput] image file found:', file.name, file.type)
+        const reader = new FileReader()
+        reader.onload = () => {
+          const url = reader.result as string
+          console.log('[DEBUG ComposerInput] emitting pasteImage, url length:', url.length)
+          emit('pasteImage', {
+            name: `image-${Date.now()}`,
+            mime: file.type,
+            url
+          })
+        }
+        reader.readAsDataURL(file)
+        e.preventDefault()
+        return
+      }
+    }
+  }
+}
+
+
+defineExpose({ focus: () => textareaRef.value?.focus(), textareaRef })
 </script>
 
 <style scoped>
-.slash-command-menu {
-  min-width: 200px;
-  max-width: 300px;
-}
+.slash-command-menu { min-width: 200px; max-width: 300px; }
 </style>

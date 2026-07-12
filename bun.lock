@@ -146,10 +146,13 @@
         "@tailwindcss/vite": "^4.3.1",
         "@tanstack/vue-virtual": "^3.13.31",
         "@vueuse/core": "^14.3.0",
+        "async-mutex": "^0.5.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "date-fns": "^3.6.0",
         "dompurify": "^3.0.0",
+        "fuzzysort": "^3.1.0",
+        "jsonc-parser": "^3.3.1",
         "lucide-vue-next": "^1.0.0",
         "markdown-it": "^14.2.0",
         "markdown-it-footnote": "^4.0.0",
@@ -181,7 +184,7 @@
         "tailwindcss": "^4.0.9",
         "typescript": "^5.8.2",
         "vite": "^5.4.19",
-        "vite-plugin-electron": "^1.1.0",
+        "vite-plugin-electron": "^1.0.4",
         "vitest": "^2.1.8",
         "vue-tsc": "^2.2.4",
       },
@@ -1209,6 +1212,8 @@
     "async": ["async@3.2.6", "", {}, "sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA=="],
 
     "async-exit-hook": ["async-exit-hook@2.0.1", "", {}, "sha512-NW2cX8m1Q7KPA7a5M2ULQeZ2wR5qI5PAbw5L0UOMxdioVk9PMZ0h1TmyZEkPYrCvYjDlFICusOu1dlEKAAeXBw=="],
+
+    "async-mutex": ["async-mutex@0.5.0", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA=="],
 
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
 

@@ -44,10 +44,45 @@ function handleRemove(e: MouseEvent) {
       </svg>
     </span>
 
-    <!-- Message content -->
-    <span class="flex-1 text-sm text-text line-clamp-2 break-words whitespace-pre-wrap">
-      {{ pending.content }}
-    </span>
+    <!-- Chips container -->
+    <div class="flex flex-col gap-1 flex-1 min-w-0">
+      <!-- Agent chips -->
+      <div
+        v-if="pending.agents && pending.agents.length > 0"
+        class="flex flex-wrap gap-1"
+      >
+        <div
+          v-for="(agent, idx) in pending.agents"
+          :key="'agent-' + idx"
+          class="text-sm font-medium text-yellow-400"
+        >
+          @{{ agent.name }}
+        </div>
+      </div>
+
+      <!-- File chips -->
+      <div
+        v-if="pending.files && pending.files.length > 0"
+        class="flex flex-wrap gap-1"
+      >
+        <div
+          v-for="(file, idx) in pending.files"
+          :key="'file-' + idx"
+          class="flex items-center gap-1 px-2 py-0.5 bg-bg-hover rounded text-xs text-text-muted"
+        >
+          <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+            <polyline points="13 2 13 9 20 9"></polyline>
+          </svg>
+          <span class="truncate max-w-[100px]">{{ file.name }}</span>
+        </div>
+      </div>
+
+      <!-- Message content -->
+      <span class="text-sm text-text line-clamp-2 break-words whitespace-pre-wrap">
+        {{ pending.content }}
+      </span>
+    </div>
 
     <!-- Action buttons -->
     <div class="flex items-center gap-1">
@@ -71,7 +106,7 @@ function handleRemove(e: MouseEvent) {
         @click="handleEdit"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+          <path d="M17 3a2.828 2.828 1 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
         </svg>
       </button>
 

@@ -3,11 +3,55 @@ export interface LocationRef {
   workspaceID?: string
 }
 
-export interface PromptInput {
-  type: 'text' | 'tool_result'
-  text?: string
-  toolResult?: unknown
+
+export interface TextPromptInput {
+  type: 'text'
+  text: string
 }
+
+export interface FilePromptInput {
+  type: 'file'
+  mime: string
+  filename?: string
+  url: string
+  source?: {
+    type: 'file' | 'resource'
+    path?: string
+    text?: { start: number; end: number; value: string }
+    clientName?: string
+    uri?: string
+  }
+}
+
+export interface ToolResultPromptInput {
+  type: 'tool_result'
+  toolResult?: unknown
+  // file part
+  url?: string
+  filename?: string
+  mime?: string
+  source?: {
+    type: 'file' | 'resource'
+    path?: string
+    text?: { start: number; end: number; value: string }
+    clientName?: string
+    uri?: string
+  }
+  // agent part
+  name?: string
+}
+
+export interface AgentPromptInput {
+  type: 'agent'
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
+export type PromptInput = TextPromptInput | FilePromptInput | ToolResultPromptInput | AgentPromptInput
 
 // Model reference matching backend's ModelRef
 export interface ModelRef {
@@ -33,6 +77,23 @@ export interface Session {
   createdAt: Date
 }
 
+export interface FilePart {
+  type: 'file'
+  mime: string
+  name?: string
+  url: string
+}
+
+export interface AgentPart {
+  type: 'agent'
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -40,6 +101,10 @@ export interface Message {
   timestamp: Date
   toolCalls?: ToolCall[]
   reasoning?: string
+  /** File attachments (images, PDFs, etc.) */
+  files?: FilePart[]
+  /** Agent mentions in the message */
+  agents?: AgentPart[]
   /** Response duration in milliseconds (for assistant messages) */
   duration?: number
   /** Reasoning duration in milliseconds */
@@ -242,12 +307,15 @@ export const IPC_CHANNELS = {
   SESSION_DELETE: 'session:delete',
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   SESSION_TODO: 'session:todo',
-  
+  SESSION_AGENTS: 'session:agents',
+
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
   FILE_LIST: 'file:list',
   FILE_PICK: 'file:pick',
-  
+  FILE_PICK_IMAGE: 'file:pick-image',
+  FILE_SEARCH: 'file:search',
+
   TOOL_EXECUTE: 'tool:execute',
   TOOL_LIST: 'tool:list',
   
@@ -319,3 +387,18 @@ export const IPC_CHANNELS = {
 } as const
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
+
+export interface Agent {
+  name: string
+  description?: string
+  mode: 'subagent' | 'primary' | 'all'
+  builtIn: boolean
+}
+
+export interface FileMatch {
+  path: string
+  relativePath: string
+  isDirectory: boolean
+  url: string
+  mimeType: string
+}

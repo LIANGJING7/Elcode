@@ -1387,7 +1387,13 @@ export const layer = Layer.effect(
             env: provider.env ?? existing?.env ?? [],
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
             source: "config",
-            models: existing?.models ?? {},
+            key: provider.options?.apiKey,
+            models: Object.keys(provider.models ?? {}).length > 0
+              ? Object.fromEntries(
+                  Object.entries(existing?.models ?? {})
+                    .filter(([modelID]) => Object.keys(provider.models ?? {}).includes(modelID))
+                )
+              : {},
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
@@ -1551,7 +1557,7 @@ export const layer = Layer.effect(
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
           const providerID = ProviderV2.ID.make(id)
-          const partial: Partial<Info> = { source: "config" }
+          const partial: Partial<Info> = { source: "config", key: provider.options?.apiKey }
           if (provider.env) partial.env = provider.env
           if (provider.name) partial.name = provider.name
           if (provider.options) partial.options = provider.options

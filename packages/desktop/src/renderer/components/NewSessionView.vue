@@ -1,152 +1,119 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useSessionStore } from '../stores/session'
-import { useModelsStore } from '../stores/models'
+import { onMounted, nextTick } from 'vue'
+import { watch } from 'vue'
+import { useSessionStore, parseMentions } from '../stores/session'
+import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
-import ComposerInput from './composer/ComposerInput.vue'
-import SessionOptions from './composer/SessionOptions.vue'
+import type { PromptInput, PromptOptions } from '../../types/ipc'
+import Composer from './Composer.vue'
 import WorkspaceSelector from './composer/WorkspaceSelector.vue'
 
 const sessionStore = useSessionStore()
-const modelsStore = useModelsStore()
+const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
 
-const inputRef = ref<{ focus: () => void } | null>(null)
-const inputValue = ref('')
-const isFocused = ref(false)
-const sessionOptions = ref<Record<string, unknown>>({ mode: 'build', model: '' })
+onMounted(() => nextTick())
 
-// 初始化模型选择
-onMounted(() => {
-  if (modelsStore.selectedModel) {
-    sessionOptions.value.model = modelsStore.selectedModel
+// 监听会话状态，自动切换到 chat view
+watch(() => sessionStore.currentSessionId, (newId) => {
+  if (newId) {
+    // effectiveView 会自动返回 'chat'，无需手动调用 ui.setView('chat')
   }
-  nextTick(() => inputRef.value?.focus())
 })
 
-const canSend = computed(() => inputValue.value.trim().length > 0)
 
-async function handleSend(content: string) {
-    console.log('[DEBUG NewSessionView] === handleSend CALLED ===')
-    console.log('[DEBUG NewSessionView] Content:', content.slice(0, 50))
-    console.log('[DEBUG NewSessionView] sessionOptions:', JSON.stringify(sessionOptions.value))
-    console.log('[DEBUG NewSessionView] currentSessionId:', sessionStore.currentSessionId)
-    console.log('[DEBUG NewSessionView] isPendingNewSession:', sessionStore.isPendingNewSession)
 
-    // 确保处于 pending 新会话状态，这样 sendMessage 才能创建会话
-    if (!sessionStore.currentSessionId && !sessionStore.isPendingNewSession) {
-      console.log('[DEBUG NewSessionView] Calling startNewSession()')
-      sessionStore.startNewSession()
-      console.log('[DEBUG NewSessionView] After startNewSession, isPendingNewSession:', sessionStore.isPendingNewSession)
+function handleInterrupt() {}
+// 处理 Composer 的 send 事件
+async function handleComposerSend(
+  content: string,
+  options: Record<string, unknown>,
+  attachments: Array<{ type: string; name: string; path: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>
+) {
+  console.log('[DEBUG NewSessionView] === handleComposerSend CALLED ===')
+  console.log('[DEBUG NewSessionView] Content:', content.slice(0, 50))
+  console.log('[DEBUG NewSessionView] Options:', JSON.stringify(options))
+  console.log('[DEBUG NewSessionView] Attachments:', attachments.length)
+  console.log('[DEBUG NewSessionView] currentSessionId:', sessionStore.currentSessionId)
+  console.log('[DEBUG NewSessionView] isPendingNewSession:', sessionStore.isPendingNewSession)
+
+  // 确保处于 pending 新会话状态
+  if (!sessionStore.currentSessionId && !sessionStore.isPendingNewSession) {
+    console.log('[DEBUG NewSessionView] Calling startNewSession()')
+    sessionStore.startNewSession()
+    console.log('[DEBUG NewSessionView] After startNewSession, isPendingNewSession:', sessionStore.isPendingNewSession)
+  }
+
+  console.log('[DEBUG NewSessionView] Calling sessionStore.sendMessage...')
+
+  // Convert sessionOptions.mode to agent field (plan/build)
+  const mode = options.mode as string
+  const agent = mode === 'plan' ? 'plan' : 'build'
+
+  // Parse @mentions in content
+  let inputs: PromptInput[] = []
+  let rawText: string | undefined
+  try {
+    const result = await parseMentions(content, workspaceStore.currentWorkspace?.path)
+    inputs = result.parts
+    rawText = result.rawText
+  } catch (error) {
+    console.error('[NewSessionView] parseMentions error:', error)
+    // Fallback to plain text
+    inputs = [{ type: 'text', text: content.trim() }]
+    rawText = content.trim()
+  }
+
+  // 添加图片附件
+  for (const att of attachments) {
+    if (att.mime) {
+      const url = att.url || (att.content
+        ? (att.isBase64
+            ? `data:${att.mime};base64,${att.content}`
+            : `data:${att.mime};utf8,${encodeURIComponent(att.content)}`)
+        : '')
+
+      inputs.push({
+        type: 'file',
+        mime: att.mime,
+        filename: att.name,
+        url
+      })
     }
-
-    console.log('[DEBUG NewSessionView] Calling sessionStore.sendMessage...')
-
-    // Note: ui.setView('chat') is NOT needed here because effectiveView
-    // automatically returns 'chat' when currentSessionId is set.
-    // Calling it after sendMessage completes causes a timing issue.
-    // Convert sessionOptions.mode to agent field (plan/build)
-    const mode = sessionOptions.value.mode as string
-    const agent = mode === 'plan' ? 'plan' : 'build'
-    await sessionStore.sendMessage(content, { agent })
-
-    console.log('[DEBUG NewSessionView] ✓ sendMessage completed')
-    console.log('[DEBUG NewSessionView] currentSessionId after:', sessionStore.currentSessionId)
-    console.log('[DEBUG NewSessionView] isPendingNewSession after:', sessionStore.isPendingNewSession)
-    // Removed: ui.setView('chat') - effectiveView handles this automatically
   }
 
-function handleManualSend() {
-  if (canSend.value) {
-    handleSend(inputValue.value)
-    inputValue.value = ''
-  }
+  // 调用 sendMessage
+  const promptOptions: PromptOptions = { agent }
+  await sessionStore.sendMessage(inputs, promptOptions, rawText)
+
+  console.log('[DEBUG NewSessionView] ✓ sendMessage completed')
+  console.log('[DEBUG NewSessionView] currentSessionId after:', sessionStore.currentSessionId)
 }
 </script>
 
 <template>
-  <div class="new-session-view flex-1 flex items-center justify-center bg-bg">
+  <div class="new-session-view flex-1 flex flex-col items-center justify-center bg-bg">
     <div class="w-full max-w-2xl mx-6">
-      <!-- ELCODE 标识 -->
       <div class="text-4xl font-bold text-text-muted/30 mb-4 text-center select-none">
         ELCODE
       </div>
 
-      <!-- 工作区选择器（左对齐） -->
-      <div class="flex justify-start mb-6">
+      <div class="flex mb-1 mx-6">
         <WorkspaceSelector />
       </div>
 
-      <!-- 输入卡片 -->
-      <div
-        class="bg-bg-elevated rounded-2xl shadow-lg transition-all duration-200 flex flex-col"
-        :class="isFocused ? 'shadow-md' : 'shadow-lg'"
-      >
-        <!-- 输入区域 -->
-        <div class="flex-1 min-h-[80px] px-3 pt-3 pb-1">
-          <ComposerInput
-            ref="inputRef"
-            v-model:value="inputValue"
-            placeholder="Ask anything... (Shift+Enter for new line)"
-            @send="handleSend"
-            @focus="isFocused = true"
-            @blur="isFocused = false"
-          />
-        </div>
-
-        <!-- 底部工具栏 -->
-        <div class="flex items-center gap-2 px-3 py-2 flex-shrink-0">
-          <!-- Plus Button -->
-          <button
-            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-bg-hover hover:bg-bg-tertiary text-text-muted transition-colors"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-
-          <!-- Spacer -->
-          <div class="flex-1"></div>
-
-          <!-- SessionOptions + Send -->
-          <div class="flex items-center gap-1.5 flex-shrink-0">
-            <SessionOptions
-              v-model:options="sessionOptions"
-              :editing-session="false"
-            />
-
-            <!-- Send Button -->
-            <button
-              class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-              :class="canSend
-                ? 'bg-accent hover:bg-accent-hover text-white'
-                : 'bg-bg-hover text-text-muted'"
-              :disabled="!canSend"
-              title="Send (Enter)"
-              @click="handleManualSend"
-            >
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="19" x2="12" y2="5"></line>
-                <polyline points="5 12 12 5 19 12"></polyline>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Footer hints -->
-        <div
-          v-if="inputValue.length > 0"
-          class="flex items-center justify-end px-4 py-1.5 border-t border-border/60"
-        >
-          <div class="flex items-center gap-2">
-            <kbd class="text-xs text-text-muted bg-bg-hover px-1.5 py-0.5 rounded font-mono">Enter</kbd>
-            <span class="text-xs text-text-muted">to send</span>
-            <span class="text-border mx-0.5">·</span>
-            <kbd class="text-xs text-text-muted bg-bg-hover px-1.5 py-0.5 rounded font-mono">Shift+Enter</kbd>
-            <span class="text-xs text-text-muted">new line</span>
-          </div>
-        </div>
+      <!-- Composer -->
+      <div class="w-full">
+        <Composer
+          compact
+          :disabled="false"
+          :is-streaming="false"
+          :has-active-session="false"
+          :queue-count="0"
+          :pending-queue="[]"
+          placeholder="Ask anything... (Shift+Enter for new line)"
+          @send="handleComposerSend"
+        />
       </div>
     </div>
   </div>
