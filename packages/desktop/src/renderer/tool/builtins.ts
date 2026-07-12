@@ -66,7 +66,6 @@ const readMeta: ToolMeta = {
     }
     return summary
   },
-  hideStatusIcon: true,
   title: () => '',
   detail: () => ''
 }

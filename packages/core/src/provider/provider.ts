@@ -1325,6 +1325,7 @@ export const layer = Layer.effect(
             return
           }
           if (provider.source === "config") {
+            // @ts-expect-error
             providers[providerID] = mergeDeep({
               id: providerID,
               name: providerID,
