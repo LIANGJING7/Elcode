@@ -145,17 +145,19 @@ export function useStreamingStore(): StreamingStore {
           console.log('[handleEvent] Set message.id to:', part.messageID)
         }
         
-        // For reasoning part, set reasoning status to done
-        // This is needed because V1 format doesn't have REASONING_ENDED event
-        // The message.part.updated with reasoning part marks the end of reasoning
+        // For reasoning part, only set reasoning status to done if stream is complete
+        // Keep 'thinking' status while stream.status === 'streaming'
         if (partType === 'reasoning') {
-          state.reasoning.status = 'done'
           state.reasoning.id = part.id
-          state.reasoning.endedAt = part.time?.end ? new Date(part.time.end).getTime() : Date.now()
+          // Don't set status to 'done' while stream is still active
+          // Only record endedAt if part has end time
+          if (part.time?.end) {
+            state.reasoning.endedAt = new Date(part.time.end).getTime()
+          }
           if (!state.reasoning.startedAt) {
             state.reasoning.startedAt = Date.now()
           }
-          console.log('[handleEvent] Reasoning status set to done for partId:', part.id)
+          console.log('[handleEvent] Reasoning part updated for partId:', part.id, 'stream status:', state.status)
         }
         
         // Flush pending deltas for this partId
@@ -225,8 +227,10 @@ export function useStreamingStore(): StreamingStore {
     
     console.log('[flushPendingDeltas] Merged delta length:', mergedDelta.length)
     
-    // For reasoning type, set content directly (avoid multiple dispatches)
+    // For reasoning type, set content directly and keep 'thinking' status
+    // Only transition to 'done' when stream ends (STREAM_DONE/STEP_ENDED)
     if (partType === 'reasoning') {
+      // Keep reasoning status as 'thinking' while stream is active
       state.reasoning.status = 'thinking'
       state.reasoning.id = partId
       if (!state.reasoning.startedAt) {
@@ -234,10 +238,7 @@ export function useStreamingStore(): StreamingStore {
       }
       // Directly append to content, skip pending array to avoid race condition
       state.reasoning.content = state.reasoning.content + mergedDelta
-      // Mark as done
-      state.reasoning.status = 'done'
-      state.reasoning.endedAt = Date.now()
-      console.log('[flushPendingDeltas] Reasoning content directly set, status: done')
+      console.log('[flushPendingDeltas] Reasoning content updated, status: thinking (stream active)')
     } else {
       // For text type, also set content directly
       state.message.content = state.message.content + mergedDelta

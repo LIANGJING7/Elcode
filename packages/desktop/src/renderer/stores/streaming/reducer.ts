@@ -56,10 +56,20 @@ export function streamingReducer(
     case 'STREAM_DONE':
       // Final terminal event — response is fully complete.
       state.status = 'done'
+      // Also mark reasoning as done if it was still thinking
+      if (state.reasoning.status === 'thinking') {
+        state.reasoning.status = 'done'
+        state.reasoning.endedAt = Date.now()
+      }
       return state
 
     case 'STEP_FAILED':
       state.status = 'error'
+      // Also mark reasoning as done if it was thinking
+      if (state.reasoning.status === 'thinking') {
+        state.reasoning.status = 'done'
+        state.reasoning.endedAt = Date.now()
+      }
       return state
 
     // ============================================

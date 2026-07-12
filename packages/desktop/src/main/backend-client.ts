@@ -332,15 +332,39 @@ export const backend = {
       console.log('[SSE CONNECT] url:', url)
       console.log('[SSE CONNECT] sessionID:', sessionID)
       console.log('[SSE CONNECT] directory param:', directory)
+      
+      // Heartbeat timeout: 60s (backend sends heartbeat every 10s, allow 6 missed)
+      const HEARTBEAT_TIMEOUT_MS = 30_000
+      let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
+      let ended = false
+      
+      const resetHeartbeat = () => {
+        if (heartbeatTimer) clearTimeout(heartbeatTimer)
+        heartbeatTimer = setTimeout(() => {
+          if (!ended) {
+            console.log('[SSE] heartbeat timeout, ending stream')
+            ended = true
+            onEvent({ type: 'stream.ended' })
+            req.destroy()
+          }
+        }, HEARTBEAT_TIMEOUT_MS)
+      }
+      
       const req = http.request(url, { method: "GET" }, (res) => {
         if (res.statusCode !== 200) {
           console.error('[SSE CONNECT] HTTP', res.statusCode, res.statusMessage)
+          if (!ended) {
+            ended = true
+            onEvent({ type: 'stream.ended' })
+          }
           return
         }
         console.log('[SSE CONNECT] connected (200)')
+        resetHeartbeat()  // Start heartbeat timer
         let buffer = ""
         let eventCount = 0
         res.on("data", (chunk) => {
+          resetHeartbeat()  // Reset on each data chunk
           buffer += chunk.toString()
           const lines = buffer.split("\n")
           buffer = lines.pop() || ""
@@ -359,13 +383,26 @@ export const backend = {
         })
         res.on("end", () => {
           console.log('[SSE] stream ended, total events:', eventCount)
+          if (heartbeatTimer) clearTimeout(heartbeatTimer)
+          if (!ended) {
+            ended = true
+            onEvent({ type: 'stream.ended' })
+          }
         })
       })
-      req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
+      req.on("error", (e) => {
+        console.error('[SSE CONNECT] request error:', e.message)
+        if (heartbeatTimer) clearTimeout(heartbeatTimer)
+        if (!ended) {
+          ended = true
+          onEvent({ type: 'stream.ended' })
+        }
+      })
       req.end()
       
       return () => {
         console.log('[SSE] destroying request for', sessionID)
+        if (heartbeatTimer) clearTimeout(heartbeatTimer)
         req.destroy()
       }
     },
