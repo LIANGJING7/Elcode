@@ -40,7 +40,7 @@ export const layer: Layer.Layer<Service, never, SkillV2.Service | SkillManagerTo
         const recentMessages = messages.slice(-10)
         const conversationSummary = recentMessages.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join("\n\n")
 
-        return `You are a skill evolution reviewer. Analyze the conversation and decide if any skill should be created or updated.
+        const prompt = `You are a skill evolution reviewer. Analyze the conversation and decide if any skill should be created or updated.
 
 Existing skills: ${skillNames}
 
@@ -71,6 +71,13 @@ Guidelines:
 - Update skill only if correction significantly improves it
 - Set confidence > 0.7 only for clear improvements
 - Prefer updating existing skills over creating new ones`
+
+        console.log("\n" + "▼".repeat(80))
+        console.log("▼▼▼ [SkillEvolution] PROMPT TO LLM ▼▼▼")
+        console.log(prompt)
+        console.log("▼".repeat(80) + "\n")
+
+        return prompt
       })
 
       const review = Effect.fn("BackgroundReviewer.review")(function* (
