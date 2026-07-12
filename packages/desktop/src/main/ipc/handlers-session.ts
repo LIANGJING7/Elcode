@@ -196,20 +196,105 @@ function safeParseToolArgs(raw: string): Record<string, unknown> {
 }
 
 /**
- * Convert backend message (V1 or V2) to desktop Message format.
+ * Reconstruct original text from text parts and agent parts
+ * 
+ * Algorithm:
+ * - Agent parts have source.start/end positions relative to original text
+ * - Text parts fill the gaps between agents
+ * - We assume text parts are ordered to match the gaps
+ * 
+ * Example:
+ * Original: "@AI-Engineer 111 @Account-Strategist"
+ * Agent 1: start=0, end=12 → "@AI-Engineer"
+ * Text: " 111 "
+ * Agent 2: start=17, end=36 → "@Account-Strategist"
+ * 
+ * Reconstructed: "@AI-Engineer" + " 111 " + "@Account-Strategist"
+ */
+function reconstructOriginalText(
+  textParts: Array<{ text?: string }>,
+  agentParts: Array<{ type: 'agent'; name?: string; source?: { value?: string; start: number; end: number } }>
+): string {
+  const segments: string[] = []
+  const textContent = textParts.map(p => p.text || '').join('')
+  
+  // Sort agents by position
+  const sortedAgents = agentParts
+    .filter(a => a.source?.start !== undefined)
+    .sort((a, b) => a.source!.start - b.source!.start)
+  
+  if (sortedAgents.length === 0) {
+    return textContent
+  }
+  
+  // Strategy: alternate between agent mentions and user text
+  // First agent: insert its @mention
+  // Then insert user text (from textParts)
+  // Then next agent: insert its @mention
+  // etc.
+  
+  let textIndex = 0
+  const textSegments = textParts.map(p => p.text || '')
+  
+  for (let i = 0; i < sortedAgents.length; i++) {
+    const agent = sortedAgents[i]
+    
+    // Add @agent mention
+    const agentText = agent.source?.value || `@${(agent.name || '').replace(/ /g, '-')}`
+    segments.push(agentText)
+    
+    // Add user text after this agent (before next agent or end)
+    if (textIndex < textSegments.length) {
+      segments.push(textSegments[textIndex])
+      textIndex++
+    }
+  }
+  
+  // Add any remaining text
+  while (textIndex < textSegments.length) {
+    segments.push(textSegments[textIndex])
+    textIndex++
+  }
+  
+  return segments.join('')
+}
+
+/**
+ * Convert backend message to renderer Message shape.
  * Returns null for non-displayable types (compaction, agent-switched, etc.).
  */
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
     // V1 format: SessionV1.WithParts
-    // Filter out synthetic text parts (e.g., expanded agent prompts)
-    const textParts = msg.parts.filter(p => p.type === 'text' && p.text && !(p as any).synthetic)
+    // Filter out synthetic text parts (expanded agent prompts)
+    console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
+    console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
+    
+    const allTextParts = msg.parts.filter(p => p.type === 'text')
+    console.log('[toMessage V1] Text parts:', allTextParts.length, 
+      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: (p as any).synthetic })))
+    
+    const textParts = msg.parts.filter(p => 
+      p.type === 'text' && p.text && !(p as any).synthetic
+    )
     const toolParts = msg.parts.filter(p => p.type === 'tool')
     const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
     const fileParts = msg.parts.filter(p => p.type === 'file')
     const agentParts = msg.parts.filter(p => p.type === 'agent')
 
-    const content = textParts.map(p => p.text!).join('\n')
+    console.log('[toMessage V1] Filtered text parts:', textParts.length)
+    console.log('[toMessage V1] Agent parts:', agentParts.length, 
+      agentParts.map(p => ({ name: (p as any).name, source: (p as any).source })))
+
+    // Reconstruct original text with @agent mentions
+    let content: string
+    if (agentParts.length > 0) {
+      console.log('[toMessage V1] === RECONSTRUCTING ORIGINAL TEXT ===')
+      content = reconstructOriginalText(textParts, agentParts)
+      console.log('[toMessage V1] Reconstructed content:', JSON.stringify(content))
+    } else {
+      content = textParts.map(p => p.text!).join('\n')
+    }
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
@@ -232,13 +317,17 @@ function toMessage(msg: BackendMessage): Message | null {
         }))
       : undefined
 
+    // Extract agent mentions for highlighting
     const agents = agentParts.length > 0
       ? agentParts.map(p => ({
           type: 'agent' as const,
-          name: (p as any).name || '',
+          name: (p as any).name,
           source: (p as any).source
         }))
       : undefined
+
+    console.log('[toMessage V1] Result content:', content.slice(0, 100))
+    console.log('[toMessage V1] Result agents:', agents?.length || 0)
 
     return {
       id: msg.info.id,
@@ -293,21 +382,138 @@ function toMessage(msg: BackendMessage): Message | null {
   }
 
   if (msg.type === 'user') {
+    // V2 User message: text is already filtered (no synthetic), files/agents at top level
+    console.log('[toMessage V2 User] ========================================')
+    console.log('[toMessage V2 User] Processing message:', msg.id)
+    console.log('[toMessage V2 User] Raw message type:', msg.type)
+    
+    // CRITICAL: Log the entire raw message structure
+    console.log('[toMessage V2 User] === RAW MESSAGE STRUCTURE ===')
+    console.log('[toMessage V2 User] msg keys:', Object.keys(msg))
+    console.log('[toMessage V2 User] msg.text:', JSON.stringify(msg.text))
+    console.log('[toMessage V2 User] msg.parts:', (msg as any).parts?.length)
+    if ((msg as any).parts) {
+      console.log('[toMessage V2 User] === PARTS DETAIL ===')
+      ;(msg as any).parts.forEach((part: any, idx: number) => {
+        console.log(`[toMessage V2 User] Part ${idx}:`, JSON.stringify(part))
+      })
+    }
+    
     const text = Array.isArray(msg.text) ? msg.text.join('\n') : (msg.text || '')
-
-    // V2 user message may have files in msg.content or msg.files
-    const fileParts = (msg.content || []).filter(p => p.type === 'file')
+    
+    console.log('[toMessage V2 User] joined text (full):', JSON.stringify(text))
+    console.log('[toMessage V2 User] text length:', text.length)
+    
     const msgFiles = (msg as any).files || []
-    const allFiles = [...fileParts, ...msgFiles]
-
-    const files = allFiles.length > 0
-      ? allFiles.map(p => ({
+    const msgAgents = (msg as any).agents || []
+    
+    console.log('[toMessage V2 User] files count:', msgFiles.length)
+    console.log('[toMessage V2 User] agents count:', msgAgents.length)
+    
+    if (msgAgents.length > 0) {
+      console.log('[toMessage V2 User] === AGENTS DETAIL ===')
+      msgAgents.forEach((a: any, idx: number) => {
+        console.log(`[toMessage V2 User] Agent ${idx}:`)
+        console.log(`[toMessage V2 User]   name: "${a.name}"`)
+        console.log(`[toMessage V2 User]   source.start: ${a.source?.start}`)
+        console.log(`[toMessage V2 User]   source.end: ${a.source?.end}`)
+        console.log(`[toMessage V2 User]   source.value: "${a.source?.value}"`)
+        console.log(`[toMessage V2 User]   source.text: "${a.source?.text}"`)
+      })
+      
+      // Try to reconstruct original text
+      console.log('[toMessage V2 User] === RECONSTRUCTION ATTEMPT ===')
+      const sorted = [...msgAgents]
+        .filter(a => a.source?.start !== undefined && a.source?.end !== undefined)
+        .sort((a, b) => a.source!.start - b.source!.start)
+      
+      console.log('[toMessage V2 User] Sorted agents:', sorted.map((a: any) => ({
+        name: a.name,
+        start: a.source!.start,
+        end: a.source!.end,
+        value: a.source!.value || a.source!.text
+      })))
+      
+      // Method 1: Assume text is filtered (no @mentions), use source positions as-is
+      console.log('[toMessage V2 User] --- Method 1: Use source positions directly ---')
+      let reconstructed1 = ''
+      let lastEnd1 = 0
+      for (const agent of sorted) {
+        const start = agent.source!.start
+        const end = agent.source!.end
+        
+        console.log(`[toMessage V2 User] Processing agent "${agent.name}":`)
+        console.log(`[toMessage V2 User]   start=${start}, end=${end}, lastEnd=${lastEnd1}`)
+        
+        // Add text before this agent
+        if (start > lastEnd1 && lastEnd1 < text.length) {
+          const segment = text.slice(lastEnd1, Math.min(start, text.length))
+          console.log(`[toMessage V2 User]   Adding pre-text [${lastEnd1}:${Math.min(start, text.length)}]: "${segment}"`)
+          reconstructed1 += segment
+        }
+        
+        // Add @agent
+        const agentText = agent.source?.value || agent.source?.text || `@${agent.name.replace(/ /g, '-')}`
+        console.log(`[toMessage V2 User]   Adding agent text: "${agentText}"`)
+        reconstructed1 += agentText
+        lastEnd1 = end
+        
+        console.log(`[toMessage V2 User]   Current reconstructed: "${reconstructed1}"`)
+      }
+      
+      // Add remaining text
+      if (lastEnd1 < text.length) {
+        const segment = text.slice(lastEnd1)
+        console.log(`[toMessage V2 User] Adding remaining text [${lastEnd1}:${text.length}]: "${segment}"`)
+        reconstructed1 += segment
+      }
+      
+      console.log('[toMessage V2 User] Method 1 result:', JSON.stringify(reconstructed1))
+      
+      // Method 2: Assume text has @mentions removed, need to recalculate positions
+      console.log('[toMessage V2 User] --- Method 2: Assume @mentions removed from text ---')
+      // This method would need to recalculate positions based on how many mentions were before
+      // For now, let's just compare source.value with actual @mention
+      
+      // Let's check if we can find @mention in source positions
+      console.log('[toMessage V2 User] --- Checking source.value positions in text ---')
+      for (const agent of sorted) {
+        const agentText = agent.source?.value || agent.source?.text
+        if (agentText) {
+          // Check if agentText exists in joined text
+          const posInText = text.indexOf(agentText)
+          console.log(`[toMessage V2 User] Agent "${agent.name}" text "${agentText}" found at position ${posInText} in text`)
+        }
+      }
+      
+      // For now, use the original text field as-is
+      console.log('[toMessage V2 User] === USING ORIGINAL TEXT (NO RECONSTRUCTION) ===')
+    }
+    
+    // Files are at top level in V2 format (uri field, not url)
+    const files = msgFiles.length > 0
+      ? msgFiles.map((p: any) => ({
           type: 'file' as const,
-          mime: (p as any).mime || 'application/octet-stream',
-          name: (p as any).filename || (p as any).name,
-          url: (p as any).url || ''
+          mime: p.mime || 'application/octet-stream',
+          name: p.name,
+          url: p.uri || ''
         }))
       : undefined
+
+    // Agent mentions are at top level in V2 format
+    const agents = msgAgents.length > 0
+      ? msgAgents.map((a: any) => ({
+          type: 'agent' as const,
+          name: a.name,
+          source: a.source
+        }))
+      : undefined
+
+    console.log('[toMessage V2 User] === FINAL RESULT ===')
+    console.log('[toMessage V2 User]   content length:', text.length)
+    console.log('[toMessage V2 User]   content:', JSON.stringify(text))
+    console.log('[toMessage V2 User]   agents:', agents?.length || 0)
+    console.log('[toMessage V2 User] ========================================')
 
     return {
       id: msg.id,
@@ -315,6 +521,7 @@ function toMessage(msg: BackendMessage): Message | null {
       content: text,
       timestamp: new Date(msg.time.created),
       ...(files && files.length > 0 ? { files } : {}),
+      ...(agents && agents.length > 0 ? { agents } : {}),
     }
   }
 
