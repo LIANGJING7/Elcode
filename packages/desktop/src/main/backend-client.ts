@@ -569,57 +569,40 @@ export const backend = {
        */
       list: async (query: SessionListQuery): Promise<SessionListResult> => {
         if (!backendPort || !backendReady) {
-          console.error('[BACKEND_SESSION_LIST] Backend not ready - port:', backendPort, 'ready:', backendReady)
           throw new Error("Backend not ready")
         }
         
         const params = new URLSearchParams()
-        // Forward directory/workspace so WorkspaceRoutingMiddleware resolves the
-        // user's project (not the launcher's cwd). Without these, the backend
-        // falls back to process.cwd() (the monorepo root) and returns sessions
-        // for the wrong project_id, yielding an empty list.
         if (query.directory) params.set('directory', storagePath(query.directory))
-        // Filter to root sessions only (exclude subagent child sessions with parent_id set)
         if (query.roots) params.set('roots', 'true')
         if (query.start) params.set('start', String(query.start))
         if (query.search) params.set('search', query.search)
         if (query.limit) params.set('limit', String(query.limit))
         
         const url = `http://localhost:${backendPort}/session?${params.toString()}`
-        console.log('[BACKEND_SESSION_LIST] Requesting:', url)
         
         return new Promise((resolve, reject) => {
           const req = http.request(url, { method: "GET" }, (res) => {
-            console.log('[BACKEND_SESSION_LIST] Response status:', res.statusCode)
             let data = ""
             res.on("data", chunk => data += chunk)
             res.on("end", () => {
-              console.log('[BACKEND_SESSION_LIST] Response data length:', data.length)
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const rawSessions = data ? JSON.parse(data) : []
-                  console.log('[BACKEND_SESSION_LIST] Raw sessions count:', Array.isArray(rawSessions) ? rawSessions.length : 'not array')
-                  if (Array.isArray(rawSessions) && rawSessions.length > 0) {
-                    console.log('[BACKEND_SESSION_LIST] First session:', JSON.stringify(rawSessions[0]).slice(0, 200))
-                  }
                   const conversations = (rawSessions as Array<Record<string, unknown>>).map(toConversation)
-                  console.log('[BACKEND_SESSION_LIST] Converted conversations:', conversations.length)
                   resolve({
                     conversations: conversations,
-                    nextCursor: undefined  // Instance API doesn't support cursor pagination
+                    nextCursor: undefined
                   })
                 } catch (parseError) {
-                  console.error('[BACKEND_SESSION_LIST] Parse error:', parseError, 'Data:', data.slice(0, 200))
                   reject(new Error(`Failed to parse response: ${data}`))
                 }
               } else {
-                console.error('[BACKEND_SESSION_LIST] HTTP error:', res.statusCode, data.slice(0, 200))
                 reject(new Error(`HTTP ${res.statusCode}: ${data}`))
               }
             })
           })
           req.on("error", (err) => {
-            console.error('[BACKEND_SESSION_LIST] Request error:', err)
             reject(err)
           })
           req.end()
