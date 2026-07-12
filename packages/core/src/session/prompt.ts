@@ -47,6 +47,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 import { Database } from "@/core/database/database"
 import { SessionEvent } from "@/core/session/event"
 import { SessionMessage } from "@/core/session/message"
@@ -122,6 +123,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const reviewer = yield* BackgroundReviewer.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1466,6 +1468,19 @@ export const layer = Layer.effect(
         }
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+        
+        // Skill evolution: review conversation after each prompt completes
+        const reviewMessages = msgs
+          .filter((m) => m.info.role === "user" || m.info.role === "assistant")
+          .map((m) => ({
+            role: m.info.role as string,
+            content: m.parts
+              .filter((p) => p.type === "text" && "text" in p)
+              .map((p: any) => p.text || "")
+              .join(""),
+          }))
+        yield* reviewer.reviewInBackground(reviewMessages)
+        
         return yield* lastAssistant(sessionID)
       },
     )
@@ -1636,6 +1651,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(Image.defaultLayer),
+    Layer.provide(BackgroundReviewer.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,
