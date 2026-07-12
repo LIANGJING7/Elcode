@@ -36,7 +36,6 @@ function write(name: string, durationMs: number, fields?: Record<string, string 
         .map(([key, value]) => `${key}=${value}`)
         .join(" ")
     : ""
-  console.error(`[acp-profile] ${name} ${Math.round(durationMs)}ms${extra ? ` ${extra}` : ""}`)
 }
 
 export * as ACPProfile from "./profile"

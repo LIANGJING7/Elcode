@@ -20,17 +20,10 @@ export const layer = Layer.effect(
 
     const publish: EventV2.Interface["publish"] = (definition, data, options) =>
       Effect.gen(function* () {
-        // DEBUG: Log event publish
-        console.log('[DEBUG EventV2Bridge.publish] type:', definition.type, 'sessionID:', (data as Record<string, unknown>)?.sessionID || 'none', 'hasLocation:', !!options?.location)
-        
         if (options?.location) return yield* events.publish(definition, data, options)
         const ctx = yield* InstanceRef
-        if (!ctx) {
-          console.log('[DEBUG EventV2Bridge.publish] NO InstanceRef - publishing without location')
-          return yield* events.publish(definition, data, options)
-        }
+        if (!ctx) return yield* events.publish(definition, data, options)
         const workspaceID = yield* WorkspaceRef
-        console.log('[DEBUG EventV2Bridge.publish] InstanceRef directory:', ctx.directory, 'workspaceID:', workspaceID)
         return yield* events.publish(definition, data, {
           ...options,
           location: new Location.Info({
@@ -43,9 +36,6 @@ export const layer = Layer.effect(
 
     const unsubscribe = yield* events.listen((event) =>
       Effect.gen(function* () {
-        // DEBUG: Log events received by listener
-        console.log('[DEBUG EventV2Bridge.listen] received event type:', event.type, 'location:', event.location?.directory, 'seq:', event.seq)
-        
         const ctx = yield* InstanceRef
         const workspaceID = (yield* WorkspaceRef) ?? event.location?.workspaceID
         GlobalBus.emit("event", {

@@ -618,53 +618,30 @@ export const layer = Layer.effect(
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
-      console.log('[Config.invalidate] invalidating global cache and instance state')
       yield* invalidateGlobal
-      // Also invalidate instance state so cfgSvc.get() reads fresh config
       yield* InstanceState.invalidate(state)
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
       const file = globalConfigFile()
-      console.log('[Config.updateGlobal] target file:', file)
-      
       const before = (yield* readConfigFile(file)) ?? "{}"
-      console.log('[Config.updateGlobal] before length:', before.length)
-      console.log('[Config.updateGlobal] before preview:', before.slice(0, 500))
-      
       const patch = writableGlobal(config)
-      console.log('[Config.updateGlobal] patch keys:', Object.keys(patch))
-      console.log('[Config.updateGlobal] patch provider keys:', patch.provider ? Object.keys(patch.provider) : 'no provider')
-      if (patch.provider) {
-        for (const [pid, p] of Object.entries(patch.provider)) {
-          console.log('[Config.updateGlobal] patch provider[' + pid + '] models:', p.models ? Object.keys(p.models) : 'no models')
-        }
-      }
 
       let next: Info
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
-        console.log('[Config.updateGlobal] file is .json, using JSON.stringify')
         const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
         const merged = mergeDeep(writable(existing), patch)
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
-        console.log('[Config.updateGlobal] changed:', changed)
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
         next = merged
       } else {
-        console.log('[Config.updateGlobal] file is .jsonc, using patchJsonc')
         const updated = patchJsonc(before, patch)
-        console.log('[Config.updateGlobal] updated length:', updated.length)
-        console.log('[Config.updateGlobal] updated preview:', updated.slice(0, 500))
-        console.log('[Config.updateGlobal] before === updated:', before === updated)
         next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
-        console.log('[Config.updateGlobal] changed:', changed)
         if (changed) {
-          console.log('[Config.updateGlobal] writing to file...')
           yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
-          console.log('[Config.updateGlobal] write completed')
         }
       }
 
