@@ -110,30 +110,19 @@ function toToolCall(
   
   if (!state?.result && !state?.structured && !state?.content && typeof state?.output === 'string') {
     const outputStr = state.output
-    console.log('[DEBUG toToolCall] V1 output detected for tool:', name, 'id:', id)
-    console.log('[DEBUG toToolCall]   state.output:', outputStr.slice(0, 300))
     
-    // Try JSON format first: {"structured": {...}, "text": "..."}
     try {
       parsedOutput = JSON.parse(outputStr)
-      const structuredStr = JSON.stringify(parsedOutput?.structured)
-      console.log('[DEBUG toToolCall]   JSON parse success, structured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
     } catch (e) {
-      // Fall back to XML format: <task id="sessionId" state="...">
-      console.log('[DEBUG toToolCall]   JSON parse failed, trying XML extraction')
       parsedOutput = undefined
       
-      // Extract sessionId from <task id="xxx"> attribute
       const taskIdMatch = outputStr.match(/<task\s+id="([^"]+)"/)
       if (taskIdMatch) {
         extractedSessionId = taskIdMatch[1]
-        console.log('[DEBUG toToolCall]   XML extraction success, sessionId:', extractedSessionId)
         
-        // Also try to extract state attribute
         const stateMatch = outputStr.match(/<task[^>]+state="([^"]+)"/)
         const taskState = stateMatch ? stateMatch[1] : 'completed'
         
-        // Build structured from XML attributes
         parsedOutput = {
           structured: {
             type: 'task',
@@ -143,8 +132,6 @@ function toToolCall(
           },
           text: outputStr,
         }
-      } else {
-        console.log('[DEBUG toToolCall]   XML extraction failed, no <task id=...> found')
       }
     }
   }
@@ -152,13 +139,6 @@ function toToolCall(
   const actualStructured = (state?.structured ?? parsedOutput?.structured) as Record<string, unknown> | undefined
   const actualResult = state?.result ?? (parsedOutput && !actualStructured ? parsedOutput : undefined)
   const hasOutput = actualResult !== undefined || actualStructured !== undefined || state?.content
-
-  console.log('[DEBUG toToolCall] final output for tool:', name)
-  const structuredStr = JSON.stringify(actualStructured)
-  console.log('[DEBUG toToolCall]   actualStructured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
-  const resultStr = typeof actualResult === 'string' ? actualResult : JSON.stringify(actualResult)
-  console.log('[DEBUG toToolCall]   actualResult:', resultStr ? resultStr.slice(0, 100) : 'undefined')
-  console.log('[DEBUG toToolCall]   hasOutput:', hasOutput)
 
   const toolCall: ToolCall = {
     id,
@@ -178,8 +158,6 @@ function toToolCall(
     ...(duration !== undefined ? { duration } : {}),
   }
   
-  const outputStr = JSON.stringify(toolCall.output)
-  console.log('[DEBUG toToolCall]   returning toolCall.output:', outputStr ? outputStr.slice(0, 300) : 'undefined')
   return toolCall
 }
 
@@ -562,7 +540,6 @@ export function registerSessionHandlers() {
     return messages.map(msg => {
       let timestamp = msg.timestamp
       if (timestamp instanceof Date && isNaN(timestamp.getTime())) {
-        console.warn('[SESSION_MESSAGES] Invalid Date for msg:', msg.id)
         timestamp = new Date()
       }
       
