@@ -9,12 +9,13 @@ import { computed } from 'vue'
 import { Badge } from '@/components/ui/badge'
 
 const props = defineProps<{
-  status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
+  status: 'connected' | 'disconnected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
 }>()
 
 const label = computed(() => {
   switch (props.status) {
     case 'connected': return 'Connected'
+    case 'disconnected': return 'Disconnected'
     case 'disabled': return 'Disabled'
     case 'failed': return 'Failed'
     case 'needs_auth': return 'Auth Required'
@@ -26,6 +27,7 @@ const label = computed(() => {
 const badgeVariant = computed(() => {
   switch (props.status) {
     case 'connected': return 'success'
+    case 'disconnected': return 'secondary'
     case 'disabled': return 'secondary'
     case 'failed': return 'destructive'
     case 'needs_auth': return 'warning'

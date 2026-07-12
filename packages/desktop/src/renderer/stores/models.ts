@@ -133,7 +133,7 @@ async function loadModels(directory?: string) {
       console.log('[loadModels] result.connected:', result.connected)
       
       // 检查 bailian-coding-plan 的模型
-      const bailianProvider = result.all.find((p: any) => p.id === 'bailian-coding-plan')
+      const bailianProvider = result.all.find((p: any) => p.id === 'bailian-coding-plan') as any
       if (bailianProvider) {
         console.log('[loadModels] bailian-coding-plan models:', Object.keys(bailianProvider.models || {}))
       } else {

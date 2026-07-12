@@ -2,7 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, shallowReactive, watch as vueWatch } from 'vue'
-import type { Message, ToolCall } from '../types/ipc'
+import type { Message, ToolCall } from '../../types/ipc'
 import type {
   FooterSubagentTab,
   FooterSubagentDetail,
@@ -34,9 +34,6 @@ function extractSubagentTab(tool: ToolCall): FooterSubagentTab | null {
         const parsed = JSON.parse(result)
         structured = parsed?.structured
         console.log('[DEBUG extractSubagentTab] parsed.result.structured:', structured ? JSON.stringify(structured).slice(0, 100) : 'undefined')
-      } else if (typeof result === 'object') {
-        structured = result?.structured
-        console.log('[DEBUG extractSubagentTab] result.structured:', structured ? JSON.stringify(structured).slice(0, 100) : 'undefined')
       }
     } catch (e) {
       console.warn('[extractSubagentTab] Failed to parse output.result:', e)

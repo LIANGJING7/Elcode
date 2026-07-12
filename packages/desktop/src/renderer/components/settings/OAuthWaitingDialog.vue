@@ -114,7 +114,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { AuthorizationResult } from '../../types/ipc'
+import type { AuthorizationResult } from '../../../types/ipc'
 
 const props = defineProps<{
   isOpen: boolean

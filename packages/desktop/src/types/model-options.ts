@@ -22,6 +22,7 @@ export interface AddModelPayload {
   modelId: string
   name?: string
   options?: ModelOptions
+  _isEditing?: boolean
 }
 
 // 字段 key 类型

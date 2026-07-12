@@ -45,6 +45,7 @@ export function makeSimpleMeta(
     defaultInteraction: input.defaultInteraction ?? 'inline',
     summary: input.summary,
     createViewModel: makeSimpleVm(input.summary),
+    category: 'execution',
   }
 }
 
