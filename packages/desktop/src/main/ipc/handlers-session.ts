@@ -265,15 +265,6 @@ function reconstructOriginalText(
  */
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
-    // V1 format: SessionV1.WithParts
-    // Filter out synthetic text parts (expanded agent prompts)
-    console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
-    console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
-    
-    const allTextParts = msg.parts.filter(p => p.type === 'text')
-    console.log('[toMessage V1] Text parts:', allTextParts.length, 
-      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: (p as any).synthetic })))
-    
     const textParts = msg.parts.filter(p => 
       p.type === 'text' && p.text && !(p as any).synthetic
     )
@@ -282,30 +273,16 @@ function toMessage(msg: BackendMessage): Message | null {
     const fileParts = msg.parts.filter(p => p.type === 'file')
     const agentParts = msg.parts.filter(p => p.type === 'agent')
 
-    console.log('[toMessage V1] Filtered text parts:', textParts.length)
-    console.log('[toMessage V1] Agent parts:', agentParts.length, 
-      agentParts.map(p => ({ name: (p as any).name, source: (p as any).source })))
-
-    // Reconstruct original text with @agent mentions
     let content: string
     if (agentParts.length > 0) {
-      console.log('[toMessage V1] === RECONSTRUCTING ORIGINAL TEXT ===')
       content = reconstructOriginalText(textParts, agentParts)
-      console.log('[toMessage V1] Reconstructed content:', JSON.stringify(content))
     } else {
       content = textParts.map(p => p.text!).join('\n')
     }
     const reasoning = reasoningParts.length > 0 ? reasoningParts.map(p => p.text!).join('\n') : undefined
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
-      ? toolParts.map(p => {
-        console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
-        console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
-        return toToolCall(p.callID || '', p.tool || '', p.state)
-      })
+      ? toolParts.map(p => toToolCall(p.callID || '', p.tool || '', p.state))
       : undefined
 
     const files = fileParts.length > 0
@@ -317,7 +294,6 @@ function toMessage(msg: BackendMessage): Message | null {
         }))
       : undefined
 
-    // Extract agent mentions for highlighting
     const agents = agentParts.length > 0
       ? agentParts.map(p => ({
           type: 'agent' as const,
@@ -325,9 +301,6 @@ function toMessage(msg: BackendMessage): Message | null {
           source: (p as any).source
         }))
       : undefined
-
-    console.log('[toMessage V1] Result content:', content.slice(0, 100))
-    console.log('[toMessage V1] Result agents:', agents?.length || 0)
 
     return {
       id: msg.info.id,
