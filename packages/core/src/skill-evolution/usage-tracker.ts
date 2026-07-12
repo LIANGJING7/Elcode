@@ -35,7 +35,11 @@ export const layer: Layer.Layer<Service, never, Database.Service | Clock.Clock> 
     const recordUse = Effect.fn("UsageTracker.recordUse")(function* (skillName: string) {
       const now = yield* Clock.currentTimeMillis
 
-      yield* Effect.logDebug("[SkillEvolution] UsageTracker.recordUse", { skillName })
+      console.log("\n" + "►".repeat(50))
+      console.log(">>> [UsageTracker] RECORD SKILL USE >>>")
+      console.log("   skillName:", skillName)
+      console.log("   timestamp:", new Date(now).toISOString())
+      console.log("►".repeat(50) + "\n")
 
       yield* db
         .insert(skill_usage)
@@ -66,7 +70,10 @@ export const layer: Layer.Layer<Service, never, Database.Service | Clock.Clock> 
     const markArchived = Effect.fn("UsageTracker.markArchived")(function* (skillName: string) {
       const now = yield* Clock.currentTimeMillis
 
-      yield* Effect.logDebug("[SkillEvolution] UsageTracker.markArchived", { skillName })
+      console.log("\n" + "▼".repeat(50))
+      console.log("vvv [UsageTracker] MARK SKILL ARCHIVED vvv")
+      console.log("   skillName:", skillName)
+      console.log("▼".repeat(50) + "\n")
 
       yield* db
         .update(skill_usage)

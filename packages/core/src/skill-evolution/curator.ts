@@ -31,7 +31,10 @@ export const layer: Layer.Layer<Service, never, Database.Service | FSUtil.Servic
       const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
       const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000
 
-      yield* Effect.logInfo("[SkillEvolution] SkillCurator.scan start")
+      console.log("\n" + "╔".repeat(80))
+      console.log("╔╔╔ [SkillCurator] LIFECYCLE SCAN START ╔╔╔")
+      console.log("   scanning for: stale (30d) + archive (90d)")
+      console.log("╔".repeat(80) + "\n")
 
       const staleThreshold = now - thirtyDaysMs
       const archiveThreshold = now - ninetyDaysMs
@@ -61,9 +64,13 @@ export const layer: Layer.Layer<Service, never, Database.Service | FSUtil.Servic
         )
         .all()
 
-      yield* Effect.logInfo("[SkillEvolution] SkillCurator.scan stale/archive", {
-        archiveCount: toArchive.length,
-      })
+      console.log("\n" + "╠".repeat(80))
+      console.log("╠╠╠ [SkillCurator] SCAN RESULTS ╠╠╠")
+      console.log("   skillsToArchive:", toArchive.length)
+      if (toArchive.length > 0) {
+        console.log("   archivedSkills:", toArchive.map(s => s.skill_name).join(", "))
+      }
+      console.log("╠".repeat(80) + "\n")
 
       for (const skill of toArchive) {
         const skillsBaseDir = path.join(process.env.LCODE_TEST_HOME ?? os.homedir(), ".config", "opencode", "skills")
@@ -100,7 +107,9 @@ export const layer: Layer.Layer<Service, never, Database.Service | FSUtil.Servic
         })
       }
 
-      yield* Effect.logInfo("[SkillEvolution] SkillCurator.scan done")
+      console.log("\n" + "╚".repeat(80))
+      console.log("╚╚╚ [SkillCurator] LIFECYCLE SCAN COMPLETE ╚╚╚")
+      console.log("╚".repeat(80) + "\n")
     })
 
     const startScheduler = Effect.fn("SkillCurator.startScheduler")(function* () {

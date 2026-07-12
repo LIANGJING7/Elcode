@@ -77,9 +77,11 @@ Guidelines:
         messages: Array<{ role: string; content: string }>,
       ): void {
         const skills = yield* skillV2.list()
-        yield* Effect.logInfo("[SkillEvolution] BackgroundReviewer.review start", {
-          messageCount: messages.length,
-        })
+        console.log("\n" + "=".repeat(80))
+        console.log(">>> [SkillEvolution] BackgroundReviewer.review START <<<")
+        console.log("   messageCount:", messages.length)
+        console.log("   skillCount:", skills.length)
+        console.log("=" .repeat(80) + "\n")
         const prompt = yield* buildPrompt(messages)
 
         // TODO: LLM Integration Point
@@ -99,19 +101,21 @@ Guidelines:
           updates: [],
         }
 
-        yield* Effect.logInfo("[SkillEvolution] BackgroundReviewer.review done", {
-          shouldUpdate: result.shouldUpdate,
-          confidence: result.confidence,
-          updateCount: result.updates.length,
-        })
+        console.log("\n" + "*".repeat(80))
+        console.log("*** [SkillEvolution] BackgroundReviewer.review DONE ***")
+        console.log("   shouldUpdate:", result.shouldUpdate)
+        console.log("   confidence:", result.confidence)
+        console.log("   updateCount:", result.updates.length)
+        console.log("*".repeat(80) + "\n")
 
         if (result.shouldUpdate && result.confidence > 0.7) {
           for (const update of result.updates) {
             if (update.type === "create" && update.skillName && update.newPrompt) {
-              yield* Effect.logInfo("[SkillEvolution] creating skill", {
-                skillName: update.skillName,
-                reason: update.reason,
-              })
+              console.log("\n" + "+".repeat(60))
+              console.log("+++ [SkillEvolution] CREATING NEW SKILL +++")
+              console.log("   skillName:", update.skillName)
+              console.log("   reason:", update.reason)
+              console.log("+".repeat(60) + "\n")
               const path = yield* skillManager.create(
                 update.skillName,
                 update.newPrompt,
@@ -126,10 +130,11 @@ Guidelines:
               const oldSkill = yield* skillV2.get(update.skillName)
               const oldPrompt = oldSkill?.content || ""
               
-              yield* Effect.logInfo("[SkillEvolution] updating skill", {
-                skillName: update.skillName,
-                reason: update.reason,
-              })
+              console.log("\n" + "~".repeat(60))
+              console.log("~~~ [SkillEvolution] UPDATING EXISTING SKILL ~~~")
+              console.log("   skillName:", update.skillName)
+              console.log("   reason:", update.reason)
+              console.log("~".repeat(60) + "\n")
               yield* skillManager.update(
                 update.skillName,
                 update.newPrompt,

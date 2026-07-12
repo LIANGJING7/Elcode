@@ -82,11 +82,12 @@ ${prompt}
 <!-- Created: ${timestamp} -->
 <!-- Reason: ${reason} -->`
 
-      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.create", {
-        skillName: sanitizedName,
-        path: skillPath,
-        reason,
-      })
+      console.log("\n" + "█".repeat(70))
+      console.log("███ [SkillManagerTool] CREATE NEW SKILL ███")
+      console.log("   skillName:", sanitizedName)
+      console.log("   path:", skillPath)
+      console.log("   reason:", reason)
+      console.log("█".repeat(70) + "\n")
       yield* fs.ensureDir(skillDir)
       yield* fs.writeFileString(skillPath, content)
 
@@ -118,10 +119,11 @@ ${newPrompt}
 <!-- Updated: ${timestamp} -->
 <!-- Reason: ${reason} -->`
 
-      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.update", {
-        skillName: sanitizedName,
-        reason,
-      })
+      console.log("\n" + "░".repeat(70))
+      console.log("░░░ [SkillManagerTool] UPDATE EXISTING SKILL ░░░")
+      console.log("   skillName:", sanitizedName)
+      console.log("   reason:", reason)
+      console.log("░".repeat(70) + "\n")
       yield* fs.writeFileString(skill.location, updatedContent)
       yield* usageTracker.recordUse(sanitizedName)
     })
@@ -140,10 +142,11 @@ ${newPrompt}
       const archivePath = join(archiveDir, sanitizedName)
 
       yield* fs.ensureDir(archiveDir)
-      yield* Effect.logInfo("[SkillEvolution] SkillManagerTool.delete", {
-        skillName: sanitizedName,
-        archivePath,
-      })
+      console.log("\n" + "▓".repeat(70))
+      console.log("▓▓▓ [SkillManagerTool] DELETE/ARCHIVE SKILL ▓▓▓")
+      console.log("   skillName:", sanitizedName)
+      console.log("   archivePath:", archivePath)
+      console.log("▓".repeat(70) + "\n")
       yield* Effect.tryPromise({
         try: async () => {
           const { rename } = await import("fs/promises")
