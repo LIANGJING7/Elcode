@@ -180,7 +180,7 @@ export interface SkillInfo {
 }
 
 export interface MCPStatus {
-  status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
+  status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration' | 'disconnected'
   error?: string
 }
 

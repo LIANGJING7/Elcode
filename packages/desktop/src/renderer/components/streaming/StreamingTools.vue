@@ -8,7 +8,8 @@
  */
 import { ref, computed } from 'vue'
 import type { StreamingToolCall } from '../../stores/streaming/types'
-import ToolCallContainer from '../tool/ToolCallContainer.vue'
+import { streamingToolToToolCall } from '../../stores/streaming/types'
+import ToolDisplay from '../part/ToolDisplay.vue'
 
 const props = defineProps<{
   tools: StreamingToolCall[]
@@ -47,11 +48,10 @@ function toggleCollapsed() {
 
     <!-- Tool list -->
     <div v-if="!collapsed" class="space-y-0.5">
-      <ToolCallContainer
+      <ToolDisplay
         v-for="tool in tools"
         :key="tool.id"
-        :tool="tool"
-        :is-streaming="isStreaming"
+        :tool="streamingToolToToolCall(tool)"
       />
     </div>
   </div>

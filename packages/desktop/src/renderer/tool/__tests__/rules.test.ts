@@ -11,7 +11,7 @@ import { createGlobViewModel } from '../rules/glob'
 import { createReadViewModel } from '../rules/read'
 import { createWebFetchViewModel } from '../rules/webfetch'
 import { createWebSearchViewModel } from '../rules/websearch'
-import type { ToolCall } from '../../../../types/ipc'
+import type { ToolCall } from '../../../types/ipc'
 
 describe('tool registry', () => {
   beforeEach(() => {

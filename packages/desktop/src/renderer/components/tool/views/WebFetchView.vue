@@ -62,7 +62,7 @@ const isMarkdown = computed(() => {
       v-if="model.content && isMarkdown"
       class="markdown-content bg-code-bg p-3 rounded overflow-x-auto max-h-96 overflow-y-auto"
     >
-      <MarkdownRenderer :content="model.content" />
+      <MarkdownRenderer :content="model.content" message-id="webfetch" />
     </div>
 
     <!-- Plain text content -->

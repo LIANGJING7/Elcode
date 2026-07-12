@@ -122,7 +122,7 @@ function handleLineClick(lineId: string) {
       >
         <div
           v-for="virtualItem in virtualItems"
-          :key="virtualItem.key"
+          :key="String(virtualItem.key)"
           class="code-line flex gap-3 px-3 py-0.5 hover:bg-bg-surface cursor-pointer absolute top-0 left-0 w-full"
           :style="{ transform: `translateY(${virtualItem.start}px)` }"
           @click="handleLineClick(lines[virtualItem.index].id)"

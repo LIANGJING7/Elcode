@@ -15,7 +15,7 @@
  * - Scroll to match
  */
 
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, type Ref, type ComputedRef } from 'vue'
 
 /**
  * Search match position.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { groupedToolNodes } from '../selectors'
 import type { StreamingState, StreamingToolCall } from '../types'
-import { activateBuiltinTools, clearTools } from '../../tool/registry'
+import { activateBuiltinTools, clearTools } from '../../../tool/registry'
 
 function makeTool(id: string, name: string, lifecycle: 'completed' | 'preparing' | 'running' = 'completed', startedAt: number = Date.now()): StreamingToolCall {
   return {

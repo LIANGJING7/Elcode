@@ -35,7 +35,7 @@ export const useStreamStore = defineStore('stream', () => {
       } else if (e.type === 'tool') {
         streamingToolCall.value = e.toolCall ?? null
       } else if (e.type === 'complete') {
-        if (streamingMessage.value) {
+        if (streamingMessage.value && _messageStore) {
           _messageStore.appendMessage(streamingMessage.value)
         }
         clear()
