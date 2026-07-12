@@ -31,7 +31,7 @@ export async function createWindow(): Promise<BrowserWindow> {
     backgroundColor: '#1a1a1a',
     frame: false,
     titleBarOverlay: {
-      color: '#202020',
+      color: '#1a1a1a',
       symbolColor: '#a8a4a0',
       height: 48,
     },
