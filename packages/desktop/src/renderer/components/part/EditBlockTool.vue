@@ -19,7 +19,7 @@ const emit = defineEmits<{
   openDiffFile: [string]
 }>()
 
-const isExpanded = ref(true)
+const isExpanded = ref(false)
 
 const fileName = computed(() => {
   if (!props.filePath) return ''

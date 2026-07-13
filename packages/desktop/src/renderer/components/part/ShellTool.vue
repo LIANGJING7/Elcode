@@ -4,7 +4,7 @@ import type { ToolCall } from '../../../types/ipc'
 
 const props = defineProps<{ tool: ToolCall }>()
 
-const collapsed = ref(false)
+const collapsed = ref(true)
 
 const command = computed(() => {
   const cmd = props.tool.args.command as string
