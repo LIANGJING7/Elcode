@@ -47,7 +47,6 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 import { Database } from "@/core/database/database"
 import { SessionEvent } from "@/core/session/event"
 import { SessionMessage } from "@/core/session/message"
@@ -123,7 +122,6 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
-    const reviewer = yield* BackgroundReviewer.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1214,7 +1212,7 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+    const runLoop = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         console.log("\n" + "▶".repeat(70))
         console.log(">>> [SessionPrompt.runLoop] V1 RUN LOOP STARTED <<<")
@@ -1267,6 +1265,18 @@ export const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            
+            // Skill evolution trigger point
+            const userMsgs = msgs.filter((m: any) => m.info.role === "user").length
+            const assistantMsgs = msgs.filter((m: any) => m.info.role === "assistant").length
+            console.log("\n" + "▼".repeat(80))
+            console.log("▼▼▼ [SkillEvolution] V1 LOOP ENDING - REVIEW TRIGGER ▼▼▼")
+            console.log("   sessionID:", sessionID)
+            console.log("   user messages:", userMsgs)
+            console.log("   assistant messages:", assistantMsgs)
+            console.log("   total messages in loop:", msgs.length)
+            console.log("▼".repeat(80) + "\n")
+            
             break
           }
 
@@ -1473,19 +1483,6 @@ export const layer = Layer.effect(
         }
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
-        
-        // Skill evolution: review conversation after each prompt completes
-        const reviewMessages = msgs
-          .filter((m) => m.info.role === "user" || m.info.role === "assistant")
-          .map((m) => ({
-            role: m.info.role as string,
-            content: m.parts
-              .filter((p) => p.type === "text" && "text" in p)
-              .map((p: any) => p.text || "")
-              .join(""),
-          }))
-        yield* reviewer.reviewInBackground(reviewMessages)
-        
         return yield* lastAssistant(sessionID)
       },
     )
@@ -1656,7 +1653,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(Image.defaultLayer),
-    Layer.provide(BackgroundReviewer.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,
