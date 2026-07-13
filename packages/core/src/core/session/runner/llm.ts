@@ -33,7 +33,6 @@ import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
-import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -107,11 +106,6 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
-    const reviewer = yield* BackgroundReviewer.Service
-    
-    console.log("\n" + "☆".repeat(60))
-    console.log("☆☆☆ [SessionRunnerLLM] BackgroundReviewer injected successfully ☆☆☆")
-    console.log("☆".repeat(60) + "\n")
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -407,30 +401,6 @@ export const layer = Layer.effect(
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
-      const messages = yield* getContext(input.sessionID).pipe(
-        Effect.map((context) =>
-          context
-            .filter(
-              (m): m is SessionMessage.User | SessionMessage.Assistant =>
-                m.type === "user" || m.type === "assistant",
-            )
-            .map((m) => ({
-              role: m.type,
-              content:
-                m.type === "user"
-                  ? m.text
-                  : m.content.filter((c) => c.type === "text").map((c) => c.text).join(""),
-            })),
-        ),
-      )
-      console.log("\n" + "◆".repeat(60))
-      console.log("◆◆◆ [SessionRunner.run] CALLING reviewInBackground ◆◆◆")
-      console.log("   messages count:", messages.length)
-      console.log("◆".repeat(60) + "\n")
-      yield* reviewer.reviewInBackground(messages)
-      console.log("\n" + "◇".repeat(60))
-      console.log("◇◇◇ [SessionRunner.run] reviewInBackground RETURNED ◇◇◇")
-      console.log("◇".repeat(60) + "\n")
     })
 
     return Service.of({
@@ -439,6 +409,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(BackgroundReviewer.defaultLayer),
-)
+export const defaultLayer = layer

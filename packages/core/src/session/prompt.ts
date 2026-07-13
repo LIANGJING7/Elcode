@@ -47,7 +47,6 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
 import { Database } from "@/core/database/database"
 import { SessionEvent } from "@/core/session/event"
 import { SessionMessage } from "@/core/session/message"
@@ -123,7 +122,6 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
-    const reviewer = yield* BackgroundReviewer.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1481,19 +1479,6 @@ export const layer = Layer.effect(
       input: LoopInput,
     ) {
       const result = yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
-
-      // Skill evolution: review conversation after prompt loop completes
-      const msgs = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      const reviewMsgs = msgs
-        .filter((m: any) => m.info.role === "user" || m.info.role === "assistant")
-        .map((m: any) => ({
-          role: m.info.role,
-          content: m.parts
-            .filter((p: any) => p.type === "text" && p.text)
-            .map((p: any) => p.text)
-            .join(""),
-        }))
-      yield* reviewer.reviewInBackground(reviewMsgs).pipe(Effect.ignore, Effect.forkIn(scope))
 
       return result
     })
