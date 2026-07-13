@@ -1216,6 +1216,11 @@ export const layer = Layer.effect(
 
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
+        console.log("\n" + "▶".repeat(70))
+        console.log(">>> [SessionPrompt.runLoop] V1 RUN LOOP STARTED <<<")
+        console.log("   sessionID:", sessionID)
+        console.log("▶".repeat(70) + "\n")
+        
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
