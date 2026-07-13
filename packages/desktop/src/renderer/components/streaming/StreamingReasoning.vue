@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * StreamingReasoning - Thinking/reasoning display
- * 
+ *
  * Shows reasoning process with:
  * - Real-time content display when thinking (batched via useStreamingMarkdown)
  * - Collapsible content when done (always collapsible if has content)
