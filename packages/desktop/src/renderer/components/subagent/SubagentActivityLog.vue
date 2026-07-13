@@ -1,28 +1,12 @@
 <!-- packages/desktop/src/renderer/components/subagent/SubagentActivityLog.vue -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TimelineItem, DisplayPart } from '../../types/subagent'
+import type { TimelineItem } from '../../types/subagent'
 import { getRenderer } from './registry/rendererRegistry'
-import InlineTool from '../part/InlineTool.vue'
-import TextBlock from '../part/TextBlock.vue'
 
 const props = defineProps<{ 
   items: TimelineItem[]
   autoScroll?: boolean
 }>()
-
-// Simple rendering without VirtualList for initial implementation
-const renderItem = (item: TimelineItem) => {
-  if (item.type === 'part') {
-    return renderPart(item.part)
-  }
-  return null
-}
-
-const renderPart = (part: DisplayPart) => {
-  const renderer = getRenderer(part.type)
-  return { component: renderer, props: part.payload }
-}
 
 function getSource(item: TimelineItem): string {
   if (item.type === 'part') {

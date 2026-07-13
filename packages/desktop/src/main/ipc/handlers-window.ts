@@ -14,4 +14,12 @@ export function registerWindowHandlers() {
     }
     return true
   })
+
+  ipcMain.handle(CHANNELS.WINDOW_READY, async () => {
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      win.show()
+    }
+    return true
+  })
 }

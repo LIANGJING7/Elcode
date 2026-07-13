@@ -1,5 +1,5 @@
 import { app, ipcMain, Menu, nativeImage } from 'electron'
-import { createWindow, getMainWindow, switchToApp, showError } from './window'
+import { createWindow, getMainWindow, showError } from './window'
 import { registerIPCHandlers, initBackend } from './ipc/handlers'
 import { stopBackend } from './backend-client'
 import { join } from 'path'
@@ -21,12 +21,9 @@ function setAppIcon(): void {
 async function startApp(): Promise<void> {
   try {
     setAppIcon()
-    await createWindow()
-    
-    await initBackend()
     registerIPCHandlers()
-
-    await switchToApp()
+    await initBackend()
+    await createWindow()
   } catch (err) {
     console.error('Failed to initialize:', err)
     const errorMsg = err instanceof Error ? err.message : String(err)

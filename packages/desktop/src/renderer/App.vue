@@ -93,6 +93,15 @@ import { useSkillStore } from './stores/skill'
 import { useSubagentStore } from './stores/subagent'
 import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
+// Hide loading overlay with fade animation
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay')
+  if (overlay) {
+    overlay.classList.add('hidden')
+    setTimeout(() => overlay.remove(), 200)
+  }
+}
+
 useGlobalShortcuts()
 
 const sessionStore = useSessionStore()
@@ -187,46 +196,69 @@ let cleanupListeners: (() => void) | null = null
 let cleanupSubagentListeners: (() => void) | null = null
 
 onMounted(async () => {
-  cleanupListeners = sessionStore.setupStreamListeners()
+  try {
+    console.log('[App] onMounted start')
+    cleanupListeners = sessionStore.setupStreamListeners()
+    console.log('[App] setupStreamListeners done')
 
-  // Setup subagent IPC listeners
-  const cleanupTabs = window.desktop.subagent.onTabsUpdate((data) => {
-    subagentStore.updateTabs(data)
-  })
-  const cleanupDetail = window.desktop.subagent.onDetailUpdate((data) => {
-    subagentStore.updateDetail(data)
-  })
-  cleanupSubagentListeners = () => {
-    cleanupTabs()
-    cleanupDetail()
-  }
-
-  await themeStore.loadTheme()
-
-  await workspaceStore.loadWorkspaces()
-
-  if (!workspaceStore.hasWorkspaces) {
-    const newWorkspace = await workspaceStore.addWorkspace()
-    if (!newWorkspace) {
-      return
+    // Setup subagent IPC listeners
+    const cleanupTabs = window.desktop.subagent.onTabsUpdate((data) => {
+      subagentStore.updateTabs(data)
+    })
+    const cleanupDetail = window.desktop.subagent.onDetailUpdate((data) => {
+      subagentStore.updateDetail(data)
+    })
+    cleanupSubagentListeners = () => {
+      cleanupTabs()
+      cleanupDetail()
     }
-  }
+    console.log('[App] subagent listeners done')
 
-  window.addEventListener('keydown', (e) => {
-    if (e.shiftKey && e.key === '\\') {
-      e.preventDefault()
-      ui.toggleSidebar()
+    console.log('[App] loading theme...')
+    await themeStore.loadTheme()
+    console.log('[App] theme loaded')
+
+    console.log('[App] loading workspaces...')
+    await workspaceStore.loadWorkspaces()
+    console.log('[App] workspaces loaded, count:', workspaceStore.workspaces.length)
+
+    if (!workspaceStore.hasWorkspaces) {
+      console.log('[App] no workspaces, adding...')
+      const newWorkspace = await workspaceStore.addWorkspace()
+      if (!newWorkspace) {
+        console.log('[App] addWorkspace returned null')
+        hideLoadingOverlay()
+        return
+      }
+      console.log('[App] workspace added:', newWorkspace.path)
     }
-  })
 
-  if (workspaceStore.currentWorkspace) {
-    const path = workspaceStore.currentWorkspace.path
-    await Promise.allSettled([
-      sessionStore.reload(),
-      modelsStore.loadModels(path),
-      mcpStore.loadStatusImmediate(),
-      skillStore.load(path),
-    ])
+    window.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.key === '\\') {
+        e.preventDefault()
+        ui.toggleSidebar()
+      }
+    })
+
+    if (workspaceStore.currentWorkspace) {
+      const path = workspaceStore.currentWorkspace.path
+      console.log('[App] loading data for workspace:', path)
+      await Promise.allSettled([
+        sessionStore.reload(),
+        modelsStore.loadModels(path),
+      ])
+      // Load MCP and skills in background, don't wait
+      mcpStore.loadStatusImmediate().catch(e => console.error('[App] mcp load error:', e))
+      skillStore.load(path).catch(e => console.error('[App] skill load error:', e))
+      console.log('[App] data loaded')
+    }
+
+    console.log('[App] onMounted complete')
+  } catch (e) {
+    console.error('[App] onMounted error:', e)
+  } finally {
+    console.log('[App] hiding loading overlay')
+    hideLoadingOverlay()
   }
 })
 

@@ -3,7 +3,6 @@
 import type { Component } from 'vue'
 import type {
   FooterSubagentTab,
-  FooterSubagentDetail,
   StreamCommit,
   TabsPatch,
   DetailPatch,
@@ -11,11 +10,10 @@ import type {
   DetailUpdatedEvent,
   ConnectionState,
 } from '../../types/subagent'
+import type { Message, ToolCall } from '../../types/ipc'
 
-// Re-export shared types for convenience
 export type {
   FooterSubagentTab,
-  FooterSubagentDetail,
   StreamCommit,
   TabsPatch,
   DetailPatch,
@@ -24,13 +22,19 @@ export type {
   ConnectionState,
 }
 
-// Snapshot returned by watch()
+export interface FooterSubagentDetail {
+  sessionID: string
+  commits: StreamCommit[]
+  messages?: Message[]
+  toolCalls?: ToolCall[]
+  parentSessionId?: string
+}
+
 export interface SubagentSnapshot {
   tabs: FooterSubagentTab[]
   version: number
 }
 
-// ViewModel types
 export interface SubagentHeaderVM {
   title: string
   icon: string
@@ -46,20 +50,17 @@ export interface SubagentViewerVM {
   autoScroll: boolean
 }
 
-// Timeline item types
 export type TimelineItem =
   | { type: 'part'; part: DisplayPart }
   | { type: 'divider'; label?: string }
   | { type: 'summary'; text: string }
   | { type: 'marker'; label: string }
 
-// DisplayPart (unified rendering)
 export interface DisplayPart {
   type: 'text' | 'tool' | 'error' | 'reasoning'
   payload: unknown
 }
 
-// PanelTab type extension
 export interface SubagentTab {
   id: string
   type: 'subagent'

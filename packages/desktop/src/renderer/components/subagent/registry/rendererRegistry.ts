@@ -2,11 +2,10 @@
 
 import type { Component } from 'vue'
 import TextBlock from '../../part/TextBlock.vue'
-import InlineTool from '../../part/InlineTool.vue'
-import BlockTool from '../../part/BlockTool.vue'
+import ToolDisplay from '../../part/ToolDisplay.vue'
 import ReasoningBlock from '../../part/ReasoningBlock.vue'
+import type { ToolCall } from '../../../../types/ipc'
 
-// Placeholder components (will be created in later tasks)
 const DividerRenderer: Component = { template: '<div class="divider text-xs text-text-muted py-1">────────────</div>' }
 const SummaryRenderer: Component = { template: '<div class="summary text-xs text-text-muted py-1">{{ text }}</div>', props: ['text'] }
 const UnknownRenderer: Component = { template: '<div class="unknown text-xs text-text-muted">?</div>' }
@@ -14,7 +13,7 @@ const ErrorPart: Component = { template: '<div class="error text-xs text-error">
 
 export const rendererRegistry: Record<string, Component> = {
   text: TextBlock,
-  tool: InlineTool,
+  tool: ToolDisplay,
   error: ErrorPart,
   reasoning: ReasoningBlock,
   divider: DividerRenderer,

@@ -5,12 +5,13 @@ import { ref, computed, shallowReactive, watch as vueWatch } from 'vue'
 import type { Message, ToolCall } from '../../types/ipc'
 import type {
   FooterSubagentTab,
-  FooterSubagentDetail,
   TabsPatch,
   DetailPatch,
   ConnectionState,
   StreamCommit,
 } from '../types/subagent'
+import type { FooterSubagentDetail } from '../types/subagent'
+import { useUiStore } from './ui'
 
 /**
  * Extract subagent tab data from a task tool call.
@@ -153,16 +154,16 @@ function buildCommitsFromMessages(messages: Message[]): StreamCommit[] {
 }
 
 export const useSubagentStore = defineStore('subagent', () => {
-  // Session binding
   const currentSessionId = ref<string | null>(null)
   const connectionState = ref<ConnectionState>('idle')
   const version = ref(0)
   const loading = ref(false)
   
-  // Map structure (O(1) lookup)
   const tabs = shallowReactive(new Map<string, FooterSubagentTab>())
   const details = shallowReactive(new Map<string, FooterSubagentDetail>())
   const activeTabId = ref<string | null>(null)
+  
+  const parentSessionDetails = shallowReactive(new Map<string, Map<string, FooterSubagentDetail>>())
   
   // Debug: log tabs changes
   vueWatch(() => [...tabs.entries()], (entries) => {
@@ -189,10 +190,8 @@ export const useSubagentStore = defineStore('subagent', () => {
   
 // Actions
   async function watch(sessionId: string, messages?: Message[], forceBootstrap?: boolean) {
-    // Prevent duplicate watch unless forceBootstrap is true
     if (currentSessionId.value === sessionId && !forceBootstrap) return
     
-    // Unwatch previous session if different
     if (currentSessionId.value && currentSessionId.value !== sessionId) {
       await window.desktop.subagent.unwatch(currentSessionId.value)
     }
@@ -200,51 +199,50 @@ export const useSubagentStore = defineStore('subagent', () => {
     currentSessionId.value = sessionId
     connectionState.value = 'connecting'
     loading.value = true
-    activeTabId.value = null
     
     try {
-      // Bootstrap from history messages (TUI-style data extraction)
-      // Clear and bootstrap if messages provided OR forceBootstrap is true
       if ((messages && messages.length > 0) || forceBootstrap) {
-        tabs.clear()
-        details.clear()
         if (messages && messages.length > 0) {
           const historyTabs = bootstrapFromMessages(messages)
+          const previousSessionTabs = [...tabs.values()].filter(t => 
+            details.get(t.sessionID)?.parentSessionId !== sessionId
+          )
+          
+          for (const [id] of tabs.entries()) {
+            const detail = details.get(id)
+            if (detail?.parentSessionId === sessionId) {
+              tabs.delete(id)
+            }
+          }
+          
           for (const tab of historyTabs) {
             tabs.set(tab.sessionID, tab)
           }
-          console.log('[SubagentStore] Bootstrapped from history:', historyTabs.length, 'tabs')
+          console.log('[SubagentStore] Bootstrapped from history:', historyTabs.length, 'tabs for session', sessionId.slice(0, 12))
         }
       }
       
-      // Also try IPC watch (for future realtime sync)
-      // NOTE: IPC may return objects that need serialization
       try {
         const snapshot = await window.desktop.subagent.watch(sessionId)
-        
-        // Ensure snapshot is plain object (not Proxy)
         const plainSnapshot = JSON.parse(JSON.stringify(snapshot))
         
-        // Merge IPC data if available
         for (const tab of plainSnapshot.tabs ?? []) {
           tabs.set(tab.sessionID, tab)
         }
         version.value = plainSnapshot.version ?? 0
       } catch (ipcError) {
         console.warn('[SubagentStore] IPC watch failed (non-critical):', ipcError)
-        // Continue without IPC data - history bootstrap is sufficient
       }
       
-      // Ensure every tab has a detail entry (even if empty) so the panel renders
       for (const sessionID of tabs.keys()) {
+        const tab = tabs.get(sessionID)
         if (!details.has(sessionID)) {
           details.set(sessionID, {
             sessionID,
-            // Child messages are not loaded yet - starts empty, will be populated
-            // by future real-time events or on-demand load
             commits: [
               { kind: 'text', text: 'Subagent session data not loaded. Click to navigate.', phase: 'final', source: 'system' },
             ],
+            parentSessionId: sessionId,
           })
         }
       }
@@ -252,15 +250,16 @@ export const useSubagentStore = defineStore('subagent', () => {
       connectionState.value = 'watching'
       loading.value = false
       
-      // Select first tab by default
-      if (tabs.size > 0) {
-        selectTab([...tabs.keys()][0])
+      if (tabs.size > 0 && !activeTabId.value) {
+        const currentSessionTabs = [...tabs.entries()]
+          .filter(([, tab]) => details.get(tab.sessionID)?.parentSessionId === sessionId)
+        if (currentSessionTabs.length > 0) {
+          selectTab(currentSessionTabs[0][0])
+        }
       }
     } catch (e) {
       connectionState.value = 'error'
       loading.value = false
-      tabs.clear()
-      details.clear()
       console.error('[SubagentStore] watch failed:', e)
     }
   }
@@ -284,7 +283,7 @@ export const useSubagentStore = defineStore('subagent', () => {
   
   async function loadDetail(sessionId: string, directory?: string) {
     const existing = details.get(sessionId)
-    if (existing && existing.commits.length > 0 && existing.commits[0].text !== 'Subagent session data not loaded. Click to navigate.') return existing
+    if (existing && existing.messages && existing.messages.length > 0) return existing
     
     try {
       const msgs = await window.desktop.session.messages(sessionId, 200, directory)
@@ -292,8 +291,8 @@ export const useSubagentStore = defineStore('subagent', () => {
       msgs.forEach((m, i) => console.log(`[SubagentStore]   msg[${i}] role=${m.role} content=${m.content?.slice(0, 60) || ''} toolCalls=${m.toolCalls?.length || 0}`))
       
       const commits = buildCommitsFromMessages(msgs)
+      const toolCalls = msgs.flatMap(m => m.toolCalls ?? [])
       
-      // If first item isn't a user message, prepend the tab description as context
       if (commits.length === 0 || (commits[0].kind === 'reasoning' || commits[0].kind === 'tool')) {
         const tab = tabs.get(sessionId)
         const context = tab?.description || tab?.title || tab?.label || ''
@@ -305,14 +304,18 @@ export const useSubagentStore = defineStore('subagent', () => {
       details.set(sessionId, {
         sessionID: sessionId,
         commits: commits.length > 0 ? commits : [{ kind: 'text', text: 'No activity recorded.', phase: 'final', source: 'system' }],
+        messages: msgs,
+        toolCalls,
+        parentSessionId: currentSessionId.value ?? undefined,
       })
-      console.log('[SubagentStore] Loaded detail with', commits.length, 'commits')
+      console.log('[SubagentStore] Loaded detail with', commits.length, 'commits, ', toolCalls.length, 'toolCalls')
       return details.get(sessionId)
     } catch (e) {
       console.error('[SubagentStore] Failed to load detail for', sessionId.slice(0, 12), ':', e)
       details.set(sessionId, {
         sessionID: sessionId,
         commits: [{ kind: 'error', text: 'Failed to load subagent session data.', phase: 'final', source: 'system' }],
+        parentSessionId: currentSessionId.value ?? undefined,
       })
       return details.get(sessionId)
     }

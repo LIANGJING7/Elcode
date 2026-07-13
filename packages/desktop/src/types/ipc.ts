@@ -376,6 +376,7 @@ export const IPC_CHANNELS = {
 
   // Window
   WINDOW_SET_TITLE_BAR_OVERLAY: 'window:set-title-bar-overlay',
+  WINDOW_READY: 'window:ready',
 
   // Global state (lcode.json - cross-project UI preferences)
   GLOBAL_STATE_GET: 'global-state:get',

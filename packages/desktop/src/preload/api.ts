@@ -209,7 +209,10 @@ deleteModel: (providerId: string, modelId: string, directory?: string): Promise<
 
   window: {
     setTitleBarOverlay: (options: { color: string; symbolColor: string }): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLE_BAR_OVERLAY, options)
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLE_BAR_OVERLAY, options),
+
+    ready: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_READY),
   },
 
   globalState: {
