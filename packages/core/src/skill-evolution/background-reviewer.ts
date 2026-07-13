@@ -170,7 +170,6 @@ Guidelines:
           Effect.catchCause((cause) =>
             Effect.logError("Background skill review failed", { cause })
           ),
-          Effect.forkDetach
         )
       })
 
