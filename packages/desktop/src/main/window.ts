@@ -18,7 +18,6 @@ function getIconPath(): string {
 }
 
 export async function createWindow(): Promise<BrowserWindow> {
-  // Create native image for better icon handling across platforms
   const icon = nativeImage.createFromPath(getIconPath())
   
   const win = new BrowserWindow({
@@ -28,10 +27,10 @@ export async function createWindow(): Promise<BrowserWindow> {
     minHeight: 600,
     icon,
     titleBarStyle: 'hidden',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#202020',
     frame: false,
     titleBarOverlay: {
-      color: '#1a1a1a',
+      color: '#202020',
       symbolColor: '#a8a4a0',
       height: 48,
     },
@@ -44,23 +43,19 @@ export async function createWindow(): Promise<BrowserWindow> {
     show: false
   })
 
-  // Open DevTools in development mode
   if (isDev) {
     win.webContents.openDevTools()
   }
-  
-  // Load splash page first and show immediately
+
   if (isDev) {
-    const loadingUrl = process.env.VITE_DEV_SERVER_URL 
-      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/loading.html`
-      : 'http://localhost:5173/src/renderer/loading.html'
-    await win.loadURL(loadingUrl)
-    win.show()
+    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+    await win.loadURL(devUrl)
   } else {
-    const loadingPath = join(__dirname, '../renderer/loading.html')
-    await win.loadFile(loadingPath)
-    win.show()
+    await win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Show window immediately so user sees loading animation
+  win.show()
 
   win.on('closed', () => {
     mainWindow = null
@@ -68,29 +63,6 @@ export async function createWindow(): Promise<BrowserWindow> {
 
   mainWindow = win
   return win
-}
-
-export async function switchToApp(): Promise<void> {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  
-  const win = mainWindow
-  
-  if (isDev) {
-    const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
-    await win.loadURL(devUrl)
-  } else {
-    await win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-  
-  // Wait for Vue to finish loading to avoid white flash
-  await new Promise<void>(resolve => {
-    win.webContents.once('did-finish-load', () => resolve())
-  })
-  
-  // Open DevTools in development mode
-  if (isDev) {
-    win.webContents.openDevTools()
-  }
 }
 
 export function getMainWindow(): BrowserWindow | null {

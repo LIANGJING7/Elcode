@@ -1,7 +1,9 @@
 // packages/desktop/src/renderer/components/subagent/composables/useSubagentViewer.ts
 
-import { computed, type Ref, type MaybeRef, unref } from 'vue'
-import type { FooterSubagentTab, FooterSubagentDetail, SubagentHeaderVM, SubagentViewerVM, TimelineItem, DisplayPart, StreamCommit } from '../../../types/subagent'
+import { computed, type MaybeRef, unref } from 'vue'
+import type { FooterSubagentTab, SubagentHeaderVM, SubagentViewerVM, TimelineItem, DisplayPart } from '../../../types/subagent'
+import type { FooterSubagentDetail } from '../../../types/subagent'
+import type { Message, ToolCall } from '../../../../types/ipc'
 
 function statusIcon(status: FooterSubagentTab['status']): string {
   if (status === 'completed') return '✓'
@@ -11,59 +13,88 @@ function statusIcon(status: FooterSubagentTab['status']): string {
 }
 
 function formatDuration(tab?: FooterSubagentTab): string | undefined {
-  // Placeholder - will need actual duration from backend
   return undefined
 }
 
-function toDisplayPart(commit: StreamCommit): DisplayPart {
-  if (commit.kind === 'text') {
-    return {
-      type: 'text',
-      payload: {
-        content: commit.text,
-        isStreaming: commit.phase !== 'final',
-        source: commit.source,
+function buildTimelineFromMessages(messages: Message[]): TimelineItem[] {
+  if (!messages || messages.length === 0) return []
+
+  const items: TimelineItem[] = []
+  let assistantGroup: Message[] = []
+
+  const flushAssistantGroup = () => {
+    if (assistantGroup.length === 0) return
+
+    const mergedReasoning = assistantGroup
+      .map(m => m.reasoning)
+      .filter((r): r is string => Boolean(r))
+      .join('\n\n')
+
+    if (mergedReasoning) {
+      items.push({
+        type: 'part',
+        part: {
+          type: 'reasoning',
+          payload: {
+            content: mergedReasoning,
+            status: 'done',
+          }
+        }
+      })
+    }
+
+    for (const msg of assistantGroup) {
+      if (msg.toolCalls && msg.toolCalls.length > 0) {
+        for (const tool of msg.toolCalls) {
+          items.push({
+            type: 'part',
+            part: {
+              type: 'tool',
+              payload: { tool },
+            }
+          })
+        }
+      }
+
+      if (msg.content && msg.content.trim()) {
+        items.push({
+          type: 'part',
+          part: {
+            type: 'text',
+            payload: {
+              content: msg.content,
+              source: 'assistant',
+            }
+          }
+        })
       }
     }
+
+    assistantGroup = []
   }
-  
-  if (commit.kind === 'tool') {
-    return {
-      type: 'tool',
-      payload: {
-        icon: commit.tool ?? '?',
-        summary: commit.phase === 'final' ? commit.text : '',
-        pending: commit.phase === 'start' ? 'Starting...' : 'Running...',
-        status: commit.toolState ?? 'running',
-        error: commit.toolState === 'error' ? commit.text : undefined
+
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      flushAssistantGroup()
+      if (msg.content) {
+        items.push({
+          type: 'part',
+          part: {
+            type: 'text',
+            payload: {
+              content: msg.content,
+              source: 'user',
+            }
+          }
+        })
       }
+    } else if (msg.role === 'assistant') {
+      assistantGroup.push(msg)
     }
   }
-  
-  if (commit.kind === 'reasoning') {
-    return {
-      type: 'reasoning',
-      payload: {
-        content: commit.text,
-        status: commit.toolState === 'running' ? 'thinking' : 'done',
-        duration: undefined
-      }
-    }
-  }
-  
-  if (commit.kind === 'error') {
-    return {
-      type: 'error',
-      payload: {
-        text: commit.text
-      }
-    }
-  }
-  
-  return {
-    type: commit.kind as DisplayPart['type'],
-    payload: { content: commit.text }
-  }
+
+  flushAssistantGroup()
+  return items
 }
 
 export function useSubagentViewer(detailRef: MaybeRef<FooterSubagentDetail | undefined>, tabRef: MaybeRef<FooterSubagentTab | undefined>) {
@@ -83,10 +114,12 @@ export function useSubagentViewer(detailRef: MaybeRef<FooterSubagentDetail | und
   const timeline = computed<TimelineItem[]>(() => {
     const detail = unref(detailRef)
     if (!detail) return []
-    return detail.commits.map((commit: StreamCommit) => ({
-      type: 'part',
-      part: toDisplayPart(commit),
-    }))
+    
+    if (detail.messages && detail.messages.length > 0) {
+      return buildTimelineFromMessages(detail.messages)
+    }
+    
+    return []
   })
   
   const autoScroll = computed(() => {

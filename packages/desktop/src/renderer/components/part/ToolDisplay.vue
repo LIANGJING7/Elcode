@@ -113,11 +113,9 @@ const editBlockProps = computed(() => {
 const subagentProps = computed(() => {
   console.log('[ToolDisplay] Computing subagentProps for tool:', props.tool.name)
   
-  // Try structured field first
   let structured = props.tool.output?.structured as any
   console.log('[ToolDisplay] tool.output?.structured:', structured)
   
-  // If structured is undefined, try parsing output.result
   if (!structured && props.tool.output?.result) {
     try {
       const result = props.tool.output.result
@@ -136,17 +134,24 @@ const subagentProps = computed(() => {
   console.log('[ToolDisplay] sessionId from structured:', structured?.sessionId)
   console.log('[ToolDisplay] sessionID from structured:', structured?.sessionID)
   
-  // Handle both sessionId and sessionID (field name inconsistency)
   const sessionId = structured?.sessionId ?? structured?.sessionID
   
+  const args = props.tool.args as Record<string, unknown>
+  const subagentType = String(args.subagent_type ?? args.subagentType ?? structured?.subagentType ?? 'general')
+  const description = String(args.description ?? structured?.summary ?? '')
+  const state = structured?.state ?? (props.tool.status === 'completed' ? 'completed' : props.tool.status === 'error' ? 'error' : 'running')
+  
   const propsData = {
-    summary: meta.value.summary(props.tool),
+    subagentType,
+    description,
+    state,
     status: props.tool.status,
     sessionId: sessionId,
     currentTool: structured?.currentTool,
     toolcalls: structured?.toolCalls,
     duration: props.tool.duration,
-    error: props.tool.error
+    error: props.tool.error,
+    summary: meta.value.summary(props.tool),
   }
   console.log('[ToolDisplay] subagentProps:', propsData)
   return propsData

@@ -1,70 +1,71 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ICON_TASK_RUNNING, ICON_TASK_DONE, ICON_TASK_ERROR } from '../../tool/icons'
 
 const props = defineProps<{
-  summary: string
+  subagentType: string
+  description: string
+  state: string
   status: 'pending' | 'running' | 'completed' | 'error'
   sessionId?: string
   currentTool?: string
   toolcalls?: number
   duration?: number
   error?: string
+  summary: string
 }>()
 
 const emit = defineEmits<{ 
   navigate: [sessionId: string]
-  openPanel: []  // New: request to open panel
+  openPanel: []
 }>()
 
-const icon = computed(() => {
-  switch (props.status) {
-    case 'running': return ICON_TASK_RUNNING
-    case 'completed': return ICON_TASK_DONE
-    case 'error': return ICON_TASK_ERROR
-    default: return ICON_TASK_RUNNING
+const titleLabel = computed(() => {
+  return props.description || props.summary || 'Subagent'
+})
+
+const subtitleLabel = computed(() => {
+  if (!props.subagentType) return ''
+  const kind = props.subagentType.charAt(0).toUpperCase() + props.subagentType.slice(1)
+  return kind
+})
+
+const statusIcon = computed(() => {
+  switch (props.state) {
+    case 'running': return '●'
+    case 'completed': return '●'
+    case 'cancelled': return '○'
+    case 'error': return '◍'
+    default: return '●'
   }
 })
 
-const iconClass = computed(() => {
-  switch (props.status) {
+const statusColor = computed(() => {
+  switch (props.state) {
     case 'running': return 'text-warning animate-pulse'
     case 'completed': return 'text-success'
+    case 'cancelled': return 'text-text-muted'
     case 'error': return 'text-error'
     default: return 'text-text-muted'
   }
 })
 
-const progressText = computed(() => {
-  if (props.status === 'running' && props.currentTool) return `↳ ${props.currentTool}`
-  if (props.status === 'completed' && props.toolcalls && props.duration) {
-    const dur = props.duration < 1000 ? `${props.duration}ms` : `${Math.floor(props.duration / 1000)}s`
-    return `↳ ${props.toolcalls} toolcalls · ${dur}`
-  }
-  if (props.status === 'error' && props.error) return `↳ ${props.error}`
-  return ''
-})
-
 const handleClick = () => {
-  console.log('[SubagentTool] handleClick triggered, sessionId:', props.sessionId)
   if (props.sessionId) {
-    console.log('[SubagentTool] Emitting navigate and openPanel events')
     emit('navigate', props.sessionId)
     emit('openPanel')
-  } else {
-    console.log('[SubagentTool] No sessionId, cannot emit events')
   }
 }
 </script>
 
 <template>
-  <div class="subagent-tool flex flex-col gap-1 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="handleClick">
-    <div class="flex items-center gap-2">
-      <span :class="['text-sm w-4 text-center', iconClass]">{{ icon }}</span>
-      <span v-if="status === 'running'" class="animate-pulse text-warning">●</span>
-      <span class="text-xs text-text-primary font-medium flex-1 truncate">{{ summary }}</span>
-    </div>
-    <div v-if="progressText" class="text-xs text-text-muted ml-6">{{ progressText }}</div>
+  <div
+    class="subagent-tool flex items-center gap-1.5 px-3 py-2 rounded border cursor-pointer hover:bg-bg-surface transition-colors bg-bg-surface/50"
+    :class="state === 'error' ? 'border-error/30' : state === 'completed' ? 'border-success/30' : 'border-accent/30'"
+    @click="handleClick"
+  >
+    <span :class="['text-sm', statusColor]">{{ statusIcon }}</span>
+    <span class="text-sm text-text-primary">{{ titleLabel }}</span>
+    <span v-if="subtitleLabel" class="text-sm text-text-muted">{{ '  ' + subtitleLabel }}</span>
   </div>
 </template>
 
