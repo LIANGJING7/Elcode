@@ -47,6 +47,12 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@/core/event"
+import { SkillV2 } from "@/core/skill"
+import { Global } from "@/core/global"
+import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
+import { SkillManagerTool } from "@/skill-evolution/skill-manager-tool"
+import { UsageTracker } from "@/skill-evolution/usage-tracker"
 import { Database } from "@/core/database/database"
 import { SessionEvent } from "@/core/session/event"
 import { SessionMessage } from "@/core/session/message"
@@ -122,6 +128,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const reviewer = yield* BackgroundReviewer.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1265,18 +1272,6 @@ export const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            
-            // Skill evolution trigger point
-            const userMsgs = msgs.filter((m: any) => m.info.role === "user").length
-            const assistantMsgs = msgs.filter((m: any) => m.info.role === "assistant").length
-            console.log("\n" + "▼".repeat(80))
-            console.log("▼▼▼ [SkillEvolution] V1 LOOP ENDING - REVIEW TRIGGER ▼▼▼")
-            console.log("   sessionID:", sessionID)
-            console.log("   user messages:", userMsgs)
-            console.log("   assistant messages:", assistantMsgs)
-            console.log("   total messages in loop:", msgs.length)
-            console.log("▼".repeat(80) + "\n")
-            
             break
           }
 
@@ -1487,10 +1482,25 @@ export const layer = Layer.effect(
       },
     )
 
-    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
+    const loop = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      const result = yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+
+      // Skill evolution: review conversation after prompt loop completes
+      const msgs = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const reviewMsgs = msgs
+        .filter((m: any) => m.info.role === "user" || m.info.role === "assistant")
+        .map((m: any) => ({
+          role: m.info.role,
+          content: m.parts
+            .filter((p: any) => p.type === "text" && p.text)
+            .map((p: any) => p.text)
+            .join(""),
+        }))
+      yield* reviewer.reviewInBackground(reviewMsgs).pipe(Effect.ignore, Effect.forkIn(scope))
+
+      return result
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
@@ -1624,7 +1634,7 @@ export const layer = Layer.effect(
     return Service.of({
       cancel,
       prompt,
-      loop,
+      loop: loop as (input: LoopInput) => Effect.Effect<SessionV1.WithParts>,
       shell,
       command,
       resolvePromptParts,
@@ -1663,6 +1673,12 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        EventV2.defaultLayer,
+        SkillV2.locationLayer,
+        Global.defaultLayer,
+        UsageTracker.defaultLayer,
+        SkillManagerTool.defaultLayer,
+        BackgroundReviewer.defaultLayer,
       ),
     ),
   ),
