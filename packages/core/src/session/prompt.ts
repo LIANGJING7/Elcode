@@ -47,12 +47,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@/core/event"
-import { SkillV2 } from "@/core/skill"
-import { Global } from "@/core/global"
 import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
-import { SkillManagerTool } from "@/skill-evolution/skill-manager-tool"
-import { UsageTracker } from "@/skill-evolution/usage-tracker"
 import { Database } from "@/core/database/database"
 import { SessionEvent } from "@/core/session/event"
 import { SessionMessage } from "@/core/session/message"
@@ -1673,12 +1668,6 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
-        EventV2.defaultLayer,
-        SkillV2.locationLayer,
-        Global.defaultLayer,
-        UsageTracker.defaultLayer,
-        SkillManagerTool.defaultLayer,
-        BackgroundReviewer.defaultLayer,
       ),
     ),
   ),

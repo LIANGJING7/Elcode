@@ -4,6 +4,11 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
+import { SkillV2 } from "@/core/skill"
+import { Global } from "@/core/global"
+import { BackgroundReviewer } from "@/skill-evolution/background-reviewer"
+import { SkillManagerTool } from "@/skill-evolution/skill-manager-tool"
+import { UsageTracker } from "@/skill-evolution/usage-tracker"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
@@ -103,6 +108,11 @@ function listenerLayer(opts: ListenOptions, port: number) {
     disableLogger: true,
     disableListenLog: true,
   }).pipe(
+    Layer.provide(SkillV2.locationLayer),
+    Layer.provide(Global.defaultLayer),
+    Layer.provide(UsageTracker.defaultLayer),
+    Layer.provide(SkillManagerTool.defaultLayer),
+    Layer.provide(BackgroundReviewer.defaultLayer),
     Layer.provideMerge(WebSocketTracker.layer),
     Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
