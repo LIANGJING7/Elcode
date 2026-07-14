@@ -374,13 +374,26 @@ function toMessage(msg: BackendMessage): Message | null {
       : undefined
 
     // Extract agent mentions for highlighting
+    console.log('[toMessage V1] agentParts before filter:', agentParts.length, agentParts.map(p => ({ name: p.name, source: p.source })))
     const agents = agentParts.length > 0
-      ? agentParts.map(p => ({
-          type: 'agent' as const,
-          name: p.name,
-          source: p.source
-        }))
+      ? agentParts
+          .filter(p => {
+            const valid = !!(p.name && p.source?.value)
+            console.log('[toMessage V1] agent filter:', p.name, 'valid:', valid, 'source:', p.source)
+            return valid
+          })
+          .map(p => ({
+            type: 'agent' as const,
+            name: p.name!,
+            source: {
+              value: p.source!.value!,
+              start: p.source!.start,
+              end: p.source!.end
+            }
+          }))
       : undefined
+
+    console.log('[toMessage V1] agents after map:', agents?.length || 0, agents)
 
 console.log('[toMessage V1] Result content:', content.slice(0, 100))
     console.log('[toMessage V1] Result agents:', agents?.length || 0)
@@ -401,6 +414,7 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(files && files.length > 0 ? { files } : {}),
+      ...(agents && agents.length > 0 ? { agents } : {}),
       ...(error ? { error } : {}),
     }
   }
@@ -450,7 +464,7 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
-      ...(files && files.length > 0 ? { files } : {}),
+...(files && files.length > 0 ? { files } : {}),
       ...(error ? { error } : {}),
     }
   }
@@ -819,7 +833,10 @@ export function registerSessionHandlers() {
   })
 
   ipcMain.handle(CHANNELS.SESSION_AGENTS, async (_event, directory?: string) => {
-    return await backend.session.agents(directory)
+    console.log('[SESSION_AGENTS] Fetching agents for directory:', directory)
+    const result = await backend.session.agents(directory)
+    console.log('[SESSION_AGENTS] Result:', JSON.stringify(result, null, 2))
+    return result
   })
 
   // Provider handlers

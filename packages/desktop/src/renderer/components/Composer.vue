@@ -382,11 +382,14 @@ onMounted(() => {
 })
 
 async function showMentionMenu(atIndex: number, query: string) {
-  const seq = ++mentionQuerySeq
-  mentionState.value = { visible: true, query, atIndex, selectedIndex: 0, items: [] }
-  const items = await searchAll(query)
-  if (seq === mentionQuerySeq) mentionState.value.items = items
-}
+    const seq = ++mentionQuerySeq
+    mentionState.value = { visible: true, query, atIndex, selectedIndex: 0, items: [] }
+    const items = await searchAll(query)
+    console.log('[showMentionMenu] seq:', seq, 'items:', items.length, items)
+    if (seq === mentionQuerySeq) {
+      mentionState.value = { ...mentionState.value, items }
+    }
+  }
 
 function hideMention() {
   mentionState.value.visible = false

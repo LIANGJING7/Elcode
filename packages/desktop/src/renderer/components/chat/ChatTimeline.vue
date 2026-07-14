@@ -188,7 +188,7 @@ async function handleOpenSubagentPanel(sessionId: string) {
     </div>
 
     <!-- 消息列表（连续 assistant 已按 user turn 聚合） -->
-    <div v-for="item in aggregatedItems" :key="item.key" v-memo="[item.key, item.message.content?.length]">
+    <div v-for="item in aggregatedItems" :key="item.key">
       <MessageUser v-if="item.role === 'user'" :message="item.message" />
       <MessageAssistant 
         v-else 
