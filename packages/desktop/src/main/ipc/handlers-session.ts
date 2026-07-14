@@ -326,8 +326,9 @@ function toMessage(msg: BackendMessage): Message | null {
         }))
       : undefined
 
-    console.log('[toMessage V1] Result content:', content.slice(0, 100))
+console.log('[toMessage V1] Result content:', content.slice(0, 100))
     console.log('[toMessage V1] Result agents:', agents?.length || 0)
+    console.log('[toMessage V1] msg.info.error:', (msg.info as any).error)
 
     return {
       id: msg.info.id,
@@ -337,7 +338,7 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(files && files.length > 0 ? { files } : {}),
-      ...(agents && agents.length > 0 ? { agents } : {}),
+      ...((msg.info as any).error ? { error: (msg.info as any).error } : {}),
     }
   }
 
