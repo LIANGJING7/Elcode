@@ -68,6 +68,15 @@ error?: string | { type: string; message: string }
 
 ### 3. main/ipc/handlers-session.ts
 
+**行 89** - toToolCall 参数类型修改：
+```typescript
+// 改前
+error?: { message?: string }
+
+// 改后
+error?: { type: string; message: string }
+```
+
 **行 177** - TOOL_FAILED 历史消息转换，保存完整 error：
 ```typescript
 // 改前
@@ -226,6 +235,31 @@ defineProps<{
 - `user dismissed`
 
 denied 状态展示样式：删除线 + 灰色文字。
+
+## Type Compatibility
+
+修改后 `ToolCall.error` 和 `StreamingToolCall.error` 变为对象类型。
+
+### 需要验证的调用点
+
+| 文件 | 行号 | 说明 |
+|------|------|------|
+| InlineTool.vue | 10 | props.error 类型需改为对象 |
+| BlockTool.vue | 9 | props.error 类型需改为对象 |
+| ToolDisplay.vue | 39, 47 | error 传递需使用 getErrorMessage |
+| streamingToolToToolCall | 260 | error 提取需兼容两种格式 |
+
+### 兼容方案
+
+`ToolCall.error` 支持两种格式（兼容历史数据）：
+```typescript
+error?: string | { type: string; message: string }
+```
+
+组件中使用 `getErrorMessage()` 统一处理：
+```typescript
+const errorMsg = getErrorMessage(props.error)
+```
 
 ## File Changes
 
