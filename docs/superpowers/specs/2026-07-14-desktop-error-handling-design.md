@@ -57,7 +57,37 @@ export interface Message {
 }
 ```
 
-### 3. streaming/reducer.ts
+**行 146** - ToolCall.error 支持两种格式（兼容历史数据）：
+```typescript
+// 改前
+error?: string
+
+// 改后（兼容旧格式）
+error?: string | { type: string; message: string }
+```
+
+### 3. main/ipc/handlers-session.ts
+
+**行 177** - TOOL_FAILED 历史消息转换，保存完整 error：
+```typescript
+// 改前
+...(state?.error?.message ? { error: state.error.message } : {}),
+
+// 改后
+...(state?.error ? { error: state.error } : {}),
+```
+
+**行 372-381** - toMessage 转换，新增 error 字段：
+```typescript
+return {
+  id: msg.id,
+  role: 'assistant',
+  content,
+  ...(msg.error ? { error: msg.error } : {}),  // 新增
+}
+```
+
+### 4. streaming/reducer.ts
 
 **行 228** - TOOL_FAILED 保存完整对象：
 ```typescript
@@ -112,6 +142,9 @@ ToolDisplay → InlineTool/BlockTool → props.error: { type, message }
 ### 1. utils/error-utils.ts（新增）
 
 ```typescript
+/**
+ * 判断是否为"已拒绝"类错误
+ */
 export function isDeniedError(error: string | undefined | null): boolean {
   if (!error) return false
   return (
@@ -120,6 +153,17 @@ export function isDeniedError(error: string | undefined | null): boolean {
     error.includes("specified a rule") ||
     error.includes("user dismissed")
   )
+}
+
+/**
+ * 从 error 中提取 message（兼容旧格式）
+ */
+export function getErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return (error as { message: string }).message
+  }
+  return 'Unknown error'
 }
 ```
 
@@ -187,10 +231,11 @@ denied 状态展示样式：删除线 + 灰色文字。
 
 ```
 packages/desktop/src/renderer/stores/streaming/types.ts     # StreamingToolCall.error 改对象，增加 stepError，修改 STEP_FAILED action 类型
-packages/desktop/src/types/ipc.ts                           # Message 增加 error 字段
+packages/desktop/src/types/ipc.ts                           # Message 增加 error 字段，ToolCall.error 兼容格式
+packages/desktop/src/main/ipc/handlers-session.ts           # toToolCall/toMessage 保存完整 error
 packages/desktop/src/renderer/stores/streaming/reducer.ts   # 保存完整 error，处理 STEP_FAILED
 packages/desktop/src/renderer/stores/streaming/normalizer.ts # session.next.step.failed 传递完整 error 对象
-packages/desktop/src/renderer/utils/error-utils.ts          # 新增：isDeniedError
+packages/desktop/src/renderer/utils/error-utils.ts          # 新增：isDeniedError, getErrorMessage
 packages/desktop/src/renderer/components/part/InlineTool.vue # denied 样式
 packages/desktop/src/renderer/components/part/BlockTool.vue  # denied 样式
 packages/desktop/src/renderer/components/part/MessageError.vue # 新增：消息级错误展示
