@@ -159,11 +159,13 @@ export async function startBackend(): Promise<{ port: number }> {
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_PASSWORD
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_USERNAME
     
+    const isDevMode = !app.isPackaged
     backendProcess = spawn(command, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
       windowsHide: true,
+      shell: isDevMode && process.platform === "win32",
     })
 
     let portFound = false

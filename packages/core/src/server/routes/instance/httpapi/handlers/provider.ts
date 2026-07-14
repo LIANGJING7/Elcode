@@ -57,7 +57,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       console.log('[ProviderHttpApi.list] connected keys:', Object.keys(connected))
       console.log('[ProviderHttpApi.list] connected providers:', JSON.stringify(Object.keys(connected).map(k => ({ id: k, source: connected[k].source }))))
       const providers = Object.assign(
-        mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
+        {},
         connected,
       )
       return {
