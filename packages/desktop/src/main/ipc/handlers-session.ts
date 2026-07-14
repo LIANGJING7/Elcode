@@ -86,7 +86,7 @@ function toToolCall(
     result?: unknown
     structured?: Record<string, unknown>
     content?: unknown[]
-    error?: { message?: string }
+    error?: { type: string; message: string }
   } | undefined,
   time?: { created?: number; ran?: number; completed?: number },
 ): ToolCall {
@@ -174,7 +174,7 @@ function toToolCall(
           },
         }
       : {}),
-    ...(state?.error?.message ? { error: state.error.message } : {}),
+    ...(state?.error ? { error: state.error } : {}),
     ...(duration !== undefined ? { duration } : {}),
   }
   
@@ -378,6 +378,7 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
       ...(files && files.length > 0 ? { files } : {}),
+      ...((msg as any).error ? { error: (msg as any).error } : {}),
     }
   }
 
