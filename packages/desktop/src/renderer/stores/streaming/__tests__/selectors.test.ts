@@ -29,6 +29,7 @@ function makeState(tools: StreamingToolCall[]): StreamingState {
     tools: { entities },
     pendingDeltas: new Map(),
     reasoningHistory: [],
+    stepError: null,
   }
 }
 

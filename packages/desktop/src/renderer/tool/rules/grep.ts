@@ -12,6 +12,7 @@
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
 import { truncate, firstArgString } from '../summary'
+import { getErrorMessage } from '../../utils/error-utils'
 
 export interface GrepMatch {
   resource: string
@@ -98,7 +99,7 @@ export function createGrepViewModel(tool: ToolCall): GrepViewModel {
     matches,
     total: matches.length,
     truncated,
-    error: tool.error ?? null,
+    error: getErrorMessage(tool.error) ?? null,
   }
 }
 

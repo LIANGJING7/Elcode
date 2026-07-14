@@ -10,6 +10,7 @@
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
 import { firstArgString, truncate } from '../summary'
+import { getErrorMessage } from '../../utils/error-utils'
 
 export interface SimpleViewModel extends ToolViewModel {
   _kind: 'simple'
@@ -22,7 +23,7 @@ function makeSimpleVm(summaryFn: (tool: ToolCall) => string) {
   return (tool: ToolCall): SimpleViewModel => ({
     _kind: 'simple',
     summary: summaryFn(tool),
-    error: tool.error ?? null,
+    error: getErrorMessage(tool.error) ?? null,
   })
 }
 

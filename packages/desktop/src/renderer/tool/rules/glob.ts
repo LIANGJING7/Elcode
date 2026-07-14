@@ -12,6 +12,7 @@
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
 import { firstArgString, truncate } from '../summary'
+import { getErrorMessage } from '../../utils/error-utils'
 
 export interface GlobViewModel extends ToolViewModel {
   _kind: 'glob'
@@ -56,7 +57,7 @@ export function createGlobViewModel(tool: ToolCall): GlobViewModel {
     files,
     total: files.length,
     truncated,
-    error: tool.error ?? null,
+    error: getErrorMessage(tool.error) ?? null,
   }
 }
 
