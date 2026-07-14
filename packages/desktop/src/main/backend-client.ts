@@ -17,10 +17,16 @@ function storagePath(input: string): string {
 
 // Resolve the backend executable path based on development vs production mode
 function getBackendExecutablePath(): { command: string; args: string[]; cwd: string } {
+  console.log('[Backend] app.isPackaged:', app.isPackaged)
+  console.log('[Backend] process.resourcesPath:', process.resourcesPath)
+  
   // In packaged mode, use the compiled elcode.exe
   if (app.isPackaged) {
     const resourcesPath = process.resourcesPath
     const backendExe = path.join(resourcesPath, "backend", "elcode.exe")
+    
+    console.log('[Backend] Looking for backend at:', backendExe)
+    console.log('[Backend] File exists:', fs.existsSync(backendExe))
     
     if (fs.existsSync(backendExe)) {
       console.log(`[Backend] Using packaged backend: ${backendExe}`)
@@ -157,7 +163,6 @@ export async function startBackend(): Promise<{ port: number }> {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
-      shell: process.platform === "win32",
       windowsHide: true,
     })
 

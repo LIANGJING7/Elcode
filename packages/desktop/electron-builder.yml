@@ -1,12 +1,12 @@
 appId: com.elcode.desktop
 productName: Elcode
+npmRebuild: false
 directories:
   buildResources: build
-  output: release_new
+  output: release
 files:
   - dist/**/*
   - build/**/*
-# Include compiled core backend executable (path is relative to packages/desktop)
 extraResources:
   - from: "../core/dist/@model-agent/core-windows-x64/bin/elcode.exe"
     to: "backend/elcode.exe"
@@ -21,6 +21,13 @@ win:
   target:
     - nsis
     - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Elcode
 linux:
   icon: build/icon.png
   target:

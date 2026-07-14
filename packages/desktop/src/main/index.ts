@@ -1,9 +1,12 @@
-import { app, ipcMain, Menu, nativeImage } from 'electron'
+import { app, ipcMain, Menu, nativeImage, dialog } from 'electron'
 import { createWindow, getMainWindow, showError } from './window'
 import { registerIPCHandlers, initBackend } from './ipc/handlers'
 import { stopBackend } from './backend-client'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
+import * as fs from 'fs'
+
+const __dirname = join(fileURLToPath(import.meta.url), '..')
 
 ;(globalThis as any).AI_SDK_LOG_WARNINGS = false
 
@@ -19,12 +22,27 @@ function setAppIcon(): void {
 }
 
 async function startApp(): Promise<void> {
+  const logPath = join(app.getPath('userData'), 'startup.log')
+  const log = (msg: string) => {
+    console.log(msg)
+    const timestamp = new Date().toISOString()
+    fs.appendFileSync(logPath, `${timestamp} ${msg}\n`)
+  }
+  
+  log('[startApp] app.isPackaged: ' + app.isPackaged)
+  log('[startApp] process.resourcesPath: ' + process.resourcesPath)
+  log('[startApp] __dirname: ' + __dirname)
+  
   try {
     setAppIcon()
     registerIPCHandlers()
+    log('[startApp] Calling initBackend...')
     await initBackend()
+    log('[startApp] Backend initialized, creating window...')
     await createWindow()
+    log('[startApp] Window created successfully')
   } catch (err) {
+    log('[startApp] ERROR: ' + (err instanceof Error ? err.message : String(err)))
     console.error('Failed to initialize:', err)
     const errorMsg = err instanceof Error ? err.message : String(err)
     await showError(errorMsg)
@@ -32,11 +50,17 @@ async function startApp(): Promise<void> {
 }
 
 app.whenReady().then(() => {
-  startApp()
+  startApp().catch(err => {
+    console.error('startApp failed:', err)
+    dialog.showErrorBox('Startup Error', `Failed to start application:\n${err instanceof Error ? err.message : String(err)}`)
+    app.exit(1)
+  })
 
   app.on('activate', () => {
     if (!getMainWindow()) {
-      startApp()
+      startApp().catch(err => {
+        console.error('startApp on activate failed:', err)
+      })
     }
   })
 })
