@@ -268,6 +268,8 @@ function toMessage(msg: BackendMessage): Message | null {
     // V1 format: SessionV1.WithParts
     // Filter out synthetic text parts (expanded agent prompts)
     console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
+    console.log('[toMessage V1] msg.info keys:', Object.keys(msg.info))
+    console.log('[toMessage V1] msg.info.error:', (msg.info as any).error)
     console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
     
     const allTextParts = msg.parts.filter(p => p.type === 'text')
@@ -382,6 +384,10 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ...((msg as any).error ? { error: (msg as any).error } : {}),
     }
   }
+
+  console.log('[toMessage V2] Processing message:', msg.id, 'type:', msg.type)
+  console.log('[toMessage V2] msg keys:', Object.keys(msg))
+  console.log('[toMessage V2] (msg as any).error:', (msg as any).error)
 
   if (msg.type === 'user') {
     // V2 User message: text is already filtered (no synthetic), files/agents at top level
