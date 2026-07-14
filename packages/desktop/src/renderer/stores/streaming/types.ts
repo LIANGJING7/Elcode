@@ -27,6 +27,8 @@ export interface StreamingState {
   reasoningHistory: ReasoningBlock[]
   /** Stream start timestamp (optional, set when streaming starts) */
   startedAt?: number
+  /** Step-level error from STEP_FAILED event */
+  stepError: { type: string; message: string } | null
 }
 
 /** Completed reasoning block from a previous step */
@@ -84,8 +86,8 @@ export interface StreamingToolCall {
   /** Progress events (stdout, structured content) */
   progress: ToolProgress[]
   
-  /** Error message if failed */
-  error: string | null
+  /** Error object if failed */
+  error: { type: string; message: string } | null
   
   /** Start timestamp */
   startedAt: number
@@ -126,7 +128,7 @@ export type StreamAction =
   | { type: 'STREAM_START'; messageId: string; version: number }
   | { type: 'STREAM_DONE'; version: number }
   | { type: 'STEP_ENDED'; version: number }
-  | { type: 'STEP_FAILED'; error: string; version: number }
+  | { type: 'STEP_FAILED'; error: { type: string; message: string }; version: number }
   
   // Text
   | { type: 'TEXT_STARTED'; textId: string; messageId: string; version: number }
@@ -180,7 +182,9 @@ export function createInitialState(version: number = 0): StreamingState {
     // Pending deltas for V1 message.part events - still needed
     pendingDeltas: new Map(),
     // Completed reasoning blocks from previous steps
-    reasoningHistory: []
+    reasoningHistory: [],
+    // Step-level error from STEP_FAILED event
+    stepError: null,
   }
 }
 

@@ -109,6 +109,8 @@ export interface Message {
   duration?: number
   /** Reasoning duration in milliseconds */
   reasoningDuration?: number
+  /** Error object if message failed */
+  error?: { type: string; message: string }
 }
 
 // ============================================
@@ -143,7 +145,7 @@ export interface ToolCall {
   status: 'pending' | 'running' | 'completed' | 'error'
   args: Record<string, unknown>
   output?: ToolOutput
-  error?: string
+  error?: string | { type: string; message: string }
   /** 执行时长 (ms)，流式和历史都填充 */
   duration?: number
 }
