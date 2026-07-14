@@ -1175,20 +1175,23 @@ export const useSessionStore = defineStore('session', () => {
               : undefined,
             reasoning: stream.reasoning.status === 'done'
               ? streamingStore.displayedReasoning.value
-              : undefined
+              : undefined,
+            error: stream.stepError || undefined
           }
 
           console.log('[WATCH] Final message reasoning:', finalMsg.reasoning?.slice(0, 100) || 'undefined')
           console.log('[WATCH] Final message content:', finalMsg.content?.slice(0, 100) || 'empty')
+          console.log('[WATCH] Final message error:', finalMsg.error)
 
           const exists = currentConversation.value.messages.some(m => m.id === finalMsg.id)
           console.log('[WATCH] Message exists:', exists)
 
-          if (!exists && finalMsg.content) {
+          // Add message if it doesn't exist and has content OR error
+          if (!exists && (finalMsg.content || finalMsg.error)) {
             currentConversation.value.messages.push(finalMsg)
-            console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no')
+            console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no', 'error:', finalMsg.error ? 'yes' : 'no')
           } else {
-            console.log('[WATCH] Skipped - exists or no content')
+            console.log('[WATCH] Skipped - exists or no content/error')
           }
 
           // Reset stream synchronously (no nextTick needed with sync watch)

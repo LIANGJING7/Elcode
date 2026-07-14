@@ -12,6 +12,7 @@ import { getToolCategory } from '../../tool/registry'
 import TimelineRenderer from './TimelineRenderer.vue'
 import ReasoningBlock from '../chat/ReasoningBlock.vue'
 import CodeBlock from '../chat/CodeBlock.vue'
+import MessageError from '../part/MessageError.vue'
 
 const props = defineProps<{ message: Message }>()
 const emit = defineEmits<{
@@ -155,5 +156,7 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
     <div v-if="codeBlocks.length" class="mt-2">
       <CodeBlock v-for="(block, i) in codeBlocks" :key="i" :code="block.code" :lang="block.lang" />
     </div>
+
+    <MessageError v-if="message.error" :error="message.error" />
   </div>
 </template>
