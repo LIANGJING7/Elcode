@@ -82,6 +82,8 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
     const toolCalls = group.flatMap(m => m.toolCalls ?? [])
     // Sum up durations from all assistant messages in the group
     const totalDuration = group.reduce((sum, m) => sum + (m.duration ?? 0), 0)
+    // Find error from any message in the group
+    const error = group.find(m => m.error)?.error
     const merged: Message = {
       id: group[0].id,
       role: 'assistant',
@@ -90,6 +92,7 @@ const aggregatedItems = computed<TimelineItem[]>(() => {
       ...(reasoning ? { reasoning } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(totalDuration > 0 ? { duration: totalDuration } : {}),
+      ...(error ? { error } : {}),
     }
     items.push({ key: groupKeys.join('|'), role: 'assistant', message: merged })
     group = []
