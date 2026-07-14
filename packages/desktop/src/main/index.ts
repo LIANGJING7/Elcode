@@ -68,18 +68,19 @@ async function teardownAndQuit(): Promise<void> {
   }
 }
 
+// `window-all-closed` triggers app.quit() on Windows/Linux, which then fires
+// `will-quit` for cleanup. macOS keeps the app running (user can reopen via Dock).
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    void teardownAndQuit()
+    app.quit()
   }
 })
 
-// `before-quit` fires for both manual quit (Cmd+Q / tray) and programmatic
-// `app.quit()`. Prevent the default quit so we control the final exit; the
-// sync exit-handler on the backend process still covers hard-kill cases.
-app.on('before-quit', (event) => {
+// `will-quit` fires on all platforms before the app exits. Prevent default to
+// ensure async cleanup (stopBackend) completes before exit.
+app.on('will-quit', (event) => {
   event.preventDefault()
-  void teardownAndQuit()
+  teardownAndQuit()
 })
 
 process.on('uncaughtException', (error) => {

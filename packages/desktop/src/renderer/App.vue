@@ -143,6 +143,12 @@ const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'm
     return ui.view
   }
 
+  // 临时 UI 状态：用户正在创建新会话（优先级高于工作区检查）
+  if (sessionStore.isPendingNewSession) {
+    console.log('[DEBUG effectiveView] isPendingNewSession → newSession')
+    return 'newSession'
+  }
+
   // 业务状态决定默认页面
   if (!hasCurrentWorkspace.value) {
     console.log('[DEBUG effectiveView] No workspace → welcome')
@@ -150,12 +156,6 @@ const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'm
   }
   if (!currentSessionId.value) {
     console.log('[DEBUG effectiveView] No sessionId → newSession')
-    return 'newSession'
-  }
-
-  // 临时 UI 状态：用户正在创建新会话
-  if (sessionStore.isPendingNewSession) {
-    console.log('[DEBUG effectiveView] isPendingNewSession → newSession')
     return 'newSession'
   }
 
@@ -222,16 +222,7 @@ onMounted(async () => {
     await workspaceStore.loadWorkspaces()
     console.log('[App] workspaces loaded, count:', workspaceStore.workspaces.length)
 
-    if (!workspaceStore.hasWorkspaces) {
-      console.log('[App] no workspaces, adding...')
-      const newWorkspace = await workspaceStore.addWorkspace()
-      if (!newWorkspace) {
-        console.log('[App] addWorkspace returned null')
-        hideLoadingOverlay()
-        return
-      }
-      console.log('[App] workspace added:', newWorkspace.path)
-    }
+    console.log('[App] workspaces check complete, hasWorkspaces:', workspaceStore.hasWorkspaces)
 
     window.addEventListener('keydown', (e) => {
       if (e.shiftKey && e.key === '\\') {

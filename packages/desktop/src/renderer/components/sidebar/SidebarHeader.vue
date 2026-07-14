@@ -63,9 +63,7 @@ function newSession() {
     <button
       data-testid="new-session"
       type="button"
-      class="new-session-btn mt-2 w-full inline-flex items-center justify-center gap-2 h-8 rounded-md px-3 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none transition-colors duration-fast shrink-0"
-      :disabled="!currentWorkspace"
-      :title="!currentWorkspace ? '请先选择工作区' : undefined"
+      class="new-session-btn mt-2 w-full inline-flex items-center justify-center gap-2 h-8 rounded-md px-3 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors duration-fast shrink-0"
       @click="newSession"
     >
       <Plus class="w-4 h-4 shrink-0" />

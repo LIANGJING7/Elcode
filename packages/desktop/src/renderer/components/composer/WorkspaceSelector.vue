@@ -2,44 +2,51 @@
   <DropdownMenu v-model:open="dropdownOpen">
     <DropdownMenuTrigger as-child>
       <button
-        class="h-8 px-3 rounded-lg bg-bg-elevated hover:bg-bg-hover text-sm text-text flex items-center gap-2 transition-colors"
+        class="h-8 px-3 rounded-md bg-sidebar hover:bg-sidebar-hover text-sm text-text flex items-center gap-2 transition-colors border border-border/50 max-w-[200px]"
       >
-        <svg class="w-4 h-4 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="w-4 h-4 text-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
         </svg>
-        <span>{{ displayName }}</span>
-        <svg class="w-3 h-3 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <span class="relative group min-w-0 flex-1">
+          <span class="truncate block">{{ displayName }}</span>
+          <span class="absolute left-0 top-full mt-1 px-2 py-1 bg-bg-elevated border border-border rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-md">
+            {{ displayName }}
+          </span>
+        </span>
+        <svg class="w-3 h-3 text-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </button>
     </DropdownMenuTrigger>
 
-    <DropdownMenuContent align="start" :side-offset="4">
+    <DropdownMenuContent align="start" :side-offset="4" class="w-[240px] bg-bg-elevated border-border rounded-lg shadow-lg overflow-visible">
       <DropdownMenuItem
         v-for="ws in workspaces"
         :key="ws.path"
-        class="px-3 py-1.5 text-sm text-text cursor-pointer flex items-center justify-between group"
+        class="px-3 py-2 text-sm text-text cursor-pointer flex items-center justify-between group/item hover:bg-bg-hover rounded-md mx-1 transition-colors"
         @click="handleSelect(ws.path)"
       >
-        <span class="flex items-center">
-          <span v-if="ws.path === currentPath" class="mr-2 text-accent">✓</span>
-          <span v-else class="mr-2 w-4 inline-block"></span>
-          {{ ws.name }}
+        <span class="flex items-center gap-2 min-w-0 flex-1" :title="ws.name">
+          <Check v-if="ws.path === currentPath" class="w-4 h-4 text-accent shrink-0" />
+          <span v-else class="w-4 shrink-0"></span>
+          <span class="truncate">{{ ws.name }}</span>
         </span>
         <!-- 删除按钮：悬停时显示 -->
         <button
-          class="delete-btn opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-bg-active text-text-muted hover:text-text transition-all duration-fast shrink-0"
+          class="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-destructive/10 text-text-muted hover:text-destructive transition-all duration-fast shrink-0"
           @click.stop="handleRemove(ws)"
         >
           <X class="w-3.5 h-3.5" />
         </button>
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator />
+      <DropdownMenuSeparator class="my-1 border-border/50" />
 
-      <DropdownMenuItem class="px-3 py-1.5 text-sm text-text cursor-pointer" @click="handleAdd">
-        <span class="mr-2">+</span>
-        添加工作区
+      <DropdownMenuItem class="px-3 py-2 text-sm text-text cursor-pointer hover:bg-bg-hover rounded-md mx-1 transition-colors" @click="handleAdd">
+        <span class="flex items-center gap-2">
+          <Plus class="w-4 h-4 text-text-muted" />
+          添加工作区
+        </span>
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
@@ -72,7 +79,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { X } from 'lucide-vue-next'
+import { X, Check, Plus } from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
