@@ -332,6 +332,13 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
     console.log('[toMessage V1] Result agents:', agents?.length || 0)
     console.log('[toMessage V1] msg.info.error:', (msg.info as any).error)
 
+    // Convert error format: { name, data: { message } } -> { type, message }
+    const rawError = (msg.info as any).error
+    const error = rawError ? {
+      type: rawError.name || 'unknown',
+      message: rawError.data?.message || rawError.message || 'Unknown error'
+    } : undefined
+
     return {
       id: msg.info.id,
       role: msg.info.role,
@@ -340,7 +347,7 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(files && files.length > 0 ? { files } : {}),
-      ...((msg.info as any).error ? { error: (msg.info as any).error } : {}),
+      ...(error ? { error } : {}),
     }
   }
 
@@ -372,6 +379,15 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ? msg.time.completed - msg.time.created
       : undefined
 
+    // Convert error format: { name, data: { message } } -> { type, message }
+    const rawError = (msg as any).error
+    const error = rawError ? {
+      type: rawError.name || rawError.type || 'unknown',
+      message: rawError.data?.message || rawError.message || 'Unknown error'
+    } : undefined
+
+    console.log('[toMessage V2 Assistant] error:', error)
+
     return {
       id: msg.id,
       role: 'assistant',
@@ -381,7 +397,7 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
       ...(files && files.length > 0 ? { files } : {}),
-      ...((msg as any).error ? { error: (msg as any).error } : {}),
+      ...(error ? { error } : {}),
     }
   }
 
