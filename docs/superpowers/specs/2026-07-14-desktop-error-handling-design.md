@@ -18,28 +18,35 @@
 
 ### 1. streaming/types.ts
 
+**行 88** - StreamingToolCall.error 改为对象：
 ```typescript
-// StreamingToolCall.error 改为对象
-export interface StreamingToolCall {
-  // ... 其他字段不变
-  error: {
-    type: string
-    message: string
-  } | null
-}
+// 改前
+error: string | null
 
-// StreamingState 增加 stepError
+// 改后
+error: { type: string; message: string } | null
+```
+
+**行 13-30** - StreamingState 增加 stepError：
+```typescript
 export interface StreamingState {
   // ... 其他字段不变
-  stepError: {
-    type: string
-    message: string
-  } | null
+  stepError: { type: string; message: string } | null  // 新增
 }
+```
+
+**行 129** - STEP_FAILED action 类型修改：
+```typescript
+// 改前
+| { type: 'STEP_FAILED'; error: string; version: number }
+
+// 改后
+| { type: 'STEP_FAILED'; error: { type: string; message: string }; version: number }
 ```
 
 ### 2. types/ipc.ts
 
+**行 97-112** - Message 增加 error 字段：
 ```typescript
 export interface Message {
   // ... 其他字段不变
@@ -50,31 +57,28 @@ export interface Message {
 }
 ```
 
-### 3. streaming/types.ts
+### 3. streaming/reducer.ts
 
+**行 228** - TOOL_FAILED 保存完整对象：
 ```typescript
-// STEP_FAILED action 类型修改
-export type StreamAction =
-  // ...
-  | { type: 'STEP_FAILED'; error: { type: string; message: string }; version: number }
+// 改前
+toolForFailed.error = action.error.message
+
+// 改后
+toolForFailed.error = action.error
 ```
 
-### 4. streaming/reducer.ts
-
+**行 61-63** - STEP_FAILED 保存消息级错误：
 ```typescript
-// TOOL_FAILED - 保存完整对象
-case 'TOOL_FAILED':
-  toolForFailed.error = action.error  // { type, message }
-
-// STEP_FAILED - 保存消息级错误
 case 'STEP_FAILED':
-  state.stepError = action.error  // 直接使用 action.error 对象
+  state.stepError = action.error
+  return state
 ```
 
-### 5. streaming/normalizer.ts
+### 4. streaming/normalizer.ts
 
+**session.next.step.failed** - 传递完整 error 对象：
 ```typescript
-// session.next.step.failed - 传递完整 error 对象
 case 'session.next.step.failed':
   const stepError = props.error as { type?: string; message?: string } | undefined
   return {
@@ -85,6 +89,22 @@ case 'session.next.step.failed':
     },
     version
   }
+```
+
+## Data Flow
+
+```
+后端 TOOL_FAILED: { type: "unknown", message: string }
+    ↓
+normalizer.ts:302-310 ✓ 已正确转换
+    ↓
+reducer.ts:228 → 保存完整 error 对象
+    ↓
+store → StreamingToolCall.error: { type, message } | null
+    ↓
+streamingToolToToolCall:260 → ToolCall.error: { type, message }
+    ↓
+ToolDisplay → InlineTool/BlockTool → props.error: { type, message }
 ```
 
 ## Presentation Layer
