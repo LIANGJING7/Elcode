@@ -50,7 +50,16 @@ export interface Message {
 }
 ```
 
-### 3. streaming/reducer.ts
+### 3. streaming/types.ts
+
+```typescript
+// STEP_FAILED action 类型修改
+export type StreamAction =
+  // ...
+  | { type: 'STEP_FAILED'; error: { type: string; message: string }; version: number }
+```
+
+### 4. streaming/reducer.ts
 
 ```typescript
 // TOOL_FAILED - 保存完整对象
@@ -59,9 +68,22 @@ case 'TOOL_FAILED':
 
 // STEP_FAILED - 保存消息级错误
 case 'STEP_FAILED':
-  state.stepError = {
-    type: 'unknown',
-    message: action.error
+  state.stepError = action.error  // 直接使用 action.error 对象
+```
+
+### 5. streaming/normalizer.ts
+
+```typescript
+// session.next.step.failed - 传递完整 error 对象
+case 'session.next.step.failed':
+  const stepError = props.error as { type?: string; message?: string } | undefined
+  return {
+    type: 'STEP_FAILED',
+    error: {
+      type: stepError?.type ?? 'unknown',
+      message: stepError?.message ?? 'Step failed'
+    },
+    version
   }
 ```
 
@@ -144,11 +166,12 @@ denied 状态展示样式：删除线 + 灰色文字。
 ## File Changes
 
 ```
-packages/desktop/src/renderer/stores/streaming/types.ts     # 修改
-packages/desktop/src/types/ipc.ts                           # 修改
-packages/desktop/src/renderer/stores/streaming/reducer.ts   # 修改
-packages/desktop/src/renderer/utils/error-utils.ts          # 新增
-packages/desktop/src/renderer/components/part/InlineTool.vue # 修改
-packages/desktop/src/renderer/components/part/BlockTool.vue  # 修改
-packages/desktop/src/renderer/components/part/MessageError.vue # 新增
+packages/desktop/src/renderer/stores/streaming/types.ts     # StreamingToolCall.error 改对象，增加 stepError，修改 STEP_FAILED action 类型
+packages/desktop/src/types/ipc.ts                           # Message 增加 error 字段
+packages/desktop/src/renderer/stores/streaming/reducer.ts   # 保存完整 error，处理 STEP_FAILED
+packages/desktop/src/renderer/stores/streaming/normalizer.ts # session.next.step.failed 传递完整 error 对象
+packages/desktop/src/renderer/utils/error-utils.ts          # 新增：isDeniedError
+packages/desktop/src/renderer/components/part/InlineTool.vue # denied 样式
+packages/desktop/src/renderer/components/part/BlockTool.vue  # denied 样式
+packages/desktop/src/renderer/components/part/MessageError.vue # 新增：消息级错误展示
 ```
