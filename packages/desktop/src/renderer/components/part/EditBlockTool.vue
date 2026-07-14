@@ -3,6 +3,7 @@
  * EditBlockTool — compact card display for edit/write operations.
  */
 import { computed, ref } from 'vue'
+import { getErrorMessage, isDeniedErrorObject } from '../../utils/error-utils'
 
 const props = defineProps<{
   title: string
@@ -10,7 +11,7 @@ const props = defineProps<{
   filePath?: string
   diff?: string
   status: 'pending' | 'running' | 'completed' | 'error'
-  error?: string
+  error?: string | { type: string; message: string }
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +21,15 @@ const emit = defineEmits<{
 }>()
 
 const isExpanded = ref(false)
+
+const errorMessage = computed(() => getErrorMessage(props.error))
+
+const isDenied = computed(() => {
+  if (typeof props.error === 'object' && props.error !== null) {
+    return isDeniedErrorObject(props.error)
+  }
+  return false
+})
 
 const fileName = computed(() => {
   if (!props.filePath) return ''
@@ -121,7 +131,7 @@ function handleOpenDiffFile() {
     </div>
     
     <!-- Error -->
-    <div v-if="error" class="error text-xs text-error bg-error/10 p-2">{{ error }}</div>
+    <div v-if="errorMessage" :class="['error text-xs p-2', isDenied ? 'line-through text-text-muted bg-bg-surface' : 'text-error bg-error/10']">{{ errorMessage }}</div>
   </div>
 </template>
 
