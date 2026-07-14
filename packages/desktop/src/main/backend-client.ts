@@ -260,9 +260,12 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 export async function stopBackend(): Promise<void> {
   const proc = backendProcess
   if (proc) {
-    backendProcess = null
-    backendReady = false
-    await killProcessTree(proc)
+    try {
+      await killProcessTree(proc)
+    } finally {
+      backendProcess = null
+      backendReady = false
+    }
   }
 }
 
