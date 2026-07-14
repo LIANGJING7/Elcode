@@ -60,6 +60,7 @@ export function streamingReducer(
 
     case 'STEP_FAILED':
       state.status = 'error'
+      state.stepError = action.error
       return state
 
     // ============================================
@@ -225,7 +226,7 @@ export function streamingReducer(
       console.log('[Reducer] TOOL_FAILED:', action.callId, 'tool name:', toolForFailed.name, 'error:', action.error)
 
       toolForFailed.lifecycle = 'failed'
-      toolForFailed.error = action.error.message
+      toolForFailed.error = action.error
       toolForFailed.endedAt = Date.now()
       return state
 

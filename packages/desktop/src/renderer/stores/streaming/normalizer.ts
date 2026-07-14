@@ -328,10 +328,13 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.step.failed':
-        const stepError = props.error as { message?: string } | undefined
+        const stepError = props.error as { type?: string; message?: string } | undefined
         return {
           type: 'STEP_FAILED',
-          error: stepError?.message ?? 'Step failed',
+          error: {
+            type: stepError?.type ?? 'unknown',
+            message: stepError?.message ?? 'Step failed'
+          },
           version
         }
     }
