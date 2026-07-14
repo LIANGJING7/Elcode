@@ -509,15 +509,17 @@ async function loadModels(directory?: string) {
     saving.value = true
     error.value = null
     try {
-      console.log('[modelsStore.deleteModel] START', { providerId, modelId })
+      console.log('[modelsStore.deleteModel] START', { providerId, modelId, modelIdType: typeof modelId })
 
       // 检查供应商是否存在
       const provider = providers.value.find(p => p.id === providerId)
+      console.log('[modelsStore.deleteModel] provider found:', !!provider, 'provider.models keys:', provider ? Object.keys(provider.models || {}) : [])
       if (!provider) {
         return { success: false, error: `供应商 '${providerId}' 不存在` }
       }
 
       // 检查模型是否存在
+      console.log('[modelsStore.deleteModel] checking model:', modelId, 'exists:', !!provider.models?.[modelId])
       if (!provider.models?.[modelId]) {
         return { success: false, error: `模型 '${modelId}' 不存在` }
       }
@@ -533,7 +535,15 @@ async function loadModels(directory?: string) {
       // 更新本地状态
       const providerIndex = providers.value.findIndex(p => p.id === providerId)
       if (providerIndex !== -1) {
-        delete providers.value[providerIndex].models[modelId]
+        const currentModels = providers.value[providerIndex].models
+        const newModels: Record<string, any> = {}
+        for (const [id, model] of Object.entries(currentModels || {})) {
+          if (id !== modelId) {
+            newModels[id] = model
+          }
+        }
+        providers.value[providerIndex].models = newModels
+        console.log('[modelsStore.deleteModel] 本地状态已更新, models keys:', Object.keys(newModels))
       }
 
       return { success: true }

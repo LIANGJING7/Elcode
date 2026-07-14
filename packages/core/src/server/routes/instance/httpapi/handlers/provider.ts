@@ -296,6 +296,10 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const refreshModels = Effect.fn("ProviderHttpApi.refreshModels")(function* (ctx: {
       params: { providerID: ProviderV2.ID }
     }) {
+      yield* cfg.invalidate()
+      yield* provider.invalidate()
+      yield* modelsDev.refresh(true)
+      
       return yield* withCatalog(
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
@@ -306,7 +310,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           return {
             success: true,
             models: providerModels,
-            changed: false, // We don't track changes for now
+            changed: false,
           }
         }),
       ).pipe(

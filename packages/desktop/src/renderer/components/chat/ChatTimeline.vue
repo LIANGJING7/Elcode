@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Message, ToolCall } from '../../../types/ipc'
 import MessageUser from './MessageUser.vue'
 import MessageAssistant from './MessageAssistant.vue'
@@ -33,25 +33,13 @@ export interface ChatTimelineExpose {
 
 function scrollToBottom(options?: ScrollOptions): boolean {
   if (!timelineContainerRef.value) return false
-
   const behavior = options?.behavior ?? 'auto'
-
   timelineContainerRef.value.scrollTo({
     top: timelineContainerRef.value.scrollHeight,
     behavior,
   })
-
   return true
 }
-
-// Debug logging
-watch(() => props.messages, (msgs) => {
-  console.log('[DEBUG ChatTimeline] messages updated:', msgs.length, msgs.map(m => ({ id: m.id, role: m.role, content: m.content?.slice(0, 20) })))
-}, { immediate: true })
-
-watch(() => props.streamingMessage, (msg) => {
-  console.log('[DEBUG ChatTimeline] streamingMessage updated:', msg ? { id: msg.id, role: msg.role, content: msg.content?.slice(0, 20) } : null)
-}, { immediate: true })
 
 // 一个 user turn 的多步 agentic 响应会被后端持久化为多条 assistant message
 // (每个 step.started 都 appendMessage 一条)，每条各带自己的 reasoning。
@@ -200,7 +188,7 @@ async function handleOpenSubagentPanel(sessionId: string) {
     </div>
 
     <!-- 消息列表（连续 assistant 已按 user turn 聚合） -->
-    <div v-for="item in aggregatedItems" :key="item.key">
+    <div v-for="item in aggregatedItems" :key="item.key" v-memo="[item.key, item.message.content?.length]">
       <MessageUser v-if="item.role === 'user'" :message="item.message" />
       <MessageAssistant 
         v-else 

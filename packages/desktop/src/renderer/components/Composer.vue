@@ -405,8 +405,11 @@ function handleMentionSelect(item: MentionItem) {
   }
 
 function checkMentionTrigger(text: string, cursorPos: number) {
+  if (text.length > 10000) { hideMention(); return }
   let atIndex = -1
-  for (let i = cursorPos - 1; i >= 0; i--) {
+  const maxSearchLen = 50
+  const startIdx = Math.max(0, cursorPos - maxSearchLen)
+  for (let i = cursorPos - 1; i >= startIdx; i--) {
     if (text[i] === '@') { atIndex = i; break }
     if (text[i] === ' ' || text[i] === '\n') break
   }

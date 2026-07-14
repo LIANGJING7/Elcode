@@ -10,6 +10,55 @@ import type { SessionListQuery, SessionListResult } from '../../types/session'
 const sessionStreams = new Map<string, () => void>()
 
 /**
+ * Shared tool state shape for both V1 and V2 messages.
+ */
+interface ToolPartState {
+  status: string
+  input?: Record<string, unknown> | string
+  result?: unknown
+  structured?: Record<string, unknown>
+  content?: unknown[]
+  error?: { message?: string }
+}
+
+/**
+ * V1 part types — discriminated union so .filter(p => p.type === '…') narrows correctly.
+ */
+interface V1TextPart {
+  type: 'text'
+  text?: string
+  synthetic?: boolean
+}
+
+interface V1ToolPart {
+  type: 'tool'
+  callID?: string
+  tool?: string
+  state?: ToolPartState
+}
+
+interface V1ReasoningPart {
+  type: 'reasoning'
+  text?: string
+}
+
+interface V1FilePart {
+  type: 'file'
+  mime?: string
+  url?: string
+  filename?: string
+  name?: string
+}
+
+interface V1AgentPart {
+  type: 'agent'
+  name?: string
+  source?: { value?: string; start: number; end: number }
+}
+
+type V1Part = V1TextPart | V1ToolPart | V1ReasoningPart | V1FilePart | V1AgentPart
+
+/**
  * V1 backend message (SessionV1.WithParts) — returned when limit=0 or undefined
  * Structure: { info: { id, role, timestamp, ... }, parts: [...] }
  */
@@ -20,22 +69,42 @@ interface V1BackendMessage {
     timestamp: number
     [key: string]: unknown
   }
-  parts: Array<{
-    type: string
-    text?: string
-    callID?: string
-    tool?: string
-    state?: {
-      status: string
-      input?: Record<string, unknown> | string
-      result?: unknown
-      structured?: Record<string, unknown>
-      content?: unknown[]
-      error?: { message?: string }
-    }
-    [key: string]: unknown
-  }>
+  parts: V1Part[]
 }
+
+interface V2ContentText {
+  type: 'text'
+  id: string
+  text: string
+  [key: string]: unknown
+}
+
+interface V2ContentReasoning {
+  type: 'reasoning'
+  id: string
+  text: string
+  [key: string]: unknown
+}
+
+interface V2ContentTool {
+  type: 'tool'
+  id: string
+  name: string
+  state: ToolPartState
+  time?: { created?: number; ran?: number; completed?: number }
+  [key: string]: unknown
+}
+
+interface V2ContentFile {
+  type: 'file'
+  mime?: string
+  url?: string
+  filename?: string
+  name?: string
+  [key: string]: unknown
+}
+
+type V2ContentPart = V2ContentText | V2ContentReasoning | V2ContentTool | V2ContentFile
 
 /**
  * V2 backend message (SessionMessage.Message) — returned when limit > 0
@@ -46,22 +115,7 @@ interface V2BackendMessage {
   type: 'user' | 'assistant' | 'system' | 'shell' | 'synthetic' | 'agent-switched' | 'model-switched' | 'compaction'
   time: { created: number; completed?: number }
   text?: string | string[]
-  content?: Array<{
-    type: string
-    id?: string
-    text?: string
-    name?: string
-    state?: {
-      status: string
-      input?: Record<string, unknown> | string
-      result?: unknown
-      structured?: Record<string, unknown>
-      content?: unknown[]
-      error?: { message?: string }
-    }
-    time?: { created?: number; ran?: number; completed?: number }
-    [key: string]: unknown
-  }>
+  content?: V2ContentPart[]
   [key: string]: unknown
 }
 
@@ -86,7 +140,7 @@ function toToolCall(
     result?: unknown
     structured?: Record<string, unknown>
     content?: unknown[]
-    error?: { type: string; message: string }
+    error?: { type?: string; message?: string }
   } | undefined,
   time?: { created?: number; ran?: number; completed?: number },
 ): ToolCall {
@@ -170,11 +224,11 @@ function toToolCall(
           output: {
             ...(actualResult !== undefined ? { result: actualResult } : {}),
             ...(actualStructured ? { structured: actualStructured as never } : {}),
-            ...(state?.content ? { content: state.content as never } : {}),
+            ...(state && state.content ? { content: state.content as never } : {}),
           },
         }
       : {}),
-    ...(state?.error ? { error: state.error } : {}),
+    ...(state && state.error ? { error: { type: state.error.type || 'APIError', message: state.error.message || '' } } : {}),
     ...(duration !== undefined ? { duration } : {}),
   }
   
@@ -212,8 +266,8 @@ function safeParseToolArgs(raw: string): Record<string, unknown> {
  * Reconstructed: "@AI-Engineer" + " 111 " + "@Account-Strategist"
  */
 function reconstructOriginalText(
-  textParts: Array<{ text?: string }>,
-  agentParts: Array<{ type: 'agent'; name?: string; source?: { value?: string; start: number; end: number } }>
+  textParts: V1TextPart[],
+  agentParts: V1AgentPart[]
 ): string {
   const segments: string[] = []
   const textContent = textParts.map(p => p.text || '').join('')
@@ -274,19 +328,19 @@ function toMessage(msg: BackendMessage): Message | null {
     
     const allTextParts = msg.parts.filter(p => p.type === 'text')
     console.log('[toMessage V1] Text parts:', allTextParts.length, 
-      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: (p as any).synthetic })))
+      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: p.synthetic })))
     
     const textParts = msg.parts.filter(p => 
-      p.type === 'text' && p.text && !(p as any).synthetic
-    )
-    const toolParts = msg.parts.filter(p => p.type === 'tool')
-    const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
-    const fileParts = msg.parts.filter(p => p.type === 'file')
-    const agentParts = msg.parts.filter(p => p.type === 'agent')
+      p.type === 'text' && p.text && !p.synthetic
+    ) as V1TextPart[]
+    const toolParts = msg.parts.filter(p => p.type === 'tool') as V1ToolPart[]
+    const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text) as V1ReasoningPart[]
+    const fileParts = msg.parts.filter(p => p.type === 'file') as V1FilePart[]
+    const agentParts = msg.parts.filter(p => p.type === 'agent') as V1AgentPart[]
 
     console.log('[toMessage V1] Filtered text parts:', textParts.length)
     console.log('[toMessage V1] Agent parts:', agentParts.length, 
-      agentParts.map(p => ({ name: (p as any).name, source: (p as any).source })))
+      agentParts.map(p => ({ name: p.name, source: p.source })))
 
     // Reconstruct original text with @agent mentions
     let content: string
@@ -313,9 +367,9 @@ function toMessage(msg: BackendMessage): Message | null {
     const files = fileParts.length > 0
       ? fileParts.map(p => ({
           type: 'file' as const,
-          mime: (p as any).mime || 'application/octet-stream',
-          name: (p as any).filename || (p as any).name,
-          url: (p as any).url || ''
+          mime: p.mime || 'application/octet-stream',
+          name: p.filename || p.name,
+          url: p.url || ''
         }))
       : undefined
 
@@ -323,8 +377,8 @@ function toMessage(msg: BackendMessage): Message | null {
     const agents = agentParts.length > 0
       ? agentParts.map(p => ({
           type: 'agent' as const,
-          name: (p as any).name,
-          source: (p as any).source
+          name: p.name,
+          source: p.source
         }))
       : undefined
 
@@ -368,9 +422,9 @@ console.log('[toMessage V1] Result content:', content.slice(0, 100))
     const files = fileParts.length > 0
       ? fileParts.map(p => ({
           type: 'file' as const,
-          mime: (p as any).mime || 'application/octet-stream',
-          name: (p as any).filename || (p as any).name,
-          url: (p as any).url || ''
+          mime: p.mime || 'application/octet-stream',
+          name: p.filename || p.name,
+          url: p.url || ''
         }))
       : undefined
 

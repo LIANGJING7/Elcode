@@ -68,6 +68,7 @@ const internalValue = ref(props.value)
 const showSlashMenu = ref(false)
 const historyIndex = ref(-1)
 const blurTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+let mentionCheckTimer: ReturnType<typeof setTimeout> | null = null
 
 const effectivePlaceholder = computed(() => {
   if (props.queueCount > 0) return `继续输入以排队（已有 ${props.queueCount} 条）后续修改...`
@@ -94,7 +95,10 @@ function handleInput(e: Event) {
   emit('update:value', newValue)
   historyIndex.value = -1
   showSlashMenu.value = newValue === '/'
-  emit('mention-check', newValue, target.selectionStart)
+  if (mentionCheckTimer) clearTimeout(mentionCheckTimer)
+  mentionCheckTimer = setTimeout(() => {
+    emit('mention-check', newValue, target.selectionStart)
+  }, 150)
 }
 
 function handleKeydown(e: KeyboardEvent) {

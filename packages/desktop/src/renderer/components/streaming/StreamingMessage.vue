@@ -47,7 +47,11 @@ const stepError = computed(() => stream.value?.stepError ?? null)
         <span class="text-xs text-text-muted thinking-text">思考中</span>
       </div>
 
-      <MessageError v-if="stepError" :error="stepError" />
+      <MessageError v-if="stepError && stepError.type !== 'MessageAbortedError'" :error="stepError" />
+
+      <div v-if="stepError?.type === 'MessageAbortedError'" class="text-xs text-error mt-2">
+        手动中断
+      </div>
     </div>
   </div>
 </template>

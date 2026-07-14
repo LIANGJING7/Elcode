@@ -63,12 +63,15 @@ function cancelDelete() {
           >{{ ws.name.charAt(0).toUpperCase() }}</span>
           <span class="truncate flex-1">{{ ws.name }}</span>
           <!-- 删除按钮：悬停时显示 -->
-          <button
-            class="delete-btn opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-bg-active text-text-muted hover:text-text transition-all duration-fast shrink-0"
+          <span
+            role="button"
+            tabindex="0"
+            class="delete-btn cursor-pointer opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-bg-active text-text-muted hover:text-text transition-all duration-fast shrink-0"
             @click.stop="handleDelete(ws)"
+            @keydown.enter.stop="handleDelete(ws)"
           >
             <X class="w-3.5 h-3.5" />
-          </button>
+          </span>
         </button>
       </li>
     </ul>

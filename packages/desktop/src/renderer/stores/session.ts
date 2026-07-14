@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick, markRaw, shallowRef } from 'vue'
 import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart, AgentPart, AgentPromptInput } from '../../types/ipc'
 import type { SessionListQuery } from '../../types/session'
 import { useWorkspaceStore } from './workspace'
@@ -694,7 +694,7 @@ export const useSessionStore = defineStore('session', () => {
           }
           return m
         })
-        conv.messages = merged
+        conv.messages = merged.map(m => markRaw(m))
       }
     } catch (e) {
       console.error('Failed to load messages:', e)
@@ -872,7 +872,7 @@ export const useSessionStore = defineStore('session', () => {
       if (!currentConversation.value.messages) {
         currentConversation.value.messages = []
       }
-      currentConversation.value.messages.push(userMessage)
+      currentConversation.value.messages.push(markRaw(userMessage))
       console.log('[DEBUG sendMessage] messages.length:', currentConversation.value.messages.length)
     }
 
@@ -995,7 +995,7 @@ export const useSessionStore = defineStore('session', () => {
       if (!currentConversation.value.messages) {
         currentConversation.value.messages = []
       }
-      currentConversation.value.messages.push(userMessage)
+      currentConversation.value.messages.push(markRaw(userMessage))
     }
 
     try {
@@ -1188,7 +1188,7 @@ export const useSessionStore = defineStore('session', () => {
 
           // Add message if it doesn't exist and has content OR error
           if (!exists && (finalMsg.content || finalMsg.error)) {
-            currentConversation.value.messages.push(finalMsg)
+            currentConversation.value.messages.push(markRaw(finalMsg))
             console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no', 'error:', finalMsg.error ? 'yes' : 'no')
           } else {
             console.log('[WATCH] Skipped - exists or no content/error')

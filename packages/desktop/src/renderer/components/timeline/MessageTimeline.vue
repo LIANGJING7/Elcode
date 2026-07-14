@@ -157,6 +157,10 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
       <CodeBlock v-for="(block, i) in codeBlocks" :key="i" :code="block.code" :lang="block.lang" />
     </div>
 
-    <MessageError v-if="message.error" :error="message.error" />
+    <MessageError v-if="message.error && message.error.type !== 'MessageAbortedError'" :error="message.error" />
+
+    <div v-if="message.error?.type === 'MessageAbortedError'" class="message-interrupted text-xs text-error mt-2">
+      手动中断
+    </div>
   </div>
 </template>

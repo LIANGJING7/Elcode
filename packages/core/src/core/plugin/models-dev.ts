@@ -62,7 +62,15 @@ export const ModelsDevPlugin = PluginV2.define({
     const transform = yield* catalog.transform()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
-      const cfg = yield* config.get()
+      const cfgResult = yield* config.get().pipe(
+        Effect.sandbox,
+        Effect.match({
+          onFailure: () => undefined as any,
+          onSuccess: (c) => c,
+        })
+      )
+      if (!cfgResult) return
+      const cfg = cfgResult
       yield* transform((catalog) => {
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
