@@ -54,7 +54,7 @@ export function createNormalizer(ctx: NormalizerContext) {
         'session.next.step.started', 'session.next.step.ended', 'session.next.step.failed',
         'stream.ended',
         // SessionV1 events (legacy)
-        'session.diff', 'message.updated', 'message.part.updated', 'session.status',
+        'session.diff', 'message.updated', 'message.part.updated', 'session.status', 'session.error',
       ]
       if (type && !knownTypes.includes(type) && !type.startsWith('server.')) {
         console.log('[Normalizer] Unknown event type:', type, 'keys:', Object.keys(event), 'props keys:', Object.keys(props))
@@ -148,6 +148,20 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
       }
       return null
+    }
+    
+    // Handle session.error - V1 error event
+    if (type === 'session.error') {
+      const error = props.error as { name?: string; data?: { message?: string } } | undefined
+      console.log('[Normalizer] session.error received:', error)
+      return {
+        type: 'STEP_FAILED',
+        error: {
+          type: error?.name ?? 'unknown',
+          message: error?.data?.message ?? 'Session error'
+        },
+        version
+      }
     }
     
     // Handle session.idle - V1 idle event
