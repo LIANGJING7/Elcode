@@ -34,13 +34,7 @@ async function handleRecover(messageId: string) {
               :key="msg.id"
               class="reverted-item"
             >
-              <div class="item-header">
-                <span class="item-label">用户</span>
-                <span class="item-time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</span>
-              </div>
-              <div class="item-content">
-                {{ msg.content || '(仅文件)' }}
-              </div>
+              <span class="item-content">{{ msg.content || '(仅文件)' }}</span>
               <button
                 @click.stop="handleRecover(msg.id)"
                 :disabled="sessionStore.isReverting"
@@ -125,29 +119,13 @@ async function handleRecover(messageId: string) {
 
 .reverted-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 12px;
   background: rgba(39, 39, 42, 0.4);
   border-radius: 6px;
   border: 1px solid rgba(63, 63, 70, 0.4);
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.item-label {
-  font-size: 11px;
-  color: #71717a;
-  font-weight: 500;
-}
-
-.item-time {
-  font-size: 11px;
-  color: #52525b;
 }
 
 .item-content {
@@ -155,13 +133,15 @@ async function handleRecover(messageId: string) {
   color: #a1a1aa;
   line-height: 1.4;
   word-wrap: break-word;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .recover-btn {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 4px;
   padding: 4px 8px;
   font-size: 12px;
   color: #d4d0c8;
@@ -170,6 +150,7 @@ async function handleRecover(messageId: string) {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .recover-btn:hover:not(:disabled) {
