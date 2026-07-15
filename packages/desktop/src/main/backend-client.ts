@@ -6,6 +6,7 @@ import fs from "fs"
 import { app } from "electron"
 import type { SessionListQuery, SessionListResult } from "../types/session"
 import type { Conversation } from "../types/ipc"
+import { createOpencodeClient } from "@model-agent/core/sdk/v2"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -345,49 +346,38 @@ export const backend = {
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
-      
+
       const params = new URLSearchParams()
       if (directory) params.set("directory", storagePath(directory))
-      // 后端 SSE 端点是 /event（不是 /session/:id/events）
-      const url = `http://localhost:${backendPort}/event?${params.toString()}`
-      console.log('[SSE CONNECT] url:', url)
-      console.log('[SSE CONNECT] sessionID:', sessionID)
-      console.log('[SSE CONNECT] directory param:', directory)
-      const req = http.request(url, { method: "GET" }, (res) => {
-        if (res.statusCode !== 200) {
-          console.error('[SSE CONNECT] HTTP', res.statusCode, res.statusMessage)
-          return
-        }
-        console.log('[SSE CONNECT] connected (200)')
-        let buffer = ""
-        let eventCount = 0
-        res.on("data", (chunk) => {
-          buffer += chunk.toString()
-          const lines = buffer.split("\n")
-          buffer = lines.pop() || ""
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (trimmed.startsWith("data:")) {
-              try {
-                const payload = JSON.parse(trimmed.slice(5))
-                eventCount++
-                onEvent(payload)
-              } catch (e) {
-                console.error('[SSE PARSE] failed:', trimmed.slice(0, 100), e)
-              }
-            }
+      console.log('[SSE CONNECT] port:', backendPort, 'sessionID:', sessionID, 'directory:', directory)
+
+      const controller = new AbortController()
+
+      ;(async () => {
+        try {
+          const sdk = createOpencodeClient({
+            baseUrl: `http://localhost:${backendPort}`,
+            directory,
+          })
+          const result = await sdk.event.subscribe(
+            { directory },
+            { signal: controller.signal }
+          )
+
+          for await (const event of result.stream) {
+            if (controller.signal.aborted) break
+            onEvent(event)
           }
-        })
-        res.on("end", () => {
-          console.log('[SSE] stream ended, total events:', eventCount)
-        })
-      })
-      req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
-      req.end()
-      
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[SSE] error:', err)
+          }
+        }
+      })()
+
       return () => {
-        console.log('[SSE] destroying request for', sessionID)
-        req.destroy()
+        console.log('[SSE] aborting for', sessionID)
+        controller.abort()
       }
     },
   },
