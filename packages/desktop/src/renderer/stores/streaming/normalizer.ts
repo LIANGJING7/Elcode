@@ -54,7 +54,7 @@ export function createNormalizer(ctx: NormalizerContext) {
         'session.next.step.started', 'session.next.step.ended', 'session.next.step.failed',
         'stream.ended',
         // SessionV1 events (legacy)
-        'session.diff', 'message.updated', 'message.part.updated', 'session.status', 'session.error',
+        'session.diff', 'message.updated', 'message.part.updated', 'message.removed', 'session.status', 'session.error',
       ]
       if (type && !knownTypes.includes(type) && !type.startsWith('server.')) {
         console.log('[Normalizer] Unknown event type:', type, 'keys:', Object.keys(event), 'props keys:', Object.keys(props))
@@ -190,6 +190,15 @@ export function createNormalizer(ctx: NormalizerContext) {
         console.log('[Normalizer] message.part.updated part type:', part.type, 'id:', part.id)
       }
       return null  // No action - partTypeMap updated in store.ts
+    }
+
+    if (type === 'message.removed') {
+      return {
+        type: 'MESSAGE_REMOVED',
+        messageID: props.messageID as string,
+        sessionID: props.sessionID as string,
+        version
+      }
     }
 
     // Text events

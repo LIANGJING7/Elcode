@@ -65,6 +65,12 @@ export const desktopAPI = {
 
     questionReject: (requestID: string, directory?: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REJECT, requestID, directory),
+
+    revert: (sessionID: string, messageID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_REVERT, sessionID, messageID, directory),
+
+    unrevert: (sessionID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UNREVERT, sessionID, directory),
   },
 
   file: {

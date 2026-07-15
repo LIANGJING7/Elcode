@@ -262,6 +262,9 @@ export function streamingReducer(
       toolForFailed.endedAt = Date.now()
       return state
 
+    case 'MESSAGE_REMOVED':
+      return state
+
     default:
       return state
   }

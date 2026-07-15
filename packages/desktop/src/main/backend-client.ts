@@ -17,30 +17,19 @@ function storagePath(input: string): string {
 
 // Resolve the backend executable path based on development vs production mode
 function getBackendExecutablePath(): { command: string; args: string[]; cwd: string } {
-  console.log('[Backend] app.isPackaged:', app.isPackaged)
-  console.log('[Backend] process.resourcesPath:', process.resourcesPath)
-  
-  // In packaged mode, use the compiled elcode.exe
   if (app.isPackaged) {
     const resourcesPath = process.resourcesPath
     const backendExe = path.join(resourcesPath, "backend", "elcode.exe")
     
-    console.log('[Backend] Looking for backend at:', backendExe)
-    console.log('[Backend] File exists:', fs.existsSync(backendExe))
-    
     if (fs.existsSync(backendExe)) {
-      console.log(`[Backend] Using packaged backend: ${backendExe}`)
-      // Use serve command with dynamic port allocation
       return { command: backendExe, args: ["serve", "--port", "0", "--hostname", "localhost"], cwd: resourcesPath }
     }
     
-    // Fallback: try to find bun in resources
     const bunExe = process.platform === "win32"
       ? path.join(resourcesPath, "bun", "bun.exe")
       : path.join(resourcesPath, "bun", "bun")
     
     if (fs.existsSync(bunExe)) {
-      console.log(`[Backend] Using bundled bun: ${bunExe}`)
       const launcherPath = path.join(__dirname, "backend-launcher.js")
       return { command: bunExe, args: ["run", launcherPath], cwd: resourcesPath }
     }
@@ -48,13 +37,11 @@ function getBackendExecutablePath(): { command: string; args: string[]; cwd: str
     throw new Error(`Backend executable not found at ${backendExe}`)
   }
   
-  // Development mode: use bun to run the launcher
   const projectRoot = path.resolve(__dirname, "../../../..")
   const launcherPath = path.resolve(__dirname, "./backend-launcher.js")
   const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
   const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
   
-  console.log(`[Backend] Development mode, using bun with launcher: ${actualLauncherPath}`)
   return { command: "bun", args: ["run", actualLauncherPath], cwd: projectRoot }
 }
 
@@ -184,7 +171,6 @@ export async function startBackend(): Promise<{ port: number }> {
     backendProcess.stdout?.on("data", (data: Buffer) => {
       const text = data.toString()
       stdout += text
-      console.log("[Backend]", text.trim())
 
       // Support two output formats:
       // 1. PORT:${port} - from backend-launcher.ts
@@ -331,6 +317,17 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
+
+    revert: async (sessionID: string, messageID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/revert?${params}`, { messageID })
+    },
+
+    unrevert: async (sessionID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/unrevert?${params}`)
+    },
+    
 
     questionReply: async (requestID: string, answers?: string[][], directory?: string): Promise<void> => {
       const params = new URLSearchParams()
@@ -525,18 +522,12 @@ export const backend = {
   mcp: {
     status: async (directory?: string): Promise<unknown> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.status GET /mcp?' + params)
-      const result = await request("GET", `/mcp?${params}`)
-      console.log('[Backend] mcp.status response:', JSON.stringify(result).slice(0, 500))
-      return result
+      return request("GET", `/mcp?${params}`)
     },
     
     config: async (directory?: string): Promise<Record<string, unknown>> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.config GET /mcp/config?' + params)
-      const result = await request("GET", `/mcp/config?${params}`) as Record<string, unknown>
-      console.log('[Backend] mcp.config response:', JSON.stringify(result).slice(0, 500))
-      return result
+      return request("GET", `/mcp/config?${params}`) as Promise<Record<string, unknown>>
     },
     
     add: async (name: string, config: unknown, directory?: string): Promise<unknown> => {
@@ -556,10 +547,7 @@ export const backend = {
     
     remove: async (name: string, directory?: string): Promise<{ success: boolean }> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.remove DELETE /mcp/' + name + '?' + params)
-      const result = await request("DELETE", `/mcp/${name}?${params}`) as { success: boolean }
-      console.log('[Backend] mcp.remove result:', result)
-      return result
+      return request("DELETE", `/mcp/${name}?${params}`) as Promise<{ success: boolean }>
     },
     
     tools: async (directory?: string): Promise<Record<string, unknown[]>> => {
@@ -593,7 +581,6 @@ export const backend = {
        */
       list: async (query: SessionListQuery): Promise<SessionListResult> => {
         if (!backendPort || !backendReady) {
-          console.error('[BACKEND_SESSION_LIST] Backend not ready - port:', backendPort, 'ready:', backendReady)
           throw new Error("Backend not ready")
         }
         
@@ -610,40 +597,29 @@ export const backend = {
         if (query.limit) params.set('limit', String(query.limit))
         
         const url = `http://localhost:${backendPort}/session?${params.toString()}`
-        console.log('[BACKEND_SESSION_LIST] Requesting:', url)
         
         return new Promise((resolve, reject) => {
           const req = http.request(url, { method: "GET" }, (res) => {
-            console.log('[BACKEND_SESSION_LIST] Response status:', res.statusCode)
             let data = ""
             res.on("data", chunk => data += chunk)
             res.on("end", () => {
-              console.log('[BACKEND_SESSION_LIST] Response data length:', data.length)
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const rawSessions = data ? JSON.parse(data) : []
-                  console.log('[BACKEND_SESSION_LIST] Raw sessions count:', Array.isArray(rawSessions) ? rawSessions.length : 'not array')
-                  if (Array.isArray(rawSessions) && rawSessions.length > 0) {
-                    console.log('[BACKEND_SESSION_LIST] First session:', JSON.stringify(rawSessions[0]).slice(0, 200))
-                  }
                   const conversations = (rawSessions as Array<Record<string, unknown>>).map(toConversation)
-                  console.log('[BACKEND_SESSION_LIST] Converted conversations:', conversations.length)
                   resolve({
                     conversations: conversations,
-                    nextCursor: undefined  // Instance API doesn't support cursor pagination
+                    nextCursor: undefined
                   })
                 } catch (parseError) {
-                  console.error('[BACKEND_SESSION_LIST] Parse error:', parseError, 'Data:', data.slice(0, 200))
                   reject(new Error(`Failed to parse response: ${data}`))
                 }
               } else {
-                console.error('[BACKEND_SESSION_LIST] HTTP error:', res.statusCode, data.slice(0, 200))
                 reject(new Error(`HTTP ${res.statusCode}: ${data}`))
               }
             })
           })
           req.on("error", (err) => {
-            console.error('[BACKEND_SESSION_LIST] Request error:', err)
             reject(err)
           })
           req.end()

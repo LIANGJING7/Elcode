@@ -14,6 +14,9 @@ const DEFAULT_START_TIME = Date.now() - 30 * 24 * 60 * 60 * 1000
 // Default page size
 const DEFAULT_LIMIT = 50
 
+// localStorage key for reverted messages persistence
+const REVERTED_MESSAGES_STORAGE_KEY = 'opencode_reverted_messages'
+
 // Helper to parse model ID
 function parseModelId(modelId: string): ModelRef | undefined {
   if (!modelId) return undefined
@@ -28,6 +31,34 @@ function parseModelId(modelId: string): ModelRef | undefined {
 let cachedAgentNames: Set<string> | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// localStorage helpers for reverted messages
+function saveRevertedMessages(sessionId: string, revertPoint: string | null) {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    const all = data ? JSON.parse(data) : {}
+    if (revertPoint) {
+      all[sessionId] = revertPoint
+    } else {
+      delete all[sessionId]
+    }
+    localStorage.setItem(REVERTED_MESSAGES_STORAGE_KEY, JSON.stringify(all))
+  } catch (error) {
+    console.error('[saveRevertedMessages] Failed:', error)
+  }
+}
+
+function loadRevertedMessages(sessionId: string): string | null {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    if (!data) return null
+    const all = JSON.parse(data)
+    return all[sessionId] || null
+  } catch (error) {
+    console.error('[loadRevertedMessages] Failed:', error)
+    return null
+  }
+}
 
 /**
  * Result of parsing @mentions in text
@@ -247,6 +278,14 @@ export const useSessionStore = defineStore('session', () => {
   let flushInProgress = false
   // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
   let manuallyInterrupted = false
+
+  // Revert point: messages with id >= this are hidden (null = no revert active)
+  const revertPoint = ref<string | null>(null)
+  watch(revertPoint, (newVal, oldVal) => {
+    console.log('[WATCH revertPoint] CHANGED:', { from: oldVal, to: newVal })
+  })
+  // Lock for preventing concurrent revert operations
+  const isReverting = ref(false)
   
   // Helper: get or create queue array for a session
   function getQueue(sessionId: string): PendingMessage[] {
@@ -276,9 +315,22 @@ export const useSessionStore = defineStore('session', () => {
     state.conversations.find(c => c.id === currentSessionId.value)
   )
 
-  const currentMessages = computed(() =>
-    currentConversation.value?.messages || []
-  )
+  const currentMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    console.log('[currentMessages] msgs:', msgs.length, 'revertPoint:', revertPoint.value, 'first 3 ids:', msgs.slice(0, 3).map(m => m.id))
+    if (!revertPoint.value) return msgs
+    const filtered = msgs.filter(m => m.id.startsWith('temp-') || m.id < revertPoint.value!)
+    console.log('[currentMessages] filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
+  })
+
+  const revertedMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    if (!revertPoint.value) return []
+    const filtered = msgs.filter(m => !m.id.startsWith('temp-') && m.id >= revertPoint.value! && m.role === 'user')
+    console.log('[revertedMessages] revertPoint:', revertPoint.value, 'filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
+  })
 
   const hasActiveSession = computed(() =>
     currentSessionId.value !== null && workspaceStore.hasCurrentWorkspace
@@ -650,6 +702,9 @@ export const useSessionStore = defineStore('session', () => {
     isPendingNewSession.value = false
     streamingStore.setCurrentSession(sessionId)
 
+    // Load revert point from localStorage
+    revertPoint.value = loadRevertedMessages(sessionId)
+
     // Remember this session for current workspace
     if (workspaceStore.currentWorkspace) {
       lastSessionByWorkspace.set(workspaceStore.currentWorkspace.id, sessionId)
@@ -735,6 +790,25 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     state.error = null
+
+    console.log('[sendMessage] BEFORE: revertPoint:', revertPoint.value, 'msgs:', currentMessages.value.length, 'reverted:', revertedMessages.value.length)
+
+    if (revertPoint.value) {
+      const conv = currentConversation.value
+      if (conv) {
+        const idx = conv.messages.findIndex(m => m.id === revertPoint.value)
+        console.log('[sendMessage] revertPoint:', revertPoint.value, 'found idx:', idx, 'total msgs:', conv.messages.length)
+        if (idx !== -1) {
+          console.log('[sendMessage] Splicing from idx', idx, 'msg IDs:', conv.messages.slice(idx).map(m => m.id))
+          conv.messages.splice(idx)
+        }
+      }
+      revertPoint.value = null
+      if (currentSessionId.value) {
+        saveRevertedMessages(currentSessionId.value, null)
+      }
+      console.log('[sendMessage] AFTER CLEAR: revertPoint:', revertPoint.value, 'msgs:', currentConversation.value?.messages.length)
+    }
 
     // 如果正在流式，将消息加入队列（不调用 backend）
     if (streamingStore.isCurrentStreaming.value && currentSessionId.value) {
@@ -1027,12 +1101,84 @@ export const useSessionStore = defineStore('session', () => {
   // SSE Event Handlers
   // ========================================
 
+  async function revertMessage(sessionId: string, messageId: string) {
+    console.log('[revertMessage] ENTRY: sessionId:', sessionId, 'messageId:', messageId)
+    if (isReverting.value) return
+    if (streamingStore.isCurrentStreaming.value) {
+      console.log('[revertMessage] Interrupting streaming before revert')
+      await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
+    isReverting.value = true
+    try {
+      const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
+      console.log('[revertMessage] FULL response:', JSON.stringify(result))
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[revertMessage] new revertPoint:', newRevertPoint)
+
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[revertMessage] revertPoint set, hidden msgs:', revertedMessages.value.length)
+      }
+    } catch (error) {
+      console.error('[revertMessage] Failed:', error)
+      state.error = error instanceof Error ? error.message : 'Failed to revert message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
+  async function recoverMessage(sessionId: string, targetMessageId: string) {
+    console.log('[recoverMessage] ENTRY:', targetMessageId)
+    if (isReverting.value) return
+
+    isReverting.value = true
+    try {
+      const revertedList = revertedMessages.value
+      const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
+      console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
+      if (targetIndex === -1) { isReverting.value = false; return }
+
+      const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
+
+      let result: unknown
+      if (nextUserMessage) {
+        result = await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
+      } else {
+        result = await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
+      }
+      console.log('[recoverMessage] FULL response:', JSON.stringify(result))
+
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[recoverMessage] new revertPoint:', newRevertPoint)
+
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[recoverMessage] complete, hidden:', revertedMessages.value.length)
+      }
+    } catch (error) {
+      console.error('[recoverMessage] Failed:', error)
+      state.error = error instanceof Error ? error.message : 'Failed to recover message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
   function setupStreamListeners() {
     const removeStream = window.desktop.session.onStreamEvent((data) => {
       const event = data.event as Record<string, unknown>
       const eventType = event?.type as string
-
       const props = (event?.data ?? event?.properties) as Record<string, unknown> | undefined
+
+      console.log('[SSE] eventType:', eventType, 'props:', JSON.stringify(props).slice(0, 200))
+
       const eventSessionId = props?.sessionID as string | undefined
 
       if (eventType?.startsWith('server.')) return
@@ -1092,6 +1238,11 @@ export const useSessionStore = defineStore('session', () => {
         if (info?.id && info?.role) {
           messageIdToRole.set(info.id, info.role as 'user' | 'assistant')
         }
+      }
+
+      if (eventType === 'message.removed') {
+        // No action needed - revert state managed through API response
+        return
       }
 
       if (eventSessionId) {
@@ -1198,6 +1349,8 @@ export const useSessionStore = defineStore('session', () => {
           if (currentSessionId.value) {
             console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
             streamingStore.resetStream(currentSessionId.value)
+            // Refresh messages from backend to get real IDs (replaces temp messages)
+            loadMessages(currentSessionId.value)
           }
         }
       },
@@ -1299,6 +1452,12 @@ export const useSessionStore = defineStore('session', () => {
     flushMessage,
     removeMessage,
     editMessage,
+
+    // Revert/Recover
+    revertedMessages,
+    isReverting,
+    revertMessage,
+    recoverMessage,
 
     // Setup
     setupStreamListeners,
