@@ -6,6 +6,7 @@ import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
 import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
+import RevertedMessagesPreview from './RevertedMessagesPreview.vue'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore, parseMentions } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
@@ -107,6 +108,7 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @open-diff-file="emit('openDiffFile', $event)"
     />
     <ChatTodo class="flex-shrink-0" />
+    <RevertedMessagesPreview class="flex-shrink-0" />
     <Composer
       :has-active-session="true"
       :is-streaming="streamingStore.isCurrentStreaming.value"
