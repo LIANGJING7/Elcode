@@ -320,6 +320,7 @@ export function useStreamingStore(): StreamingStore {
       state.reasoning.endedAt = null
       state.reasoningHistory.length = 0
       state.startedAt = undefined
+      state.stepError = null
     }
   }
 
@@ -338,6 +339,7 @@ export function useStreamingStore(): StreamingStore {
     state.reasoning.startedAt = null
     state.reasoning.endedAt = null
     state.reasoningHistory.length = 0
+    state.stepError = null
   }
 
   // Computed: ordered tools for current session

@@ -783,11 +783,23 @@ export const useSessionStore = defineStore('session', () => {
     }
     state.error = null
 
+    console.log('[sendMessage] BEFORE: revertPoint:', revertPoint.value, 'msgs:', currentMessages.value.length, 'reverted:', revertedMessages.value.length)
+
     if (revertPoint.value) {
+      const conv = currentConversation.value
+      if (conv) {
+        const idx = conv.messages.findIndex(m => m.id === revertPoint.value)
+        console.log('[sendMessage] revertPoint:', revertPoint.value, 'found idx:', idx, 'total msgs:', conv.messages.length)
+        if (idx !== -1) {
+          console.log('[sendMessage] Splicing from idx', idx, 'msg IDs:', conv.messages.slice(idx).map(m => m.id))
+          conv.messages.splice(idx)
+        }
+      }
       revertPoint.value = null
       if (currentSessionId.value) {
         saveRevertedMessages(currentSessionId.value, null)
       }
+      console.log('[sendMessage] AFTER CLEAR: revertPoint:', revertPoint.value, 'msgs:', currentConversation.value?.messages.length)
     }
 
     // 如果正在流式，将消息加入队列（不调用 backend）
@@ -1168,16 +1180,6 @@ export const useSessionStore = defineStore('session', () => {
           const newTitle = info.title as string | undefined
           const conv = state.conversations.find(c => c.id === sessionId)
           if (conv && newTitle) conv.title = newTitle
-          // Sync revert point from backend
-          const revertInfo = (info as any).revert as Record<string, unknown> | undefined
-          if (sessionId === currentSessionId.value && revertInfo !== undefined) {
-            const rp = (revertInfo?.messageID as string) || null
-            if (rp !== revertPoint.value) {
-              revertPoint.value = rp
-              saveRevertedMessages(sessionId, rp)
-              console.log('[SSE] session.updated synced revertPoint:', rp)
-            }
-          }
         }
         return
       }
