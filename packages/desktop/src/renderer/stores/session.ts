@@ -1231,15 +1231,7 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       if (eventType === 'message.removed') {
-        const msgId = props?.messageID as string | undefined
-        const sessionId = props?.sessionID as string | undefined
-        if (msgId && sessionId === currentSessionId.value) {
-          // Set revert point to this message - hides it and all subsequent
-          if (!revertPoint.value || msgId < revertPoint.value) {
-            revertPoint.value = msgId
-            saveRevertedMessages(sessionId, msgId)
-          }
-        }
+        // No action needed - revert state managed through API response
         return
       }
 
