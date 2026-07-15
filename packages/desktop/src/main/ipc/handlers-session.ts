@@ -164,30 +164,19 @@ function toToolCall(
   
   if (!state?.result && !state?.structured && !state?.content && typeof state?.output === 'string') {
     const outputStr = state.output
-    console.log('[DEBUG toToolCall] V1 output detected for tool:', name, 'id:', id)
-    console.log('[DEBUG toToolCall]   state.output:', outputStr.slice(0, 300))
     
-    // Try JSON format first: {"structured": {...}, "text": "..."}
     try {
       parsedOutput = JSON.parse(outputStr)
-      const structuredStr = JSON.stringify(parsedOutput?.structured)
-      console.log('[DEBUG toToolCall]   JSON parse success, structured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
     } catch (e) {
-      // Fall back to XML format: <task id="sessionId" state="...">
-      console.log('[DEBUG toToolCall]   JSON parse failed, trying XML extraction')
       parsedOutput = undefined
       
-      // Extract sessionId from <task id="xxx"> attribute
       const taskIdMatch = outputStr.match(/<task\s+id="([^"]+)"/)
       if (taskIdMatch) {
         extractedSessionId = taskIdMatch[1]
-        console.log('[DEBUG toToolCall]   XML extraction success, sessionId:', extractedSessionId)
         
-        // Also try to extract state attribute
         const stateMatch = outputStr.match(/<task[^>]+state="([^"]+)"/)
         const taskState = stateMatch ? stateMatch[1] : 'completed'
         
-        // Build structured from XML attributes
         parsedOutput = {
           structured: {
             type: 'task',
@@ -197,8 +186,6 @@ function toToolCall(
           },
           text: outputStr,
         }
-      } else {
-        console.log('[DEBUG toToolCall]   XML extraction failed, no <task id=...> found')
       }
     }
   }
@@ -206,13 +193,6 @@ function toToolCall(
   const actualStructured = (state?.structured ?? parsedOutput?.structured) as Record<string, unknown> | undefined
   const actualResult = state?.result ?? (parsedOutput && !actualStructured ? parsedOutput : undefined)
   const hasOutput = actualResult !== undefined || actualStructured !== undefined || state?.content
-
-  console.log('[DEBUG toToolCall] final output for tool:', name)
-  const structuredStr = JSON.stringify(actualStructured)
-  console.log('[DEBUG toToolCall]   actualStructured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
-  const resultStr = typeof actualResult === 'string' ? actualResult : JSON.stringify(actualResult)
-  console.log('[DEBUG toToolCall]   actualResult:', resultStr ? resultStr.slice(0, 100) : 'undefined')
-  console.log('[DEBUG toToolCall]   hasOutput:', hasOutput)
 
   const toolCall: ToolCall = {
     id,
@@ -232,8 +212,6 @@ function toToolCall(
     ...(duration !== undefined ? { duration } : {}),
   }
   
-  const outputStr = JSON.stringify(toolCall.output)
-  console.log('[DEBUG toToolCall]   returning toolCall.output:', outputStr ? outputStr.slice(0, 300) : 'undefined')
   return toolCall
 }
 
@@ -319,16 +297,7 @@ function reconstructOriginalText(
  */
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
-    // V1 format: SessionV1.WithParts
-    // Filter out synthetic text parts (expanded agent prompts)
-    console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
-    console.log('[toMessage V1] msg.info keys:', Object.keys(msg.info))
-    console.log('[toMessage V1] msg.info.error:', (msg.info as any).error)
-    console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
-    
     const allTextParts = msg.parts.filter(p => p.type === 'text')
-    console.log('[toMessage V1] Text parts:', allTextParts.length, 
-      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: p.synthetic })))
     
     const textParts = msg.parts.filter(p => 
       p.type === 'text' && p.text && !p.synthetic
@@ -338,16 +307,9 @@ function toMessage(msg: BackendMessage): Message | null {
     const fileParts = msg.parts.filter(p => p.type === 'file') as V1FilePart[]
     const agentParts = msg.parts.filter(p => p.type === 'agent') as V1AgentPart[]
 
-    console.log('[toMessage V1] Filtered text parts:', textParts.length)
-    console.log('[toMessage V1] Agent parts:', agentParts.length, 
-      agentParts.map(p => ({ name: p.name, source: p.source })))
-
-    // Reconstruct original text with @agent mentions
     let content: string
     if (agentParts.length > 0) {
-      console.log('[toMessage V1] === RECONSTRUCTING ORIGINAL TEXT ===')
       content = reconstructOriginalText(textParts, agentParts)
-      console.log('[toMessage V1] Reconstructed content:', JSON.stringify(content))
     } else {
       content = textParts.map(p => p.text!).join('\n')
     }
@@ -355,11 +317,6 @@ function toMessage(msg: BackendMessage): Message | null {
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
       ? toolParts.map(p => {
-        console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
-        console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
         return toToolCall(p.callID || '', p.tool || '', p.state)
       })
       : undefined
@@ -373,14 +330,10 @@ function toMessage(msg: BackendMessage): Message | null {
         }))
       : undefined
 
-    // Extract agent mentions for highlighting
-    console.log('[toMessage V1] agentParts before filter:', agentParts.length, agentParts.map(p => ({ name: p.name, source: p.source })))
     const agents = agentParts.length > 0
       ? agentParts
           .filter(p => {
-            const valid = !!(p.name && p.source?.value)
-            console.log('[toMessage V1] agent filter:', p.name, 'valid:', valid, 'source:', p.source)
-            return valid
+            return !!(p.name && p.source?.value)
           })
           .map(p => ({
             type: 'agent' as const,
@@ -392,12 +345,6 @@ function toMessage(msg: BackendMessage): Message | null {
             }
           }))
       : undefined
-
-    console.log('[toMessage V1] agents after map:', agents?.length || 0, agents)
-
-console.log('[toMessage V1] Result content:', content.slice(0, 100))
-    console.log('[toMessage V1] Result agents:', agents?.length || 0)
-    console.log('[toMessage V1] msg.info.error:', (msg.info as any).error)
 
     // Convert error format: { name, data: { message } } -> { type, message }
     const rawError = (msg.info as any).error
@@ -681,7 +628,6 @@ export function registerSessionHandlers() {
     return messages.map(msg => {
       let timestamp = msg.timestamp
       if (timestamp instanceof Date && isNaN(timestamp.getTime())) {
-        console.warn('[SESSION_MESSAGES] Invalid Date for msg:', msg.id)
         timestamp = new Date()
       }
       
@@ -838,10 +784,7 @@ export function registerSessionHandlers() {
   })
 
   ipcMain.handle(CHANNELS.SESSION_AGENTS, async (_event, directory?: string) => {
-    console.log('[SESSION_AGENTS] Fetching agents for directory:', directory)
-    const result = await backend.session.agents(directory)
-    console.log('[SESSION_AGENTS] Result:', JSON.stringify(result, null, 2))
-    return result
+    return await backend.session.agents(directory)
   })
 
   ipcMain.handle(CHANNELS.SESSION_REVERT, async (_event, sessionID: string, messageID: string, directory?: string) => {

@@ -1093,6 +1093,7 @@ export const useSessionStore = defineStore('session', () => {
     isReverting.value = true
     try {
       const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
+      console.log('[revertMessage] FULL response:', JSON.stringify(result))
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined
       const newRevertPoint = (revertInfo?.messageID as string) || null
@@ -1130,6 +1131,7 @@ export const useSessionStore = defineStore('session', () => {
       } else {
         result = await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
       }
+      console.log('[recoverMessage] FULL response:', JSON.stringify(result))
 
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined

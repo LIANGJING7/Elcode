@@ -1379,7 +1379,6 @@ export const layer = Layer.effect(
 
         // extend database from config
         for (const [providerID, provider] of configProviders) {
-          console.log('[ProviderInit] Processing config provider:', providerID)
           const existing = database[providerID]
           const parsed: Info = {
             id: ProviderV2.ID.make(providerID),
@@ -1397,7 +1396,6 @@ export const layer = Layer.effect(
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-            console.log('[ProviderInit] Processing model:', modelID, 'config name:', model.name)
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
@@ -1411,7 +1409,6 @@ export const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
-            console.log('[ProviderInit] Model', modelID, 'final name:', name)
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1482,13 +1479,11 @@ export const layer = Layer.effect(
 
         // load env
         const envs = yield* env.all()
-        console.log('[ProviderInit] envs:', Object.keys(envs).filter(k => envs[k]))
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
-          console.log('[ProviderInit] Found env key for provider:', providerID, 'env:', provider.env)
           mergeProvider(providerID, {
             source: "env",
             key: provider.env.length === 1 ? apiKey : undefined,
@@ -1497,12 +1492,10 @@ export const layer = Layer.effect(
 
         // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
-        console.log('[ProviderInit] auths keys:', Object.keys(auths))
         for (const [id, provider] of Object.entries(auths)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
-            console.log('[ProviderInit] Found auth for provider:', providerID)
             mergeProvider(providerID, {
               source: "api",
               key: provider.key,
@@ -1643,21 +1636,12 @@ export const layer = Layer.effect(
     )
 
     const list = Effect.fn("Provider.list")(function* () {
-      const dir = yield* InstanceState.directory
-      console.log('[Provider.list] Getting providers for directory:', dir)
       const providers = yield* InstanceState.use(state, (s) => s.providers)
-      console.log('[Provider.list] Final providers count:', Object.keys(providers).length)
-      for (const [id, p] of Object.entries(providers)) {
-        console.log('[Provider.list] Provider:', id, 'source:', p.source, 'name:', p.name, 'hasKey:', !!p.key)
-      }
       return providers
     })
 
     const invalidateState = Effect.fn("Provider.invalidate")(function* () {
-      const dir = yield* InstanceState.directory
-      console.log('[Provider] Invalidating InstanceState cache for directory:', dir)
       yield* InstanceState.invalidate(state)
-      console.log('[Provider] InstanceState cache invalidated')
     })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
