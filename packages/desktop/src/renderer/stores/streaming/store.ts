@@ -85,6 +85,10 @@ let schedulerRunning = false
 // Used to classify message.part.delta events without explicit partType
 const partTypeMap = new Map<string, 'text' | 'reasoning'>()
 
+// Deduplication: track V2 textID/reasoningID per message to avoid V1+V2 duplicate processing
+// Map<messageID, Set<textID/reasoningID>>
+const v2ProcessedParts = new Map<string, Set<string>>()
+
 /**
  * Create or get streaming store singleton
  */
@@ -128,7 +132,26 @@ export function useStreamingStore(): StreamingStore {
     const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
     const props = event?.data ?? event?.properties ?? {}
     
+    // Deduplication: track V2 textID/reasoningID to avoid V1+V2 duplicate processing
+    if (event?.type === 'session.next.text.started' || event?.type === 'session.next.reasoning.started') {
+      const messageID = (props.assistantMessageID || props.messageID) as string
+      const partID = (props.textID || props.reasoningID) as string
+      if (messageID && partID) {
+        if (!v2ProcessedParts.has(messageID)) v2ProcessedParts.set(messageID, new Set())
+        v2ProcessedParts.get(messageID)!.add(partID)
+        console.log('[Dedup] Registered V2 part:', partID, 'for message:', messageID)
+      }
+    }
     
+    // Deduplication: skip V1 delta if already processed via V2
+    if (event?.type === 'message.part.delta') {
+      const messageID = props.messageID as string
+      const partID = props.partID as string
+      if (messageID && partID && v2ProcessedParts.get(messageID)?.has(partID)) {
+        console.log('[Dedup] Skip V1 delta - already processed via V2, partID:', partID)
+        return
+      }
+    }
     
     if (event?.type === 'message.part.updated') {
       const part = props.part as { 
@@ -321,6 +344,9 @@ export function useStreamingStore(): StreamingStore {
       state.reasoningHistory.length = 0
       state.startedAt = undefined
       state.stepError = null
+      // Clear dedup tracking
+      v2ProcessedParts.clear()
+      partTypeMap.clear()
     }
   }
 
@@ -340,6 +366,9 @@ export function useStreamingStore(): StreamingStore {
     state.reasoning.endedAt = null
     state.reasoningHistory.length = 0
     state.stepError = null
+    // Clear dedup tracking for new stream
+    v2ProcessedParts.clear()
+    partTypeMap.clear()
   }
 
   // Computed: ordered tools for current session
