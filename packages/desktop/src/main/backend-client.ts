@@ -331,6 +331,16 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
+
+    revert: async (sessionID: string, messageID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/revert?${params}`, { messageID })
+    },
+
+    unrevert: async (sessionID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/unrevert?${params}`)
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}

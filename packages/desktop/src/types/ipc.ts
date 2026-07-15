@@ -310,6 +310,8 @@ export const IPC_CHANNELS = {
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   SESSION_TODO: 'session:todo',
   SESSION_AGENTS: 'session:agents',
+  SESSION_REVERT: 'session:revert',
+  SESSION_UNREVERT: 'session:unrevert',
 
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
