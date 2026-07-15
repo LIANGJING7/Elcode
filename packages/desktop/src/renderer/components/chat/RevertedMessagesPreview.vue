@@ -27,7 +27,7 @@ async function handleRecover(messageId: string) {
           </div>
         </div>
 
-        <div   :class="{ collapsed }">
+        <div class="reverted-list" :class="{ collapsed }">
           <div class="reverted-list-inner">
             <div
               v-for="msg in messages"
