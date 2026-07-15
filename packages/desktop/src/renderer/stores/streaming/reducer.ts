@@ -60,6 +60,10 @@ export function streamingReducer(
       return state
 
     case 'STEP_FAILED':
+      if (action.messageId && state.message.id && action.messageId !== state.message.id) {
+        console.log('[Reducer] STEP_FAILED for different message, ignoring', 'action:', action.messageId, 'state:', state.message.id)
+        return state
+      }
       state.status = 'error'
       state.stepError = action.error
       return state

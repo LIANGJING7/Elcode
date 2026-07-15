@@ -157,7 +157,7 @@ export type StreamAction =
   | { type: 'STREAM_START'; messageId: string; version: number }
   | { type: 'STREAM_DONE'; version: number }
   | { type: 'STEP_ENDED'; version: number }
-  | { type: 'STEP_FAILED'; error: { type: string; message: string }; version: number }
+  | { type: 'STEP_FAILED'; messageId: string; error: { type: string; message: string }; version: number }
   
   // Text
   | { type: 'TEXT_STARTED'; textId: string; messageId: string; version: number }

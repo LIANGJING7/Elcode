@@ -355,6 +355,7 @@ export function createNormalizer(ctx: NormalizerContext) {
         const stepError = props.error as { type?: string; message?: string } | undefined
         return {
           type: 'STEP_FAILED',
+          messageId: props.assistantMessageID as string,
           error: {
             type: stepError?.type ?? 'unknown',
             message: stepError?.message ?? 'Step failed'
