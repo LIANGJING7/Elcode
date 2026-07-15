@@ -150,6 +150,7 @@ import QueuedMessageChip from './composer/QueuedMessageChip.vue'
 import MentionAutocomplete from './composer/MentionAutocomplete.vue'
 import { useMention } from '../composables/useMention'
 import { useModelsStore } from '../stores/models'
+import { useSessionStore } from '../stores/session'
 import type { PendingMessage } from '../stores/session'
 import type { MentionItem, MentionState } from '../../types/mention'
 
@@ -203,6 +204,7 @@ const emit = defineEmits<{
 }>()
 
 const modelsStore = useModelsStore()
+const sessionStore = useSessionStore()
 
 const inputRef = ref<{ focus: () => void } | null>(null)
 const inputValue = ref('')
@@ -243,6 +245,18 @@ watch(() => props.disabled, (val) => {
     nextTick(() => inputRef.value?.focus())
   }
 })
+
+watch(
+  () => sessionStore.revertedMessages.length,
+  (newLength, oldLength) => {
+    if (newLength > oldLength && sessionStore.revertedMessages.length > 0) {
+      const latestReverted = sessionStore.revertedMessages[0]
+      if (latestReverted && latestReverted.content) {
+        inputValue.value = latestReverted.content
+      }
+    }
+  }
+)
 
 function handleSend(content: string) {
   console.log('[DEBUG Composer] === handleSend CALLED ===')
