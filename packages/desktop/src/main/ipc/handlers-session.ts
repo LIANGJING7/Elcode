@@ -924,6 +924,16 @@ export function registerSessionHandlers() {
       return { success: false, error }
     }
   })
+
+  // Question reply
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REPLY, async (_, requestID: string, answers?: string[][], directory?: string) => {
+    await backend.session.questionReply(requestID, answers, directory)
+  })
+
+  // Question reject
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REJECT, async (_, requestID: string, directory?: string) => {
+    await backend.session.questionReject(requestID, directory)
+  })
 }
 
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {

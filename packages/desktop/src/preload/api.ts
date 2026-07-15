@@ -59,6 +59,12 @@ export const desktopAPI = {
 
     agents: (directory?: string): Promise<Agent[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory),
+
+    questionReply: (requestID: string, answers?: string[][], directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REPLY, requestID, answers, directory),
+
+    questionReject: (requestID: string, directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REJECT, requestID, directory),
   },
 
   file: {
