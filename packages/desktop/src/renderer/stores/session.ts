@@ -1071,14 +1071,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function revertMessage(sessionId: string, messageId: string) {
     console.log('[revertMessage] ENTRY: sessionId:', sessionId, 'messageId:', messageId)
-    console.log('[revertMessage] isReverting:', isReverting.value)
-    console.log('[revertMessage] isStreaming:', streamingStore.isCurrentStreaming.value)
-
-    if (isReverting.value) {
-      console.log('[revertMessage] Already reverting, skipping')
-      return
-    }
-
+    if (isReverting.value) return
     if (streamingStore.isCurrentStreaming.value) {
       console.log('[revertMessage] Interrupting streaming before revert')
       await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
@@ -1086,78 +1079,81 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     isReverting.value = true
-
     try {
-      const message = currentMessages.value.find(m => m.id === messageId)
-      console.log('[revertMessage] Found message:', message ? { id: message.id, role: message.role } : 'NOT FOUND')
-      if (!message || message.role !== 'user') {
-        console.error('[revertMessage] Message not found or not user message')
-        return
-      }
-
-      console.log('[revertMessage] Calling backend.session.revert, directory:', workspaceStore.currentWorkspace?.path)
       const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
-      console.log('[revertMessage] Backend returned:', result)
-
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined
-      const revertedMsgId = revertInfo?.messageID as string | undefined
-      console.log('[revertMessage] revertedMsgId from response:', revertedMsgId)
+      const revertPoint = revertInfo?.messageID as string | undefined
+      console.log('[revertMessage] Response revertPoint:', revertPoint)
 
-      if (revertedMsgId && sessionId === currentSessionId.value) {
+      if (revertPoint && sessionId === currentSessionId.value) {
         const conv = currentConversation.value
-        if (conv) {
-          const msgIndex = conv.messages.findIndex(m => m.id === revertedMsgId)
-          console.log('[revertMessage] msgIndex in conv:', msgIndex, 'total msgs:', conv.messages.length)
-          if (msgIndex !== -1) {
-            const removedMsg = conv.messages[msgIndex]
-            conv.messages.splice(msgIndex, 1)
-            console.log('[revertMessage] Removed message:', revertedMsgId, 'role:', removedMsg.role)
-
-            if (removedMsg.role === 'user') {
-              revertedMessages.value.unshift(removedMsg)
-              saveRevertedMessages(sessionId, revertedMessages.value)
-              console.log('[revertMessage] Added to revertedMessages, count:', revertedMessages.value.length)
-            }
-          } else {
-            console.warn('[revertMessage] Message not found in conversation messages. Available IDs:', conv.messages.map(m => m.id))
-          }
-        }
+        if (!conv) { await loadMessages(sessionId) }
+        // Remove all messages from revert point onwards
+        applyRevertFilter(sessionId, revertPoint)
       }
     } catch (error) {
-      console.error('[revertMessage] Revert failed:', error)
+      console.error('[revertMessage] Failed:', error)
       state.error = error instanceof Error ? error.message : 'Failed to revert message'
     } finally {
       isReverting.value = false
     }
   }
 
-  async function recoverMessage(sessionId: string, targetMessageId: string) {
-    if (isReverting.value) {
-      console.log('[recoverMessage] Already reverting, skipping')
-      return
+  function applyRevertFilter(sessionId: string, revertPoint: string) {
+    const conv = currentConversation.value
+    if (!conv) return
+    const idx = conv.messages.findIndex(m => m.id === revertPoint)
+    console.log('[applyRevertFilter] revertPoint:', revertPoint, 'found at index:', idx, 'total:', conv.messages.length)
+    if (idx === -1) return
+    const removed = conv.messages.splice(idx)
+    const userMsgs = removed.filter(m => m.role === 'user')
+    revertedMessages.value = []
+    for (let i = userMsgs.length - 1; i >= 0; i--) {
+      revertedMessages.value.unshift(userMsgs[i])
     }
+    saveRevertedMessages(sessionId, revertedMessages.value)
+    console.log('[applyRevertFilter] Removed', removed.length, 'msgs, preview has', revertedMessages.value.length)
+  }
+
+  async function recoverMessage(sessionId: string, targetMessageId: string) {
+    console.log('[recoverMessage] ENTRY: sessionId:', sessionId, 'targetMessageId:', targetMessageId)
+    if (isReverting.value) return
 
     isReverting.value = true
-
     try {
       const targetIndex = revertedMessages.value.findIndex(m => m.id === targetMessageId)
-      if (targetIndex === -1) {
-        console.error('[recoverMessage] Target message not found in reverted list')
-        return
-      }
+      console.log('[recoverMessage] targetIndex in preview:', targetIndex, 'of', revertedMessages.value.length)
+      if (targetIndex === -1) return
 
       const nextUserMessage = revertedMessages.value.slice(targetIndex + 1).find(m => m.role === 'user')
+      console.log('[recoverMessage] nextUserMessage:', nextUserMessage?.id || 'none (full restore)')
 
+      let result: unknown
       if (nextUserMessage) {
-        await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
+        result = await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
       } else {
-        await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
+        result = await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
       }
+      console.log('[recoverMessage] API returned:', result)
 
-      console.log('[recoverMessage] Recovery initiated')
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const revertPoint = revertInfo?.messageID as string | undefined
+      console.log('[recoverMessage] new revertPoint:', revertPoint)
+
+      if (sessionId === currentSessionId.value) {
+        await loadMessages(sessionId)
+        if (revertPoint) {
+          applyRevertFilter(sessionId, revertPoint)
+        } else {
+          revertedMessages.value = []
+          saveRevertedMessages(sessionId, [])
+        }
+        console.log('[recoverMessage] complete, preview size:', revertedMessages.value.length)
+      }
     } catch (error) {
-      console.error('[recoverMessage] Recovery failed:', error)
+      console.error('[recoverMessage] Failed:', error)
       state.error = error instanceof Error ? error.message : 'Failed to recover message'
     } finally {
       isReverting.value = false
