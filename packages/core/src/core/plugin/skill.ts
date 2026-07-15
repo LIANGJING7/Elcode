@@ -5,6 +5,7 @@ import { PluginV2 } from "../plugin"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
 import customizeOpencodeContent from "./skill/customize-opencode.md?raw"
+import { getSuperpowersSkills } from "@/skill/superpowers-builtin"
 
 export const CustomizeOpencodeContent = customizeOpencodeContent
 
@@ -27,6 +28,21 @@ export const Plugin = PluginV2.define({
           }),
         }),
       )
+
+      for (const s of getSuperpowersSkills()) {
+        if (s.name === "using-superpowers") continue
+        editor.source(
+          new SkillV2.EmbeddedSource({
+            type: "embedded",
+            skill: new SkillV2.Info({
+              name: s.name,
+              description: s.description,
+              location: AbsolutePath.make(s.location),
+              content: s.content,
+            }),
+          }),
+        )
+      }
     })
   }),
 })
