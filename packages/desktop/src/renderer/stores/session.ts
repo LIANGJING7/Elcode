@@ -281,6 +281,9 @@ export const useSessionStore = defineStore('session', () => {
 
   // Revert point: messages with id >= this are hidden (null = no revert active)
   const revertPoint = ref<string | null>(null)
+  watch(revertPoint, (newVal, oldVal) => {
+    console.log('[WATCH revertPoint] CHANGED:', { from: oldVal, to: newVal })
+  })
   // Lock for preventing concurrent revert operations
   const isReverting = ref(false)
   
@@ -314,14 +317,19 @@ export const useSessionStore = defineStore('session', () => {
 
   const currentMessages = computed(() => {
     const msgs = currentConversation.value?.messages || []
+    console.log('[currentMessages] msgs:', msgs.length, 'revertPoint:', revertPoint.value, 'first 3 ids:', msgs.slice(0, 3).map(m => m.id))
     if (!revertPoint.value) return msgs
-    return msgs.filter(m => m.id < revertPoint.value!)
+    const filtered = msgs.filter(m => m.id.startsWith('temp-') || m.id < revertPoint.value!)
+    console.log('[currentMessages] filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
   })
 
   const revertedMessages = computed(() => {
     const msgs = currentConversation.value?.messages || []
     if (!revertPoint.value) return []
-    return msgs.filter(m => m.id >= revertPoint.value! && m.role === 'user')
+    const filtered = msgs.filter(m => !m.id.startsWith('temp-') && m.id >= revertPoint.value! && m.role === 'user')
+    console.log('[revertedMessages] revertPoint:', revertPoint.value, 'filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
   })
 
   const hasActiveSession = computed(() =>
@@ -1167,8 +1175,10 @@ export const useSessionStore = defineStore('session', () => {
     const removeStream = window.desktop.session.onStreamEvent((data) => {
       const event = data.event as Record<string, unknown>
       const eventType = event?.type as string
-
       const props = (event?.data ?? event?.properties) as Record<string, unknown> | undefined
+
+      console.log('[SSE] eventType:', eventType, 'props:', JSON.stringify(props).slice(0, 200))
+
       const eventSessionId = props?.sessionID as string | undefined
 
       if (eventType?.startsWith('server.')) return
