@@ -331,6 +331,20 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
+
+    questionReply: async (requestID: string, answers?: string[][], directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reply${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url, answers ? { answers } : undefined)
+    },
+
+    questionReject: async (requestID: string, directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reject${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url)
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
