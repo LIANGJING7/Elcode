@@ -103,7 +103,9 @@ async function handleReject() {
 </script>
 
 <template>
-  <div v-if="current" class="question-panel bg-bg-elevated border border-border rounded-lg shadow-lg">
+  <div v-if="current" class="pt-0 pb-6 mx-6">
+    <div class="max-w-chat-max mx-auto">
+      <div class="question-panel bg-bg-elevated border border-border rounded-2xl shadow transition-all duration-200 flex flex-col">
     <div v-if="isMulti" class="question-tabs border-b border-border">
       <div class="tabs-header flex items-center gap-1 px-2 py-1 overflow-x-auto">
         <button
@@ -201,6 +203,8 @@ async function handleReject() {
       >
         Dismiss
       </Button>
+    </div>
+      </div>
     </div>
   </div>
 </template>
