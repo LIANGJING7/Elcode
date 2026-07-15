@@ -1111,6 +1111,31 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     isReverting.value = true
+
+    const prevRevertPoint = revertPoint.value
+    const msgs = currentConversation.value?.messages || []
+    const targetIdx = msgs.findIndex(m => m.id === messageId)
+    const targetMsg = targetIdx >= 0 ? msgs[targetIdx] : null
+    let optimisticPoint: string | null = null
+    if (targetMsg) {
+      if (targetMsg.role === 'user') {
+        optimisticPoint = targetMsg.id
+      } else {
+        for (let i = targetIdx - 1; i >= 0; i--) {
+          if (msgs[i].role === 'user') {
+            optimisticPoint = msgs[i].id
+            break
+          }
+        }
+        if (!optimisticPoint) optimisticPoint = messageId
+      }
+    }
+
+    if (sessionId === currentSessionId.value && optimisticPoint) {
+      revertPoint.value = optimisticPoint
+      saveRevertedMessages(sessionId, optimisticPoint)
+    }
+
     try {
       const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
       console.log('[revertMessage] FULL response:', JSON.stringify(result))
@@ -1126,6 +1151,10 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (error) {
       console.error('[revertMessage] Failed:', error)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = prevRevertPoint
+        saveRevertedMessages(sessionId, prevRevertPoint)
+      }
       state.error = error instanceof Error ? error.message : 'Failed to revert message'
     } finally {
       isReverting.value = false
@@ -1137,14 +1166,22 @@ export const useSessionStore = defineStore('session', () => {
     if (isReverting.value) return
 
     isReverting.value = true
+    const prevRevertPoint = revertPoint.value
+
+    const revertedList = revertedMessages.value
+    const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
+    console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
+    if (targetIndex === -1) { isReverting.value = false; return }
+
+    const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
+    const optimisticPoint = nextUserMessage ? nextUserMessage.id : null
+
+    if (sessionId === currentSessionId.value) {
+      revertPoint.value = optimisticPoint
+      saveRevertedMessages(sessionId, optimisticPoint)
+    }
+
     try {
-      const revertedList = revertedMessages.value
-      const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
-      console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
-      if (targetIndex === -1) { isReverting.value = false; return }
-
-      const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
-
       let result: unknown
       if (nextUserMessage) {
         result = await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
@@ -1165,6 +1202,10 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (error) {
       console.error('[recoverMessage] Failed:', error)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = prevRevertPoint
+        saveRevertedMessages(sessionId, prevRevertPoint)
+      }
       state.error = error instanceof Error ? error.message : 'Failed to recover message'
     } finally {
       isReverting.value = false

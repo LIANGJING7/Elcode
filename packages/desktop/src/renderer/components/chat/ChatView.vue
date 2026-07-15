@@ -111,6 +111,7 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @open-diff-file="emit('openDiffFile', $event)"
     />
     <ChatTodo class="flex-shrink-0" />
+    <RevertedMessagesPreview class="flex-shrink-0" />
     <div v-if="questionStore.hasPending" class="pt-0 pb-6 mx-6 flex-shrink-0">
       <div class="max-w-chat-max mx-auto">
         <QuestionPanel />
@@ -129,6 +130,5 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @edit-queued="handleEditQueued"
       @remove-queued="handleRemoveQueued"
     />
-    <RevertedMessagesPreview class="flex-shrink-0" />
   </div>
 </template>
