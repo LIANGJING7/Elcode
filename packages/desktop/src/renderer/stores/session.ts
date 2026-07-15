@@ -33,26 +33,30 @@ let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 // localStorage helpers for reverted messages
-function saveRevertedMessages(sessionId: string, messages: Message[]) {
+function saveRevertedMessages(sessionId: string, revertPoint: string | null) {
   try {
     const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
     const all = data ? JSON.parse(data) : {}
-    all[sessionId] = messages
+    if (revertPoint) {
+      all[sessionId] = revertPoint
+    } else {
+      delete all[sessionId]
+    }
     localStorage.setItem(REVERTED_MESSAGES_STORAGE_KEY, JSON.stringify(all))
   } catch (error) {
     console.error('[saveRevertedMessages] Failed:', error)
   }
 }
 
-function loadRevertedMessages(sessionId: string): Message[] {
+function loadRevertedMessages(sessionId: string): string | null {
   try {
     const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
-    if (!data) return []
+    if (!data) return null
     const all = JSON.parse(data)
-    return all[sessionId] || []
+    return all[sessionId] || null
   } catch (error) {
     console.error('[loadRevertedMessages] Failed:', error)
-    return []
+    return null
   }
 }
 
@@ -275,8 +279,8 @@ export const useSessionStore = defineStore('session', () => {
   // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
   let manuallyInterrupted = false
 
-  // Reverted messages for preview
-  const revertedMessages = ref<Message[]>([])
+  // Revert point: messages with id >= this are hidden (null = no revert active)
+  const revertPoint = ref<string | null>(null)
   // Lock for preventing concurrent revert operations
   const isReverting = ref(false)
   
@@ -308,9 +312,17 @@ export const useSessionStore = defineStore('session', () => {
     state.conversations.find(c => c.id === currentSessionId.value)
   )
 
-  const currentMessages = computed(() =>
-    currentConversation.value?.messages || []
-  )
+  const currentMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    if (!revertPoint.value) return msgs
+    return msgs.filter(m => m.id < revertPoint.value!)
+  })
+
+  const revertedMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    if (!revertPoint.value) return []
+    return msgs.filter(m => m.id >= revertPoint.value! && m.role === 'user')
+  })
 
   const hasActiveSession = computed(() =>
     currentSessionId.value !== null && workspaceStore.hasCurrentWorkspace
@@ -682,8 +694,8 @@ export const useSessionStore = defineStore('session', () => {
     isPendingNewSession.value = false
     streamingStore.setCurrentSession(sessionId)
 
-    // Load reverted messages from localStorage
-    revertedMessages.value = loadRevertedMessages(sessionId)
+    // Load revert point from localStorage
+    revertPoint.value = loadRevertedMessages(sessionId)
 
     // Remember this session for current workspace
     if (workspaceStore.currentWorkspace) {
@@ -771,10 +783,10 @@ export const useSessionStore = defineStore('session', () => {
     }
     state.error = null
 
-    if (revertedMessages.value.length > 0) {
-      revertedMessages.value = []
+    if (revertPoint.value) {
+      revertPoint.value = null
       if (currentSessionId.value) {
-        saveRevertedMessages(currentSessionId.value, [])
+        saveRevertedMessages(currentSessionId.value, null)
       }
     }
 
@@ -1083,14 +1095,13 @@ export const useSessionStore = defineStore('session', () => {
       const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined
-      const revertPoint = revertInfo?.messageID as string | undefined
-      console.log('[revertMessage] Response revertPoint:', revertPoint)
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[revertMessage] new revertPoint:', newRevertPoint)
 
-      if (revertPoint && sessionId === currentSessionId.value) {
-        const conv = currentConversation.value
-        if (!conv) { await loadMessages(sessionId) }
-        // Remove all messages from revert point onwards
-        applyRevertFilter(sessionId, revertPoint)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[revertMessage] revertPoint set, hidden msgs:', revertedMessages.value.length)
       }
     } catch (error) {
       console.error('[revertMessage] Failed:', error)
@@ -1100,34 +1111,18 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  function applyRevertFilter(sessionId: string, revertPoint: string) {
-    const conv = currentConversation.value
-    if (!conv) return
-    const idx = conv.messages.findIndex(m => m.id === revertPoint)
-    console.log('[applyRevertFilter] revertPoint:', revertPoint, 'found at index:', idx, 'total:', conv.messages.length)
-    if (idx === -1) return
-    const removed = conv.messages.splice(idx)
-    const userMsgs = removed.filter(m => m.role === 'user')
-    revertedMessages.value = []
-    for (let i = userMsgs.length - 1; i >= 0; i--) {
-      revertedMessages.value.unshift(userMsgs[i])
-    }
-    saveRevertedMessages(sessionId, revertedMessages.value)
-    console.log('[applyRevertFilter] Removed', removed.length, 'msgs, preview has', revertedMessages.value.length)
-  }
-
   async function recoverMessage(sessionId: string, targetMessageId: string) {
-    console.log('[recoverMessage] ENTRY: sessionId:', sessionId, 'targetMessageId:', targetMessageId)
+    console.log('[recoverMessage] ENTRY:', targetMessageId)
     if (isReverting.value) return
 
     isReverting.value = true
     try {
-      const targetIndex = revertedMessages.value.findIndex(m => m.id === targetMessageId)
-      console.log('[recoverMessage] targetIndex in preview:', targetIndex, 'of', revertedMessages.value.length)
-      if (targetIndex === -1) return
+      const revertedList = revertedMessages.value
+      const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
+      console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
+      if (targetIndex === -1) { isReverting.value = false; return }
 
-      const nextUserMessage = revertedMessages.value.slice(targetIndex + 1).find(m => m.role === 'user')
-      console.log('[recoverMessage] nextUserMessage:', nextUserMessage?.id || 'none (full restore)')
+      const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
 
       let result: unknown
       if (nextUserMessage) {
@@ -1135,22 +1130,16 @@ export const useSessionStore = defineStore('session', () => {
       } else {
         result = await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
       }
-      console.log('[recoverMessage] API returned:', result)
 
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined
-      const revertPoint = revertInfo?.messageID as string | undefined
-      console.log('[recoverMessage] new revertPoint:', revertPoint)
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[recoverMessage] new revertPoint:', newRevertPoint)
 
       if (sessionId === currentSessionId.value) {
-        await loadMessages(sessionId)
-        if (revertPoint) {
-          applyRevertFilter(sessionId, revertPoint)
-        } else {
-          revertedMessages.value = []
-          saveRevertedMessages(sessionId, [])
-        }
-        console.log('[recoverMessage] complete, preview size:', revertedMessages.value.length)
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[recoverMessage] complete, hidden:', revertedMessages.value.length)
       }
     } catch (error) {
       console.error('[recoverMessage] Failed:', error)
@@ -1177,6 +1166,16 @@ export const useSessionStore = defineStore('session', () => {
           const newTitle = info.title as string | undefined
           const conv = state.conversations.find(c => c.id === sessionId)
           if (conv && newTitle) conv.title = newTitle
+          // Sync revert point from backend
+          const revertInfo = (info as any).revert as Record<string, unknown> | undefined
+          if (sessionId === currentSessionId.value && revertInfo !== undefined) {
+            const rp = (revertInfo?.messageID as string) || null
+            if (rp !== revertPoint.value) {
+              revertPoint.value = rp
+              saveRevertedMessages(sessionId, rp)
+              console.log('[SSE] session.updated synced revertPoint:', rp)
+            }
+          }
         }
         return
       }
@@ -1230,20 +1229,11 @@ export const useSessionStore = defineStore('session', () => {
       if (eventType === 'message.removed') {
         const msgId = props?.messageID as string | undefined
         const sessionId = props?.sessionID as string | undefined
-
         if (msgId && sessionId === currentSessionId.value) {
-          const conv = currentConversation.value
-          if (conv) {
-            const msgIndex = conv.messages.findIndex(m => m.id === msgId)
-            if (msgIndex !== -1) {
-              const removedMsg = conv.messages[msgIndex]
-              conv.messages.splice(msgIndex, 1)
-
-              if (removedMsg.role === 'user') {
-                revertedMessages.value.unshift(removedMsg)
-                saveRevertedMessages(sessionId, revertedMessages.value)
-              }
-            }
+          // Set revert point to this message - hides it and all subsequent
+          if (!revertPoint.value || msgId < revertPoint.value) {
+            revertPoint.value = msgId
+            saveRevertedMessages(sessionId, msgId)
           }
         }
         return
