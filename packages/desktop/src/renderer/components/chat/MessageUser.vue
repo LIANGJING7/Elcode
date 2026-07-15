@@ -163,8 +163,9 @@ function handleKeydown(e: KeyboardEvent) {
         </span>
       </div>
 
-      <!-- Revert button - always visible below bubble -->
+      <!-- Revert button - always visible below bubble, hidden for temp messages -->
       <button
+        v-if="!props.message.id.startsWith('temp-')"
         @click.stop="handleRevert"
         :disabled="sessionStore.isReverting"
         class="flex items-center gap-1 text-xs text-text-muted hover:text-text disabled:opacity-50 transition-colors"
