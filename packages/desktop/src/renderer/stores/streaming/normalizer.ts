@@ -5,7 +5,7 @@
  * This layer isolates the reducer from raw SSE event format changes.
  */
 
-import type { StreamAction } from './types'
+import type { StreamAction, QuestionInfo, QuestionTool } from './types'
 
 // ============================================
 // Types
@@ -359,6 +359,30 @@ export function createNormalizer(ctx: NormalizerContext) {
             type: stepError?.type ?? 'unknown',
             message: stepError?.message ?? 'Step failed'
           },
+          version
+        }
+    }
+
+    // Question events
+    switch (type) {
+      case 'question.asked':
+        return {
+          type: 'QUESTION_ASKED',
+          request: {
+            id: props.id as string,
+            sessionID: props.sessionID as string,
+            questions: props.questions as QuestionInfo[],
+            tool: props.tool as QuestionTool | undefined
+          },
+          version
+        }
+
+      case 'question.replied':
+      case 'question.rejected':
+        return {
+          type: 'QUESTION_RESOLVED',
+          sessionID: props.sessionID as string,
+          requestID: props.requestID as string,
           version
         }
     }
