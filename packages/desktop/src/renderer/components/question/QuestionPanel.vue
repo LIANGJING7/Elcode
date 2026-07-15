@@ -3,107 +3,175 @@ import { ref, computed, watch } from 'vue'
 import { useQuestionStore } from '@/stores/question'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { QuestionInfo, QuestionOption } from '@/stores/streaming/types'
+import type { QuestionOption } from '@/stores/streaming/types'
 
 const questionStore = useQuestionStore()
 
-const tab = ref<number | 'confirm'>(0)
+const tab = ref(0)
 const answers = ref<string[][]>([])
-const customInput = ref('')
-const editingCustom = ref(false)
+const customText = ref<string[]>([])
+const selected = ref(0)
+const editing = ref(false)
 const submitting = ref(false)
 
 const current = computed(() => questionStore.current)
 
-const isMulti = computed(() => {
-  return current.value && current.value.questions.length > 1
+const isSingle = computed(() => {
+  if (!current.value) return true
+  return current.value.questions.length === 1
+    && !current.value.questions[0]?.multiple
+})
+
+const isConfirm = computed(() => {
+  if (!current.value) return false
+  return !isSingle.value && tab.value === current.value.questions.length
 })
 
 const currentQuestion = computed(() => {
-  if (!current.value) return null
-  if (isMulti.value && typeof tab.value === 'number') {
-    return current.value.questions[tab.value] ?? null
-  }
-  return current.value.questions[0] ?? null
-})
-
-const currentTabIndex = computed(() => {
-  return isMulti.value && typeof tab.value === 'number' ? tab.value : 0
+  if (!current.value || isConfirm.value) return null
+  return current.value.questions[tab.value] ?? null
 })
 
 const allowCustom = computed(() => {
   return currentQuestion.value?.custom !== false
 })
 
+const currentAnswers = computed(() => {
+  return answers.value[tab.value] ?? []
+})
+
+const customValue = computed(() => {
+  return customText.value[tab.value] ?? ''
+})
+
+// is "Type your own answer" highlighted
+const isOther = computed(() => {
+  if (!currentQuestion.value || !allowCustom.value) return false
+  return selected.value === currentQuestion.value.options.length
+})
+
+const isPicked = computed(() => {
+  const val = customValue.value
+  return val && currentAnswers.value.includes(val)
+})
+
+// Set answers for a specific tab (creates new array for Vue reactivity)
+function setAnswers(idx: number, list: string[]) {
+  const a = [...answers.value]
+  a[idx] = list
+  answers.value = a
+}
+
+function setCustom(idx: number, text: string) {
+  const c = [...customText.value]
+  c[idx] = text
+  customText.value = c
+}
+
 watch(current, (newVal) => {
   if (newVal) {
     tab.value = 0
     answers.value = newVal.questions.map(() => [])
-    customInput.value = ''
-    editingCustom.value = false
+    customText.value = newVal.questions.map(() => '')
+    selected.value = 0
+    editing.value = false
     submitting.value = false
   }
 })
 
-function handleOptionClick(q: QuestionInfo, option: QuestionOption, qIndex: number) {
-  if (q.multiple) {
-    const cur = answers.value[qIndex] ?? []
-    const idx = cur.indexOf(option.label)
-    if (idx === -1) {
-      answers.value[qIndex] = [...cur, option.label]
-    } else {
-      answers.value[qIndex] = cur.filter((_, i) => i !== idx)
-    }
+function toggleOption(label: string) {
+  const cur = [...currentAnswers.value]
+  const idx = cur.indexOf(label)
+  if (idx === -1) {
+    setAnswers(tab.value, [...cur, label])
   } else {
-    answers.value[qIndex] = [option.label]
-    editingCustom.value = false
-    customInput.value = ''
-
-    if (!isMulti.value) {
-      submitAnswer()
-    } else {
-      tab.value = Math.min((tab.value as number) + 1, current.value!.questions.length)
-    }
+    setAnswers(tab.value, cur.filter((_, i) => i !== idx))
   }
 }
 
-function isSelected(qIndex: number, option: QuestionOption): boolean {
-  return answers.value[qIndex]?.includes(option.label) ?? false
+function pickOption(label: string, asCustom = false) {
+  setAnswers(tab.value, [label])
+  if (asCustom) {
+    setCustom(tab.value, label)
+  }
+  editing.value = false
+  if (isSingle.value) {
+    submitAnswer()
+  } else {
+    tab.value = tab.value + 1
+  }
 }
 
-function selectCustom() {
-  if (!allowCustom.value) return
-  editingCustom.value = true
+function choose(index: number) {
+  const q = currentQuestion.value
+  if (!q) return
+
+  // "Type your own answer"
+  if (allowCustom.value && index === q.options.length) {
+    if (!q.multiple) {
+      editing.value = true
+      return
+    }
+    if (isPicked.value) {
+      toggleOption(customValue.value)
+      return
+    }
+    editing.value = true
+    return
+  }
+
+  const option = q.options[index]
+  if (!option) return
+
+  if (q.multiple) {
+    toggleOption(option.label)
+  } else {
+    pickOption(option.label)
+  }
 }
 
 function saveCustom() {
-  const qIndex = currentTabIndex.value
-  const value = customInput.value.trim()
-  if (!value) {
-    editingCustom.value = false
-    return
-  }
+  const val = customValue.value.trim()
   const q = currentQuestion.value
   if (!q) return
-  if (q.multiple) {
-    const cur = answers.value[qIndex] ?? []
-    answers.value[qIndex] = [...cur, value]
-  } else {
-    answers.value[qIndex] = [value]
-    if (!isMulti.value && current.value) {
-      submitAnswer()
-      return
+
+  if (!val) {
+    const prev = customText.value[tab.value]
+    if (prev) {
+      setCustom(tab.value, '')
+      setAnswers(tab.value, currentAnswers.value.filter(v => v !== prev))
     }
-    tab.value = Math.min((tab.value as number) + 1, current.value!.questions.length)
+    editing.value = false
+    return
   }
-  editingCustom.value = false
+
+  if (q.multiple) {
+    const prev = customText.value[tab.value]
+    const cur = [...currentAnswers.value]
+    if (prev) {
+      const idx = cur.indexOf(prev)
+      if (idx !== -1) cur.splice(idx, 1)
+    }
+    if (!cur.includes(val)) cur.push(val)
+    setCustom(tab.value, val)
+    setAnswers(tab.value, cur)
+    editing.value = false
+    return
+  }
+
+  pickOption(val, true)
+}
+
+function cancelCustom() {
+  editing.value = false
 }
 
 async function submitAnswer() {
   if (!current.value || submitting.value) return
   submitting.value = true
   try {
-    await questionStore.reply(answers.value)
+    const all = current.value.questions.map((_, i) => answers.value[i] ?? [])
+    await questionStore.reply(all)
   } finally {
     submitting.value = false
   }
@@ -126,26 +194,26 @@ async function handleReject() {
       <div class="question-panel bg-bg-elevated border border-border rounded-lg shadow-lg">
 
         <!-- Tabs for multi-question -->
-        <div v-if="isMulti" class="question-tabs border-b border-border">
-          <div class="tabs-header flex items-center gap-1 px-2 py-1 overflow-x-auto">
+        <div v-if="!isSingle" class="question-tabs border-b border-border">
+          <div class="flex items-center gap-1 px-2 py-1 overflow-x-auto">
             <button
               v-for="(q, i) in current.questions"
               :key="i"
               :class="cn(
-                'tab-trigger px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
                 tab === i ? 'bg-bg-hover text-text' : 'text-text-muted hover:text-text'
               )"
               @click="tab = i"
             >
               {{ q.header }}
-              <span v-if="answers[i]?.length" class="ml-1 text-accent">✓</span>
+              <span v-if="answers[i]?.length" class="ml-1 text-success">✓</span>
             </button>
             <button
               :class="cn(
-                'tab-trigger px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
-                tab === 'confirm' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
+                isConfirm ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
               )"
-              @click="tab = 'confirm'"
+              @click="tab = current.questions.length"
             >
               Confirm
             </button>
@@ -153,92 +221,108 @@ async function handleReject() {
         </div>
 
         <!-- Confirm page -->
-        <div v-if="tab === 'confirm' && isMulti" class="confirm-page p-4">
-          <h3 class="text-lg font-semibold text-text mb-4">Review Answers</h3>
-          <div class="space-y-3">
+        <div v-if="isConfirm" class="p-4">
+          <h3 class="text-base font-semibold text-text mb-3">Review</h3>
+          <div class="space-y-2">
             <div
               v-for="(q, i) in current.questions"
               :key="i"
-              class="answer-review p-3 bg-bg rounded border border-border/50"
+              class="p-3 bg-bg rounded border border-border/50"
             >
-              <div class="text-xs text-text-muted mb-1">{{ q.header }}</div>
-              <div class="text-sm text-text">{{ answers[i]?.join(', ') || 'Not answered' }}</div>
+              <div class="text-xs text-text-muted mb-1">{{ q.header }}:</div>
+              <div :class="answers[i]?.length ? 'text-sm text-text' : 'text-sm text-error'">
+                {{ answers[i]?.join(', ') || '(not answered)' }}
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Question content -->
-        <div v-else-if="currentQuestion" class="question-content p-4">
-          <h3 class="question-text text-lg font-medium text-text mb-4">
+        <div v-else-if="currentQuestion" class="p-4">
+          <h3 class="text-sm text-text mb-4">
             {{ currentQuestion.question }}
+            <span v-if="currentQuestion.multiple" class="text-xs text-text-muted">(select all that apply)</span>
           </h3>
 
-          <div v-if="currentQuestion.multiple" class="multiple-hint text-xs text-text-muted mb-3">
-            Select all that apply
-          </div>
-
-          <div class="options space-y-2">
-            <button
+          <div class="space-y-1.5">
+            <!-- Options -->
+            <div
               v-for="(option, oi) in currentQuestion.options"
               :key="oi"
               :class="cn(
-                'option-btn w-full text-left px-4 py-3 rounded-lg border transition-all',
-                isSelected(currentTabIndex, option)
-                  ? 'bg-accent/10 border-accent text-text'
-                  : 'bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
+                'w-full text-left px-3 py-2.5 rounded-lg border transition-colors cursor-pointer',
+                selected === oi && !editing ? 'border-border-light bg-bg-hover' : 'border-transparent',
+                currentAnswers.includes(option.label) ? 'border-accent bg-accent/10' : ''
               )"
-              :disabled="submitting"
-              @click="handleOptionClick(currentQuestion!, option, currentTabIndex)"
+              @mouseenter="selected = oi"
+              @click="choose(oi)"
             >
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2.5">
                 <span :class="cn(
-                  'w-4 h-4 rounded border flex items-center justify-center text-xs',
-                  isSelected(currentTabIndex, option) ? 'border-accent bg-accent text-white' : 'border-border-muted'
+                  'w-4 h-4 rounded-full border flex items-center justify-center text-xs shrink-0',
+                  currentAnswers.includes(option.label) ? 'border-accent bg-accent text-white' : 'border-muted'
                 )">
-                  {{ currentQuestion.multiple ? (isSelected(currentTabIndex, option) ? '✓' : '') : (oi + 1) }}
+                  {{ currentAnswers.includes(option.label) ? '✓' : '' }}
                 </span>
-                <span class="font-medium">{{ option.label }}</span>
-              </div>
-              <div v-if="option.description" class="text-sm text-text-muted mt-1 ml-6">
-                {{ option.description }}
-              </div>
-            </button>
-
-            <!-- Custom answer option -->
-            <div v-if="allowCustom" class="custom-option">
-              <button
-                v-if="!editingCustom"
-                :class="cn(
-                  'option-btn w-full text-left px-4 py-3 rounded-lg border transition-all bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
-                )"
-                :disabled="submitting"
-                @click="selectCustom"
-              >
-                <div class="flex items-center gap-2">
-                  <span class="w-4 h-4 rounded border border-border-muted flex items-center justify-center text-xs">
-                    {{ currentQuestion?.options.length + 1 }}
-                  </span>
-                  <span class="font-medium">Type your own answer</span>
+                <div>
+                  <span class="font-medium text-text text-sm">{{ option.label }}</span>
+                  <p v-if="option.description" class="text-xs text-text-muted mt-0.5">{{ option.description }}</p>
                 </div>
-              </button>
-
-              <div v-else class="custom-input-wrapper px-4 py-3 border border-border rounded-lg bg-bg">
-                <input
-                  v-model="customInput"
-                  type="text"
-                  class="w-full bg-transparent border-none outline-none text-text placeholder-text-muted"
-                  placeholder="Type your answer..."
-                  autofocus
-                  @keyup.enter="saveCustom"
-                  @keyup.escape="editingCustom = false"
-                />
               </div>
             </div>
+
+            <!-- Custom answer option -->
+            <template v-if="allowCustom">
+              <!-- Not editing: show "Type your own answer" row -->
+              <div
+                v-if="!editing"
+                :class="cn(
+                  'w-full text-left px-3 py-2.5 rounded-lg border transition-colors cursor-pointer',
+                  isOther ? 'border-border-light bg-bg-hover' : 'border-transparent',
+                  isPicked ? 'border-accent bg-accent/10' : ''
+                )"
+                @mouseenter="selected = currentQuestion.options.length"
+                @click="choose(currentQuestion.options.length)"
+              >
+                <div class="flex items-center gap-2.5">
+                  <span :class="cn(
+                    'w-4 h-4 rounded-full border flex items-center justify-center text-xs shrink-0',
+                    isPicked ? 'border-accent bg-accent text-white' : 'border-muted'
+                  )">
+                    {{ isPicked ? '✓' : '' }}
+                  </span>
+                  <span class="text-sm text-text">Type your own answer</span>
+                </div>
+                <!-- Show saved custom value below -->
+                <div v-if="currentAnswers.includes('') === false && customValue && !currentQuestion.multiple" class="ml-[26px] mt-1">
+                  <span class="text-xs text-text-muted">{{ customValue }}</span>
+                </div>
+              </div>
+
+              <!-- Editing mode: show text input -->
+              <div
+                v-if="editing"
+                class="ml-[26px] px-3 py-2.5 border border-accent rounded-lg bg-bg-hover"
+              >
+                <input
+                  v-model="customText[tab]"
+                  type="text"
+                  class="w-full bg-transparent border-none outline-none text-sm text-text placeholder-text-muted"
+                  :placeholder="'Type your answer...'"
+                  autofocus
+                  @keyup.enter="saveCustom"
+                  @keyup.escape="cancelCustom"
+                />
+                <div class="flex items-center justify-between mt-1.5">
+                  <span class="text-xs text-text-muted">Enter to save, Esc to cancel</span>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
-        <!-- Actions - always show Dismiss -->
-        <div class="actions flex items-center justify-end gap-2 p-4 border-t border-border">
+        <!-- Actions -->
+        <div class="flex items-center justify-end gap-2 p-3 border-t border-border">
           <Button
             variant="outline"
             size="sm"
@@ -248,7 +332,7 @@ async function handleReject() {
             Dismiss
           </Button>
           <Button
-            v-if="isMulti"
+            v-if="!isSingle && isConfirm"
             variant="default"
             size="sm"
             :disabled="submitting"
