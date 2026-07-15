@@ -13,11 +13,12 @@
 import { reactive, computed, watch, ref, type Reactive, type ComputedRef, type Ref } from 'vue'
 import {
   createInitialState,
+  streamingReducer,
+  normalizeEvent,
   type StreamingState,
-  type StreamingToolCall,
-  type ToolProgress
+  type StreamAction,
+  type StreamingToolCall
 } from './index'
-import { useQuestionStore } from '../question'
 
 // ============================================
 // Store Types
@@ -84,6 +85,10 @@ let schedulerRunning = false
 // Used to classify message.part.delta events without explicit partType
 const partTypeMap = new Map<string, 'text' | 'reasoning'>()
 
+// V2 processed IDs - used to skip V1 duplicate processing
+const v2ReasoningIds = new Set<string>()
+const v2TextIds = new Set<string>()
+
 /**
  * Create or get streaming store singleton
  */
@@ -119,441 +124,148 @@ export function useStreamingStore(): StreamingStore {
     }
   }
 
-// Handle SSE event: dispatch to target session directly
+  // Handle SSE event: dispatch to target session directly
   function handleEvent(sessionId: string, rawEvent: unknown) {
     const state = ensureStream(sessionId)
     
-    const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown>; seq?: number }
-    const type = event?.type
+    // Pre-process message.part.updated to build partTypeMap and flush pending deltas
+    const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
     const props = event?.data ?? event?.properties ?? {}
     
-    if (!type) return
-    
-    // Version check for stale events
-    const eventVersion = typeof event.seq === 'number' ? event.seq : (props.version as number)
-    if (eventVersion !== undefined && eventVersion < state.version) {
-      console.log('[handleEvent] Skip stale event:', type, 'v:', eventVersion, 'current:', state.version)
-      return
+    // Track V2 IDs to avoid V1/V2 duplicate processing
+    if (event?.type === 'session.next.text.started') {
+      const textID = props.textID as string
+      if (textID) {
+        v2TextIds.add(textID)
+      }
+    }
+    if (event?.type === 'session.next.reasoning.started') {
+      const reasoningID = props.reasoningID as string
+      if (reasoningID) {
+        v2ReasoningIds.add(reasoningID)
+      }
     }
     
-    // Switch-based event handling (like TUI)
-    switch (type) {
-      // ============================================
-      // V2 Format - Text
-      // ============================================
-      case 'session.next.text.started':
-        // Just marker event, content comes via deltas
-        break
-        
-      case 'session.next.text.delta':
-        state.status = 'streaming'
-        state.message.content += props.delta as string
-        break
-        
-      case 'session.next.text.ended':
-        state.message.id = (props.assistantMessageID || props.messageID) as string
-        break
-        
-      // ============================================
-      // V2 Format - Reasoning
-      // ============================================
-      case 'session.next.reasoning.started':
-        state.reasoning.id = props.reasoningID as string
-        state.reasoning.status = 'thinking'
-        state.reasoning.startedAt = Date.now()
-        break
-        
-      case 'session.next.reasoning.delta':
-        state.reasoning.status = 'thinking'
-        state.reasoning.content += props.delta as string
-        break
-        
-      case 'session.next.reasoning.ended':
-        state.reasoning.status = 'done'
-        state.reasoning.endedAt = Date.now()
-        if (state.reasoning.content.length === 0 && props.text) {
-          state.reasoning.content = props.text as string
+    if (event?.type === 'message.part.updated') {
+      const part = props.part as { 
+        id?: string
+        type?: string
+        text?: string
+        time?: { end?: number }
+        messageID?: string
+        tool?: string
+        callID?: string
+        state?: { 
+          status?: string
+          input?: unknown
+          raw?: string
+          output?: string
+          metadata?: { output?: string; [key: string]: unknown }
+          time?: { start?: number; end?: number }
+          title?: string
         }
-        break
+      } | undefined
+      
+      // Handle tool parts - V1 format uses message.part.updated for tool progress
+      if (part?.type === 'tool' && part.callID && part.state) {
+        const toolStatus = part.state.status
+        const toolName = part.tool || 'unknown'
+        const toolCallID = part.callID
         
-      // ============================================
-      // V2 Format - Tool Input
-      // ============================================
-      case 'session.next.tool.input.started':
-        handleToolInputStarted(state, props)
-        break
-        
-      case 'session.next.tool.input.delta':
-        handleToolInputDelta(state, props)
-        break
-        
-      case 'session.next.tool.input.ended':
-        handleToolInputEnded(state, props)
-        break
-        
-      // ============================================
-      // V2 Format - Tool Execution
-      // ============================================
-      case 'session.next.tool.called':
-        handleToolCalled(state, props)
-        break
-        
-      case 'session.next.tool.progress':
-        handleToolProgress(state, props)
-        break
-        
-      case 'session.next.tool.success':
-        handleToolSuccess(state, props)
-        break
-        
-      case 'session.next.tool.failed':
-        handleToolFailed(state, props)
-        break
-        
-      // ============================================
-      // V2 Format - Step
-      // ============================================
-      case 'session.next.step.started':
-        state.status = 'streaming'
-        state.message.id = props.assistantMessageID as string
-        state.startedAt = Date.now()
-        break
-        
-      case 'session.next.step.ended':
-        // Don't set done - backend may send more steps
-        break
-        
-      case 'session.next.step.failed':
-        state.status = 'error'
-        const stepError = props.error as { type?: string; message?: string } | undefined
-        state.stepError = {
-          type: stepError?.type ?? 'unknown',
-          message: stepError?.message ?? 'Step failed'
+        // Handle pending tool - create tool in preparing state
+        if (toolStatus === 'pending') {
+          const action = {
+            type: 'TOOL_INPUT_STARTED' as const,
+            callId: toolCallID,
+            name: toolName,
+            messageId: part.messageID || '',
+            version: state.version
+          }
+          streamingReducer(state, action)
         }
-        break
-        
-      // ============================================
-      // V1 Format - Legacy Events
-      // ============================================
-      case 'session.next.text.started':
-      case 'session.next.reasoning.started':
-        // Already handled above
-        break
-        
-      case 'session.diff': {
-        const diff = props.diff as Array<{ type?: string; text?: string }> | undefined
-        if (diff) {
-          const textParts = diff.filter(p => p?.type === 'text')
-          if (textParts.length > 0) {
-            state.message.content = textParts.map(p => p?.text || '').join('\n')
+        // Handle running tool with output (bash progress)
+        else if (toolStatus === 'running') {
+          const existingTool = state.tools.entities.get(toolCallID)
+          if (!existingTool) {
+            const startAction = {
+              type: 'TOOL_INPUT_STARTED' as const,
+              callId: toolCallID,
+              name: toolName,
+              messageId: part.messageID || '',
+              version: state.version
+            }
+            streamingReducer(state, startAction)
+          }
+          
+          const calledAction = {
+            type: 'TOOL_CALLED' as const,
+            callId: toolCallID,
+            input: part.state.input as Record<string, unknown> || {},
+            messageId: part.messageID || '',
+            version: state.version
+          }
+          streamingReducer(state, calledAction)
+          
+          // Send progress if output exists (for bash tool)
+          if (part.state.metadata?.output) {
+            const progressAction = {
+              type: 'TOOL_PROGRESS' as const,
+              callId: toolCallID,
+              content: [part.state.metadata.output],
+              version: state.version
+            }
+            streamingReducer(state, progressAction)
           }
         }
-        break
-      }
-      
-      case 'message.part.updated': {
-        const part = props.part as {
-          id?: string
-          type?: string
-          text?: string
-          time?: { end?: number }
-          messageID?: string
-          tool?: string
-          callID?: string
-          state?: {
-            status?: string
-            input?: unknown
-            raw?: string
-            output?: string
-            metadata?: { output?: string; [key: string]: unknown }
-            time?: { start?: number; end?: number }
+        // Handle completed tool
+        else if (toolStatus === 'completed') {
+          const successAction = {
+            type: 'TOOL_SUCCESS' as const,
+            callId: toolCallID,
+            output: {
+              structured: part.state.metadata,
+              result: part.state.output,
+              content: undefined
+            },
+            version: state.version
           }
-        } | undefined
+          streamingReducer(state, successAction)
+        }
+        // Handle error tool
+        else if (toolStatus === 'error') {
+        }
+      }
+      
+      if (part?.id && part?.type) {
+        const partType = part.type === 'reasoning' ? 'reasoning' : 'text'
+        partTypeMap.set(part.id, partType)
         
-        if (part?.type === 'tool' && part.callID && part.state) {
-          handleV1ToolPart(state, part)
+        if (partType === 'text' && part.messageID) {
+          state.message.id = part.messageID
         }
         
-        if (part?.id && part?.type) {
-          partTypeMap.set(part.id, part.type === 'reasoning' ? 'reasoning' : 'text')
-          if (part.type === 'text' && part.messageID) {
-            state.message.id = part.messageID
-          }
-          if (part.type === 'reasoning') {
-            state.reasoning.status = 'done'
-            state.reasoning.id = part.id
-            state.reasoning.endedAt = part.time?.end ? new Date(part.time.end).getTime() : Date.now()
-          }
-          flushPendingDeltas(sessionId, part.id, part.type === 'reasoning' ? 'reasoning' : 'text')
-        }
-        break
-      }
-      
-      case 'message.part.delta': {
-        const delta = props.delta as string
-        const field = props.field as string
-        const partID = props.partID as string
+        // Skip V1 processing if already handled by V2 events
+        const v2Processed = 
+          (partType === 'text' && v2TextIds.has(part.id)) ||
+          (partType === 'reasoning' && v2ReasoningIds.has(part.id))
         
-        if (delta && field === 'text' && partID) {
-          const partType = partTypeMap.get(partID)
-          if (partType === 'reasoning') {
-            state.reasoning.content += delta
-          } else if (partType === 'text') {
-            state.message.content += delta
-          } else {
-            // Store as pending, will be flushed on message.part.updated
-            const pending = state.pendingDeltas.get(partID) || []
-            pending.push(delta)
-            state.pendingDeltas.set(partID, pending)
-          }
+        if (!v2Processed) {
+          flushPendingDeltas(sessionId, part.id, partType)
         }
-        break
-      }
-      
-      case 'session.status': {
-        const status = props.status as { type?: string } | undefined
-        if (status?.type === 'idle') {
-          state.status = 'done'
-        }
-        break
-      }
-      
-      case 'session.error': {
-        const error = props.error as { name?: string; data?: { message?: string } } | undefined
-        state.status = 'error'
-        state.stepError = {
-          type: error?.name ?? 'unknown',
-          message: error?.data?.message ?? 'Session error'
-        }
-        break
-      }
-      
-      // ============================================
-      // Question Events
-      // ============================================
-      case 'question.asked': {
-        const questionStore = useQuestionStore()
-        questionStore.addQuestion({
-          id: props.id as string,
-          sessionID: props.sessionID as string,
-          questions: props.questions as any[],
-          tool: props.tool as any
-        })
-        break
-      }
-      
-      case 'question.replied':
-      case 'question.rejected': {
-        const questionStore = useQuestionStore()
-        questionStore.removeQuestion(props.sessionID as string, props.requestID as string)
-        break
-      }
-      
-      // ============================================
-      // Stream End
-      // ============================================
-      case 'stream.ended':
-        state.status = 'done'
-        break
-        
-      default:
-        // Log unknown events in dev
-        if (import.meta.env.DEV && !type.startsWith('server.')) {
-          console.log('[handleEvent] Unknown event type:', type)
-        }
-    }
-  }
-  
-  // ============================================
-  // Tool Handlers
-  // ============================================
-  
-  function handleToolInputStarted(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const name = props.name as string
-    const messageID = props.assistantMessageID as string
-    
-    if (!callID) return
-    
-    const tool: StreamingToolCall = {
-      id: callID,
-      name,
-      lifecycle: 'preparing',
-      rawInput: '',
-      rawOutput: null,
-      progress: [],
-      error: null,
-      startedAt: Date.now(),
-      endedAt: null,
-      expanded: true
-    }
-    state.tools.entities.set(callID, tool)
-    state.message.id = messageID
-  }
-  
-  function handleToolInputDelta(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const delta = props.delta as string
-    
-    const tool = state.tools.entities.get(callID)
-    if (tool) {
-      tool.rawInput += delta
-    }
-  }
-  
-  function handleToolInputEnded(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const text = props.text as string
-    
-    const tool = state.tools.entities.get(callID)
-    if (tool && text) {
-      tool.rawInput = text
-    }
-  }
-  
-  function handleToolCalled(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const input = props.input as Record<string, unknown>
-    const messageID = props.assistantMessageID as string
-    
-    let tool = state.tools.entities.get(callID)
-    if (!tool) {
-      // Create if not exists
-      tool = {
-        id: callID,
-        name: props.name as string || 'unknown',
-        lifecycle: 'running',
-        rawInput: '',
-        rawOutput: null,
-        progress: [],
-        error: null,
-        startedAt: Date.now(),
-        endedAt: null,
-        expanded: true
-      }
-      state.tools.entities.set(callID, tool)
-    }
-    
-    tool.lifecycle = 'running'
-    tool.rawInput = typeof input === 'string' ? input : JSON.stringify(input)
-    state.message.id = messageID
-  }
-  
-  function handleToolProgress(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const content = props.content as unknown[]
-    
-    const tool = state.tools.entities.get(callID)
-    if (tool && content) {
-      tool.lifecycle = 'streaming'
-      for (const item of content) {
-        tool.progress.push({
-          type: 'text',
-          message: typeof item === 'string' ? item : JSON.stringify(item),
-          timestamp: Date.now()
-        })
       }
     }
-  }
-  
-  function handleToolSuccess(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
     
-    const tool = state.tools.entities.get(callID)
-    if (tool) {
-      tool.lifecycle = 'completed'
-      tool.endedAt = Date.now()
-      tool.rawOutput = typeof props.result === 'string' ? props.result : JSON.stringify(props.result)
+    const action = normalizeEvent(rawEvent, state.version, partTypeMap)
+    if (!action) return
+
+    if ('version' in action && action.version < state.version) return
+
+    if (state.status === 'idle' && isStreamingEvent(action)) {
+      state.status = 'streaming'
+      state.startedAt = Date.now()
     }
-  }
-  
-  function handleToolFailed(state: StreamingState, props: Record<string, unknown>) {
-    const callID = props.callID as string
-    const error = props.error as { type?: string; message?: string } | undefined
-    
-    const tool = state.tools.entities.get(callID)
-    if (tool) {
-      tool.lifecycle = 'failed'
-      tool.endedAt = Date.now()
-      tool.error = {
-        type: error?.type ?? 'unknown',
-        message: error?.message ?? 'Unknown error'
-      }
-    }
-  }
-  
-  function handleV1ToolPart(state: StreamingState, part: {
-    id?: string
-    type?: string
-    text?: string
-    time?: { end?: number }
-    messageID?: string
-    tool?: string
-    callID?: string
-    state?: {
-      status?: string
-      input?: unknown
-      raw?: string
-      output?: string
-      metadata?: { output?: string; [key: string]: unknown }
-      time?: { start?: number; end?: number }
-    }
-  }) {
-    if (!part.callID || !part.state) return
-    
-    const callID = part.callID
-    const toolName = part.tool || 'unknown'
-    const toolStatus = part.state.status
-    
-    if (toolStatus === 'pending') {
-      // Create tool in preparing state
-      state.tools.entities.set(callID, {
-        id: callID,
-        name: toolName,
-        lifecycle: 'preparing',
-        rawInput: '',
-        rawOutput: null,
-        progress: [],
-        error: null,
-        startedAt: Date.now(),
-        endedAt: null,
-        expanded: true
-      })
-    } else if (toolStatus === 'running') {
-      let tool = state.tools.entities.get(callID)
-      if (!tool) {
-        tool = {
-          id: callID,
-          name: toolName,
-          lifecycle: 'running',
-          rawInput: '',
-          rawOutput: null,
-          progress: [],
-          error: null,
-          startedAt: Date.now(),
-          endedAt: null,
-          expanded: true
-        }
-        state.tools.entities.set(callID, tool)
-      }
-      tool.lifecycle = 'running'
-      tool.rawInput = typeof part.state.input === 'string' ? part.state.input : JSON.stringify(part.state.input)
-      
-      if (part.state.metadata?.output) {
-        tool.progress.push({
-          type: 'text',
-          message: part.state.metadata.output,
-          timestamp: Date.now()
-        })
-      }
-    } else if (toolStatus === 'completed') {
-      const tool = state.tools.entities.get(callID)
-      if (tool) {
-        tool.lifecycle = 'completed'
-        tool.endedAt = Date.now()
-        tool.rawOutput = part.state.output || ''
-      }
-    }
+
+    streamingReducer(state, action)
   }
   
   // Flush pending deltas for a partId after receiving message.part.updated
@@ -623,6 +335,10 @@ export function useStreamingStore(): StreamingStore {
       state.reasoningHistory.length = 0
       state.startedAt = undefined
       state.stepError = null
+      // Clear V1/V2 dedup tracking
+      v2ReasoningIds.clear()
+      v2TextIds.clear()
+      partTypeMap.clear()
     }
   }
 
@@ -642,6 +358,10 @@ export function useStreamingStore(): StreamingStore {
     state.reasoning.endedAt = null
     state.reasoningHistory.length = 0
     state.stepError = null
+    // Clear V1/V2 dedup tracking
+    v2ReasoningIds.clear()
+    v2TextIds.clear()
+    partTypeMap.clear()
   }
 
   // Computed: ordered tools for current session
@@ -734,3 +454,18 @@ export function resetStreamingStoreSingleton() {
 // ============================================
 // Helper Functions
 // ============================================
+
+/**
+ * Check if action is a streaming-related event (not lifecycle management)
+ */
+function isStreamingEvent(action: StreamAction): boolean {
+  switch (action.type) {
+    case 'STREAM_RESET':
+    case 'STREAM_START':
+    case 'STEP_ENDED':
+    case 'STEP_FAILED':
+      return false
+    default:
+      return true
+  }
+}
