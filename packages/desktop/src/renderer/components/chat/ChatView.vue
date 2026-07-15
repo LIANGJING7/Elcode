@@ -116,7 +116,6 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
         <QuestionPanel />
       </div>
     </div>
-    <RevertedMessagesPreview class="flex-shrink-0" />
     <Composer
       v-else
       :has-active-session="true"
@@ -130,5 +129,6 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @edit-queued="handleEditQueued"
       @remove-queued="handleRemoveQueued"
     />
+    <RevertedMessagesPreview class="flex-shrink-0" />
   </div>
 </template>
