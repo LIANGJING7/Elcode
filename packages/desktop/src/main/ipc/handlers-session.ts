@@ -702,15 +702,14 @@ export function registerSessionHandlers() {
     }
 
     // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
-    // Always set up SSE stream (remove existing if present) to ensure fresh connection
-    if (sessionStreams.has(sessionID)) {
-      const oldUnsub = sessionStreams.get(sessionID)
-      if (oldUnsub) {
-        console.log('[PROMPT] removing old SSE stream for', sessionID)
-        oldUnsub()
-      }
-      sessionStreams.delete(sessionID)
+    // Clean up ALL existing streams before creating a new one -
+    // the /event endpoint is global and sends events for all sessions,
+    // so multiple subscriptions would cause duplicate event delivery
+    for (const [sid, unsub] of sessionStreams) {
+      console.log('[PROMPT] cleaning up old SSE stream for', sid)
+      unsub()
     }
+    sessionStreams.clear()
     
     console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID)
     let loggedFirstEvent = false
@@ -753,6 +752,8 @@ export function registerSessionHandlers() {
       console.log('[PROMPT] session.prompt succeeded for', sessionID)
     } catch (e) {
       console.error('[PROMPT] session.prompt FAILED for', sessionID, ':', e)
+      stopSessionStream(sessionID)
+      throw e
     }
 
     return true
@@ -888,8 +889,13 @@ export function registerSessionHandlers() {
 }
 
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
-  if (!sessionStreams.has(sessionID)) {
-    const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
+  // Clean up old subscriptions first - /event endpoint is global
+  for (const [sid, unsub] of sessionStreams) {
+    unsub()
+  }
+  sessionStreams.clear()
+  
+  const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
       // Check if webContents is still alive
       if (webContents.isDestroyed()) {
         console.log('[SSE] WebContents destroyed, stopping stream for', sessionID)
@@ -904,8 +910,7 @@ export function startSessionStream(sessionID: string, webContents: Electron.WebC
         event: serializedEvent
       })
     })
-    sessionStreams.set(sessionID, unsubscribe)
-  }
+  sessionStreams.set(sessionID, unsubscribe)
 }
 
 export function stopSessionStream(sessionID: string) {
