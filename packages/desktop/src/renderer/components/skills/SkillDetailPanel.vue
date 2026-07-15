@@ -10,7 +10,7 @@
       <MarkdownRenderer :content="skill.content" />
     </div>
     
-    <PanelActions @copy="handleCopy" />
+    <PanelActions :content="skill.content" />
   </div>
 </template>
 
@@ -27,17 +27,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'close': []
 }>()
-
-async function handleCopy() {
-  if (!props.skill?.content) return
-  
-  try {
-    await navigator.clipboard.writeText(props.skill.content)
-    console.log('Content copied to clipboard')
-  } catch (err) {
-    console.error('Failed to copy:', err)
-  }
-}
 
 function handleClose() {
   emit('close')

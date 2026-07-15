@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 
 const sessionStore = useSessionStore()
 
-const messages = computed(() => sessionStore.revertedMessages ?? [])
+const messages = computed(() => sessionStore.revertedMessages)
 const collapsed = ref(false)
 
 async function handleRecover(messageId: string) {

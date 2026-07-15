@@ -1014,6 +1014,19 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
 
+    // Clear revert point before sending - same behavior as sendMessage
+    if (revertPoint.value) {
+      const conv = currentConversation.value
+      if (conv) {
+        const idx = conv.messages.findIndex(m => m.id === revertPoint.value)
+        if (idx !== -1) {
+          conv.messages.splice(idx)
+        }
+      }
+      revertPoint.value = null
+      saveRevertedMessages(currentSessionId.value, null)
+    }
+
     // 获取选择的模型
     const modelsStore = useModelsStore()
     const modelRef = parseModelId(modelsStore.selectedModel)
