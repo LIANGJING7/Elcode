@@ -98,7 +98,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="message-user flex justify-end mb-4 group">
-    <div class="relative flex flex-col items-end gap-1 max-w-[80%]">
+    <div class="flex flex-col items-end gap-1 max-w-[80%]">
       <!-- Image thumbnails -->
       <div
         v-if="imageFiles(message.files).length > 0"
@@ -157,14 +157,14 @@ function handleKeydown(e: KeyboardEvent) {
         </span>
       </div>
 
-      <!-- Revert button -->
+      <!-- Revert button - always visible below bubble -->
       <button
         @click.stop="handleRevert"
         :disabled="sessionStore.isReverting"
-        class="absolute -bottom-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-text-muted hover:text-text disabled:opacity-50 transition-colors"
+        class="flex items-center gap-1 text-xs text-text-muted hover:text-text disabled:opacity-50 transition-colors"
         title="撤销此消息及后续内容"
       >
-        <Undo2 class="w-4 h-4" />
+        <Undo2 class="w-3.5 h-3.5" />
       </button>
     </div>
   </div>
