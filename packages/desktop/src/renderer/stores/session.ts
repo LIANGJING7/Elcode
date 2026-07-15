@@ -1107,6 +1107,10 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       console.log('[DEBUG sendPending] ✗ Prompt failed:', e)
       state.error = e instanceof Error ? e.message : 'Failed to send queued message'
+      // 出错时重置流式状态，防止一直显示"思考中"
+      if (currentSessionId.value) {
+        streamingStore.resetStream(currentSessionId.value)
+      }
     }
   }
 

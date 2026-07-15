@@ -9,9 +9,9 @@
         <Transition name="copy-feedback" mode="out-in">
           <span v-if="copied" key="copied">
             <span class="check-icon">&#10003;</span>
-            Copied!
+            复制成功!
           </span>
-          <span v-else key="copy">Copy</span>
+          <span v-else key="copy">复制</span>
         </Transition>
       </span>
     </button>
