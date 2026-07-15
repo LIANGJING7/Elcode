@@ -11,6 +11,9 @@ const tab = ref<number | 'confirm'>(0)
 const answers = ref<Map<number, string[]>>(new Map())
 const submitting = ref(false)
 const focusedIndex = ref(-1)
+const customInputs = ref<string[]>([])
+const isCustomMode = ref(false)
+const customInputRef = ref<HTMLInputElement | null>(null)
 
 const current = computed(() => questionStore.current)
 
@@ -24,6 +27,10 @@ const currentQuestion = computed(() => {
     return current.value.questions[tab.value] ?? null
   }
   return current.value.questions[0] ?? null
+})
+
+const allowCustom = computed(() => {
+  return currentQuestion.value?.custom !== false
 })
 
 const currentAnswers = computed(() => {
@@ -46,21 +53,89 @@ const hasCurrentAnswer = computed(() => {
   return ans && ans.length > 0
 })
 
+const customValue = computed(() => {
+  if (!current.value) return ''
+  const qIndex = isMulti.value && typeof tab.value === 'number' ? tab.value : 0
+  const ans = answers.value.get(qIndex)
+  if (!ans || ans.length === 0) return ''
+  const options = currentQuestion.value?.options ?? []
+  const optionLabels = new Set(options.map(o => o.label))
+  const custom = ans.filter(a => !optionLabels.has(a))
+  return custom.length > 0 ? custom.join(', ') : ''
+})
+
+const isCustomSelected = computed(() => {
+  if (!allowCustom.value || !currentQuestion.value) return false
+  return customValue.value.length > 0
+})
+
 watch(current, (newVal) => {
   if (newVal) {
     tab.value = 0
     answers.value = new Map()
     submitting.value = false
     focusedIndex.value = -1
+    isCustomMode.value = false
+    customInputs.value = []
   }
 })
 
 watch(tab, () => {
   focusedIndex.value = -1
+  isCustomMode.value = false
 })
+
+const currentCustomInput = computed(() => {
+  const qIndex = isMulti.value && typeof tab.value === 'number' ? tab.value : 0
+  return customInputs.value[qIndex] ?? ''
+})
+
+function setCustomInput(value: string) {
+  const qIndex = isMulti.value && typeof tab.value === 'number' ? tab.value : 0
+  const inputs = [...customInputs.value]
+  inputs[qIndex] = value
+  customInputs.value = inputs
+}
+
+function handleCustomBlur() {
+  if (!currentCustomInput.value) isCustomMode.value = false
+}
+
+function enterCustomMode() {
+  isCustomMode.value = true
+  setTimeout(() => customInputRef.value?.focus(), 0)
+}
+
+function exitCustomMode() {
+  isCustomMode.value = false
+  setCustomInput('')
+}
+
+function confirmCustomInput() {
+  if (!currentCustomInput.value.trim() || !currentQuestion.value) return
+  const qIndex = isMulti.value && typeof tab.value === 'number' ? tab.value : 0
+  const text = currentCustomInput.value.trim()
+  
+  if (currentQuestion.value.multiple) {
+    const currentAns = answers.value.get(qIndex) ?? []
+    if (currentAns.includes(text)) {
+      answers.value.set(qIndex, currentAns.filter(a => a !== text))
+    } else {
+      answers.value.set(qIndex, [...currentAns, text])
+    }
+    isCustomMode.value = false
+  } else {
+    answers.value.set(qIndex, [text])
+    isCustomMode.value = false
+  }
+}
 
 function goToNext() {
   if (!current.value) return
+  if (tab.value === 'confirm') {
+    submitAnswer()
+    return
+  }
   if (!isMulti.value) {
     if (hasCurrentAnswer.value) submitAnswer()
     return
@@ -76,6 +151,17 @@ function goToNext() {
 
 function handleKeydown(e: KeyboardEvent) {
   if (!current.value) return
+  
+  if (isCustomMode.value) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      confirmCustomInput()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      exitCustomMode()
+    }
+    return
+  }
   
   if (e.key === 'ArrowLeft' && isMulti.value) {
     e.preventDefault()
@@ -240,38 +326,69 @@ function handleBlur(e: MouseEvent) {
       </div>
     </div>
     
-    <div v-else-if="currentQuestion" class="question-content p-4">
-      <h3 class="question-text text-lg font-medium text-text mb-4">
+    <div v-else-if="currentQuestion" class="question-content p-3">
+      <h3 class="question-text text-base font-medium text-text mb-3">
         {{ currentQuestion.question }}
       </h3>
       
-      <div v-if="currentQuestion.multiple" class="multiple-hint text-xs text-text-muted mb-3">
+      <div v-if="currentQuestion.multiple" class="multiple-hint text-xs text-text-muted mb-2">
         可选择多个选项
       </div>
       
-      <div class="options space-y-2">
+      <div class="options space-y-1.5">
         <button
           v-for="(option, oi) in currentQuestion.options"
           :key="oi"
           :class="cn(
-            'option-btn w-full text-left px-4 py-3 rounded-lg border transition-all',
-            isSelected(isMulti && typeof tab === 'number' ? tab : 0, option)
-              ? 'bg-accent/10 border-accent text-text'
-              : focusedIndex >= 0 && focusedIndex === oi
-                ? 'bg-bg-hover border-border-light text-text'
-                : 'bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
+            'option-btn w-full text-left px-3 py-2 rounded-lg border transition-all text-sm',
+            isCustomMode
+              ? 'bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
+              : isSelected(isMulti && typeof tab === 'number' ? tab : 0, option)
+                ? 'bg-accent/10 border-accent text-text'
+                : focusedIndex >= 0 && focusedIndex === oi
+                  ? 'bg-bg-hover border-border-light text-text'
+                  : 'bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
           )"
           @click="handleOptionClick(currentQuestion!, option, isMulti && typeof tab === 'number' ? tab : 0, oi)"
         >
           <div class="option-label font-medium">{{ option.label }}</div>
-          <div v-if="option.description" class="option-desc text-sm text-text-muted mt-0.5">
+          <div v-if="option.description" class="option-desc text-xs text-text-muted mt-0.5">
             {{ option.description }}
           </div>
         </button>
+        
+        <div
+          v-if="allowCustom"
+          :class="cn(
+            'option-btn w-full text-left px-3 py-2 rounded-lg border transition-all text-sm',
+            isCustomMode
+              ? 'bg-accent/10 border-accent text-text'
+              : isCustomSelected
+                ? 'bg-accent/10 border-accent text-text'
+                : focusedIndex === currentQuestion.options.length
+                  ? 'bg-bg-hover border-border-light text-text'
+                  : 'bg-bg border-border hover:border-border-light hover:bg-bg-hover text-text'
+          )"
+          @click="!isCustomMode && enterCustomMode()"
+        >
+          <div class="option-label font-medium">输入自己的答案</div>
+          <div class="mt-1" @click.stop>
+            <input
+              ref="customInputRef"
+              :value="currentCustomInput"
+              type="text"
+              class="w-full px-2 py-1.5 rounded bg-bg text-text text-sm focus:outline-none"
+              placeholder="输入你的答案..."
+              @input="setCustomInput(($event.target as HTMLInputElement).value)"
+              @focus="isCustomMode = true"
+              @blur="handleCustomBlur"
+            />
+          </div>
+        </div>
       </div>
     </div>
     
-    <div class="actions flex items-center justify-between gap-2 p-4 border-t border-border">
+    <div class="actions flex items-center justify-between gap-2 p-3 border-t border-border">
       <Button
         variant="outline"
         size="sm"
@@ -283,7 +400,7 @@ function handleBlur(e: MouseEvent) {
       <Button
         variant="default"
         size="sm"
-        :disabled="submitting || !hasCurrentAnswer"
+        :disabled="submitting || (tab !== 'confirm' && !hasCurrentAnswer)"
         @click="goToNext"
       >
         {{ submitting ? '提交中...' : (tab === 'confirm' || hasAllAnswers ? '提交' : '下一步') }}
