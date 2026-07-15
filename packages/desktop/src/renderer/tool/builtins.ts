@@ -222,7 +222,7 @@ const todowriteMeta: ToolMeta = {
 registerTool('todowrite', todowriteMeta)
 
 const questionMeta: ToolMeta = {
-  display: 'block',
+  display: 'none',
   icon: ICON_QUESTION,
   pending: 'Waiting for answer...',
   summary: (tool) => {
