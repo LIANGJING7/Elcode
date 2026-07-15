@@ -1349,6 +1349,8 @@ export const useSessionStore = defineStore('session', () => {
           if (currentSessionId.value) {
             console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
             streamingStore.resetStream(currentSessionId.value)
+            // Refresh messages from backend to get real IDs (replaces temp messages)
+            loadMessages(currentSessionId.value)
           }
         }
       },
