@@ -50,6 +50,12 @@ let backendProcess: ChildProcess | null = null
 let backendPort: number | null = null
 let backendReady = false
 
+// Global SSE connection - single connection shared across all sessions
+let globalEventsController: AbortController | null = null
+let globalEventsDirectory = ''
+let globalEventsPromise: Promise<void> | null = null
+const globalEventCallbacks: Array<(event: unknown) => void> = []
+
 // Safety net: if the Electron main process is about to exit for any reason
 // (user Ctrl+C, hard kill, crash, Vite restart in dev), Node still runs the
 // `exit` handler synchronously. Use a synchronous taskkill so the child
@@ -245,6 +251,7 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 }
 
 export async function stopBackend(): Promise<void> {
+  stopGlobalEvents()
   const proc = backendProcess
   if (proc) {
     try {
@@ -254,6 +261,53 @@ export async function stopBackend(): Promise<void> {
       backendReady = false
     }
   }
+}
+
+function ensureGlobalEvents(directory?: string) {
+  const dir = directory || ''
+  
+  // If already running for the same directory, do nothing
+  if (globalEventsController && globalEventsDirectory === dir) return
+  // If running for a different directory, restart
+  if (globalEventsController) stopGlobalEvents()
+
+  const controller = new AbortController()
+  globalEventsController = controller
+  globalEventsDirectory = dir
+
+  console.log('[SSE GLOBAL] Starting global SSE connection, directory:', dir)
+
+  globalEventsPromise = (async () => {
+    const sdk = createOpencodeClient({
+      baseUrl: `http://localhost:${backendPort}`,
+      directory: dir || undefined,
+    })
+    try {
+      const result = await sdk.event.subscribe(
+        dir ? { directory: dir } : undefined,
+        { signal: controller.signal }
+      )
+
+      for await (const event of result.stream) {
+        if (controller.signal.aborted) break
+        for (const cb of globalEventCallbacks) {
+          try { cb(event) } catch {}
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        console.error('[SSE GLOBAL] error:', err)
+      }
+    }
+  })()
+}
+
+function stopGlobalEvents() {
+  globalEventsController?.abort()
+  globalEventsController = null
+  globalEventsDirectory = ''
+  globalEventCallbacks.length = 0
+  globalEventsPromise = null
 }
 
 export const backend = {
@@ -347,37 +401,23 @@ export const backend = {
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
 
-      const params = new URLSearchParams()
-      if (directory) params.set("directory", storagePath(directory))
-      console.log('[SSE CONNECT] port:', backendPort, 'sessionID:', sessionID, 'directory:', directory)
+      // Ensure global SSE connection is running
+      ensureGlobalEvents(directory)
 
-      const controller = new AbortController()
-
-      ;(async () => {
-        try {
-          const sdk = createOpencodeClient({
-            baseUrl: `http://localhost:${backendPort}`,
-            directory,
-          })
-          const result = await sdk.event.subscribe(
-            { directory },
-            { signal: controller.signal }
-          )
-
-          for await (const event of result.stream) {
-            if (controller.signal.aborted) break
-            onEvent(event)
-          }
-        } catch (err) {
-          if (!controller.signal.aborted) {
-            console.error('[SSE] error:', err)
-          }
-        }
-      })()
+      // Register callback
+      globalEventCallbacks.push(onEvent)
+      let removed = false
 
       return () => {
-        console.log('[SSE] aborting for', sessionID)
-        controller.abort()
+        if (removed) return
+        removed = true
+        const idx = globalEventCallbacks.indexOf(onEvent)
+        if (idx >= 0) globalEventCallbacks.splice(idx, 1)
+
+        // Stop global connection when no more listeners
+        if (globalEventCallbacks.length === 0) {
+          stopGlobalEvents()
+        }
       }
     },
   },

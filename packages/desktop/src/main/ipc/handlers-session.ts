@@ -702,43 +702,43 @@ export function registerSessionHandlers() {
     }
 
     // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
-    // Clean up ALL existing streams before creating a new one -
-    // the /event endpoint is global and sends events for all sessions,
-    // so multiple subscriptions would cause duplicate event delivery
-    for (const [sid, unsub] of sessionStreams) {
-      console.log('[PROMPT] cleaning up old SSE stream for', sid)
-      unsub()
+    // Only clean up this session's old subscription (not all sessions anymore)
+    if (sessionStreams.has(sessionID)) {
+      sessionStreams.get(sessionID)!()
+      sessionStreams.delete(sessionID)
     }
-    sessionStreams.clear()
     
-    console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID)
+    console.log('[PROMPT] registering SSE listener for', sessionID)
     let loggedFirstEvent = false
     let eventCount = 0
     try {
+      const sender = event.sender
       const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
         const e = evt as Record<string, unknown>
+        // Filter by event's internal sessionID - global connection sends ALL events
+        const props = (e?.data ?? e?.properties) as Record<string, unknown> | undefined
+        const eventSessionID = props?.sessionID as string | undefined
+        if (eventSessionID && eventSessionID !== sessionID) return
+
         eventCount++
         const eventType = e?.type as string | undefined
         if (eventType) {
           console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'keys:', Object.keys(e).slice(0, 5))
-          // Log first event structure in detail
           if (!loggedFirstEvent) {
             console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
             loggedFirstEvent = true
           }
-          // Log session events with more detail
           if (eventType.startsWith('session.next.')) {
             console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
           }
         }
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
+        if (!sender.isDestroyed()) {
+          sender.send(CHANNELS.SESSION_STREAM_EVENT, {
             sessionID,
             event: evt
           })
         } else {
           console.log('[SSE MAIN] WebContents destroyed, stopping stream for', sessionID)
-          return false
         }
       }, directory)
       sessionStreams.set(sessionID, unsubscribe)
@@ -889,21 +889,24 @@ export function registerSessionHandlers() {
 }
 
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
-  // Clean up old subscriptions first - /event endpoint is global
-  for (const [sid, unsub] of sessionStreams) {
-    unsub()
+  // Clean up old subscription for this session only
+  if (sessionStreams.has(sessionID)) {
+    sessionStreams.get(sessionID)!()
+    sessionStreams.delete(sessionID)
   }
-  sessionStreams.clear()
   
   const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
-      // Check if webContents is still alive
+      // Filter by event's internal sessionID
+      const e = event as Record<string, unknown>
+      const props = (e?.data ?? e?.properties) as Record<string, unknown> | undefined
+      const eventSessionID = props?.sessionID as string | undefined
+      if (eventSessionID && eventSessionID !== sessionID) return
+
       if (webContents.isDestroyed()) {
         console.log('[SSE] WebContents destroyed, stopping stream for', sessionID)
         stopSessionStream(sessionID)
         return
       }
-      // Deep serialize event to ensure IPC compatibility
-      // Some events may contain non-serializable objects
       const serializedEvent = JSON.parse(JSON.stringify(event))
       webContents.send(CHANNELS.SESSION_STREAM_EVENT, {
         sessionID,
