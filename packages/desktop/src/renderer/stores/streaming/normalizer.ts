@@ -196,7 +196,8 @@ export function createNormalizer(ctx: NormalizerContext) {
       return {
         type: 'MESSAGE_REMOVED',
         messageID: props.messageID as string,
-        sessionID: props.sessionID as string
+        sessionID: props.sessionID as string,
+        version
       }
     }
 

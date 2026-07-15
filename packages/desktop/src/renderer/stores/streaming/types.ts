@@ -188,7 +188,7 @@ export type StreamAction =
   | { type: 'QUESTION_RESOLVED'; sessionID: string; requestID: string; version: number }
   
   // Message removed (for undo/redo)
-  | { type: 'MESSAGE_REMOVED'; messageID: string; sessionID: string }
+  | { type: 'MESSAGE_REMOVED'; messageID: string; sessionID: string; version: number }
 
 // ============================================
 // Helper Functions
