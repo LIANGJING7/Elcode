@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Message, FilePart, AgentPart } from '../../../types/ipc'
+import { useSessionStore } from '../../stores/session'
+import { useWorkspaceStore } from '../../stores/workspace'
+import { Undo2 } from 'lucide-vue-next'
 
 const props = defineProps<{ message: Message }>()
+
+const sessionStore = useSessionStore()
+const workspaceStore = useWorkspaceStore()
 
 // Debug log when message changes
 watch(() => props.message, (msg) => {
@@ -12,6 +18,11 @@ watch(() => props.message, (msg) => {
   console.log('[MessageUser]   message.files:', msg.files?.length, msg.files?.map(f => f.name))
   console.log('[MessageUser]   message.agents:', msg.agents?.length, msg.agents?.map(a => a.name))
 }, { immediate: true })
+
+async function handleRevert() {
+  if (!sessionStore.currentSessionId || !props.message.id) return
+  await sessionStore.revertMessage(sessionStore.currentSessionId, props.message.id)
+}
 
 // Compute highlighted segments based on agent mentions
 const highlightedContent = computed(() => {
@@ -87,7 +98,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="message-user flex justify-end mb-4">
-    <div class="flex flex-col items-end gap-1 max-w-[80%]">
+    <div class="relative group flex flex-col items-end gap-1 max-w-[80%]">
       <!-- Image thumbnails -->
       <div
         v-if="imageFiles(message.files).length > 0"
@@ -145,6 +156,16 @@ function handleKeydown(e: KeyboardEvent) {
           {{ segment.text }}
         </span>
       </div>
+
+      <!-- Revert button -->
+      <button
+        @click.stop="handleRevert"
+        :disabled="sessionStore.isReverting"
+        class="absolute bottom-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-text-muted hover:text-text disabled:opacity-50 transition-colors"
+        title="撤销此消息及后续内容"
+      >
+        <Undo2 class="w-4 h-4" />
+      </button>
     </div>
   </div>
 
