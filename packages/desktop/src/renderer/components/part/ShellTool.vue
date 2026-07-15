@@ -19,8 +19,14 @@ const workdir = computed(() => {
 })
 
 const stdout = computed(() => {
+  console.log('[ShellTool] Computing stdout for tool:', props.tool.name)
+  console.log('[ShellTool] props.tool.output:', props.tool.output)
+  console.log('[ShellTool] props.tool.output?.content:', props.tool.output?.content)
+  
   const content = props.tool.output?.content
   if (content && Array.isArray(content)) {
+    console.log('[ShellTool] content is array, length:', content.length)
+    console.log('[ShellTool] content items:', content.map(c => c.type))
     return content
       .filter((c): c is { type: 'text'; text: string } =>
         typeof c === 'object' && c !== null && c.type === 'text' && typeof c.text === 'string')

@@ -81,13 +81,8 @@ const handleClick = () => {
     >
       <span :class="['text-sm', statusColor]">{{ statusIcon }}</span>
       <span :class="['text-sm text-text-primary', { 'line-through': isDenied }]">{{ titleLabel }}</span>
-      <span v-if="subtitleLabel" class="text-sm text-text-muted">{{ '  ' + subtitleLabel }}</span>
-      <span v-if="errorMessage" class="text-xs text-error ml-2" @click.stop="errorExpanded = !errorExpanded">⚠</span>
     </div>
-    <div 
-      v-if="errorMessage && errorExpanded" 
-      :class="['error-detail ml-6 mt-1 text-xs p-2 rounded', isDenied ? 'text-text-muted bg-bg-surface' : 'text-error bg-error/10']"
-    >{{ errorMessage }}</div>
+
   </div>
 </template>
 

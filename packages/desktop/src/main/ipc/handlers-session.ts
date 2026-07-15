@@ -786,10 +786,15 @@ export function registerSessionHandlers() {
             console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
           }
         }
-        event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
-          sessionID,
-          event: evt
-        })
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
+            sessionID,
+            event: evt
+          })
+        } else {
+          console.log('[SSE MAIN] WebContents destroyed, stopping stream for', sessionID)
+          return false
+        }
       }, directory)
       sessionStreams.set(sessionID, unsubscribe)
       console.log('[PROMPT] SSE stream set up for', sessionID)
@@ -924,6 +929,12 @@ export function registerSessionHandlers() {
 export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
   if (!sessionStreams.has(sessionID)) {
     const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
+      // Check if webContents is still alive
+      if (webContents.isDestroyed()) {
+        console.log('[SSE] WebContents destroyed, stopping stream for', sessionID)
+        stopSessionStream(sessionID)
+        return
+      }
       // Deep serialize event to ensure IPC compatibility
       // Some events may contain non-serializable objects
       const serializedEvent = JSON.parse(JSON.stringify(event))

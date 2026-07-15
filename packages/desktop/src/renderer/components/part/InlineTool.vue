@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ICON_RUNNING, ICON_COMPLETED, ICON_ERROR, ICON_PENDING } from '../../tool/icons'
 import { getErrorMessage, isDeniedErrorObject } from '../../utils/error-utils'
 
@@ -11,6 +11,11 @@ const props = defineProps<{
   error?: string | { type: string; message: string }
   hideStatusIcon?: boolean
 }>()
+
+// Debug: log status changes
+watch(() => props.status, (status) => {
+  console.log('[InlineTool] status changed:', status, 'summary:', props.summary?.slice(0, 50))
+}, { immediate: true })
 
 const emit = defineEmits<{ click: [] }>()
 const errorExpanded = ref(false)
@@ -42,8 +47,9 @@ const handleClick = () => {
 <template>
   <div class="inline-tool flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer hover:bg-bg-surface" @click="handleClick">
     <template v-if="status === 'running'">
-      <span class="animate-pulse text-warning">●</span>
-      <span class="text-sm text-text-muted">{{ pending }}</span>
+      <span v-if="!hideStatusIcon" class="animate-pulse text-warning">●</span>
+      <span v-if="icon" class="text-xs text-accent w-4 text-center">{{ icon }}</span>
+      <span class="text-xs text-text-muted animate-pulse-glow flex-1 truncate" v-html="summary"></span>
     </template>
     <template v-else>
       <span v-if="!hideStatusIcon" :class="['text-sm w-4 text-center', statusIcon.class]">{{ statusIcon.char }}</span>
@@ -62,5 +68,10 @@ const handleClick = () => {
 
 <style scoped>
 .animate-pulse { animation: icon-pulse 1.5s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 1.5s ease-in-out infinite; }
+</style>
+
+<style>
 @keyframes icon-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 </style>

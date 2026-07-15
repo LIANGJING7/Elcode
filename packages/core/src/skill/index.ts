@@ -16,6 +16,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
+import { getSuperpowersSkills } from "./superpowers-builtin"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -279,6 +280,15 @@ export const layer = Layer.effect(
           description: CUSTOMIZE_LCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_LCODE_SKILL_BODY,
+        }
+        // Register superpowers built-in skills
+        const superpowersSkills = getSuperpowersSkills()
+        for (const skill of superpowersSkills) {
+          if (s.skills[skill.name]) {
+            yield* Effect.logWarning("superpowers skill already registered", { name: skill.name })
+          } else {
+            s.skills[skill.name] = skill
+          }
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s

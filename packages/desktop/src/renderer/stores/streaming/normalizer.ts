@@ -289,6 +289,16 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.tool.progress':
+        console.log('[Normalizer] session.next.tool.progress received')
+        console.log('[Normalizer] props.callID:', props.callID)
+        console.log('[Normalizer] props.content:', props.content)
+        console.log('[Normalizer] props.content type:', typeof props.content, Array.isArray(props.content))
+        if (Array.isArray(props.content)) {
+          console.log('[Normalizer] props.content length:', props.content.length)
+          props.content.forEach((item, idx) => {
+            console.log(`[Normalizer] content[${idx}] type:`, typeof item, item)
+          })
+        }
         return {
           type: 'TOOL_PROGRESS',
           callId: props.callID as string,
