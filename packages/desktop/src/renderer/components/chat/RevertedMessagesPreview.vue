@@ -114,7 +114,7 @@ async function handleRecover(messageId: string) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 4px 8px 8px 8px;
+  padding: 0 8px 8px 8px;
 }
 
 .reverted-item {
