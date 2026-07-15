@@ -247,6 +247,11 @@ export const useSessionStore = defineStore('session', () => {
   let flushInProgress = false
   // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
   let manuallyInterrupted = false
+
+  // Reverted messages for preview
+  const revertedMessages = ref<Message[]>([])
+  // Lock for preventing concurrent revert operations
+  const isReverting = ref(false)
   
   // Helper: get or create queue array for a session
   function getQueue(sessionId: string): PendingMessage[] {
@@ -736,6 +741,10 @@ export const useSessionStore = defineStore('session', () => {
     }
     state.error = null
 
+    if (revertedMessages.value.length > 0) {
+      revertedMessages.value = []
+    }
+
     // 如果正在流式，将消息加入队列（不调用 backend）
     if (streamingStore.isCurrentStreaming.value && currentSessionId.value) {
       console.log('[DEBUG] === Streaming active - enqueueing message ===')
@@ -1027,6 +1036,69 @@ export const useSessionStore = defineStore('session', () => {
   // SSE Event Handlers
   // ========================================
 
+  async function revertMessage(sessionId: string, messageId: string) {
+    if (isReverting.value) {
+      console.log('[revertMessage] Already reverting, skipping')
+      return
+    }
+
+    if (streamingStore.isCurrentStreaming.value) {
+      console.log('[revertMessage] Interrupting streaming before revert')
+      await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
+    isReverting.value = true
+
+    try {
+      const message = currentMessages.value.find(m => m.id === messageId)
+      if (!message || message.role !== 'user') {
+        console.error('[revertMessage] Message not found or not user message')
+        return
+      }
+
+      await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
+      console.log('[revertMessage] Revert API called successfully')
+    } catch (error) {
+      console.error('[revertMessage] Revert failed:', error)
+      state.error = error instanceof Error ? error.message : 'Failed to revert message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
+  async function recoverMessage(sessionId: string, targetMessageId: string) {
+    if (isReverting.value) {
+      console.log('[recoverMessage] Already reverting, skipping')
+      return
+    }
+
+    isReverting.value = true
+
+    try {
+      const targetIndex = revertedMessages.value.findIndex(m => m.id === targetMessageId)
+      if (targetIndex === -1) {
+        console.error('[recoverMessage] Target message not found in reverted list')
+        return
+      }
+
+      const nextUserMessage = revertedMessages.value.slice(targetIndex + 1).find(m => m.role === 'user')
+
+      if (nextUserMessage) {
+        await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
+      } else {
+        await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
+      }
+
+      console.log('[recoverMessage] Recovery initiated')
+    } catch (error) {
+      console.error('[recoverMessage] Recovery failed:', error)
+      state.error = error instanceof Error ? error.message : 'Failed to recover message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
   function setupStreamListeners() {
     const removeStream = window.desktop.session.onStreamEvent((data) => {
       const event = data.event as Record<string, unknown>
@@ -1092,6 +1164,27 @@ export const useSessionStore = defineStore('session', () => {
         if (info?.id && info?.role) {
           messageIdToRole.set(info.id, info.role as 'user' | 'assistant')
         }
+      }
+
+      if (eventType === 'message.removed') {
+        const msgId = props?.messageID as string | undefined
+        const sessionId = props?.sessionID as string | undefined
+
+        if (msgId && sessionId === currentSessionId.value) {
+          const conv = currentConversation.value
+          if (conv) {
+            const msgIndex = conv.messages.findIndex(m => m.id === msgId)
+            if (msgIndex !== -1) {
+              const removedMsg = conv.messages[msgIndex]
+              conv.messages.splice(msgIndex, 1)
+
+              if (removedMsg.role === 'user') {
+                revertedMessages.value.unshift(removedMsg)
+              }
+            }
+          }
+        }
+        return
       }
 
       if (eventSessionId) {
@@ -1299,6 +1392,12 @@ export const useSessionStore = defineStore('session', () => {
     flushMessage,
     removeMessage,
     editMessage,
+
+    // Revert/Recover
+    revertedMessages,
+    isReverting,
+    revertMessage,
+    recoverMessage,
 
     // Setup
     setupStreamListeners,
