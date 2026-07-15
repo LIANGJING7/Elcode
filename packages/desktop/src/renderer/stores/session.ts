@@ -1098,6 +1098,32 @@ export const useSessionStore = defineStore('session', () => {
       console.log('[revertMessage] Calling backend.session.revert, directory:', workspaceStore.currentWorkspace?.path)
       const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
       console.log('[revertMessage] Backend returned:', result)
+
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const revertedMsgId = revertInfo?.messageID as string | undefined
+      console.log('[revertMessage] revertedMsgId from response:', revertedMsgId)
+
+      if (revertedMsgId && sessionId === currentSessionId.value) {
+        const conv = currentConversation.value
+        if (conv) {
+          const msgIndex = conv.messages.findIndex(m => m.id === revertedMsgId)
+          console.log('[revertMessage] msgIndex in conv:', msgIndex, 'total msgs:', conv.messages.length)
+          if (msgIndex !== -1) {
+            const removedMsg = conv.messages[msgIndex]
+            conv.messages.splice(msgIndex, 1)
+            console.log('[revertMessage] Removed message:', revertedMsgId, 'role:', removedMsg.role)
+
+            if (removedMsg.role === 'user') {
+              revertedMessages.value.unshift(removedMsg)
+              saveRevertedMessages(sessionId, revertedMessages.value)
+              console.log('[revertMessage] Added to revertedMessages, count:', revertedMessages.value.length)
+            }
+          } else {
+            console.warn('[revertMessage] Message not found in conversation messages. Available IDs:', conv.messages.map(m => m.id))
+          }
+        }
+      }
     } catch (error) {
       console.error('[revertMessage] Revert failed:', error)
       state.error = error instanceof Error ? error.message : 'Failed to revert message'
