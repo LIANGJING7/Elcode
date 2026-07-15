@@ -17,7 +17,7 @@ async function handleRecover(messageId: string) {
 
 <template>
   <div v-if="messages.length > 0" class="reverted-panel-container">
-    <div class="max-w-chat-max mx-auto">
+    <div class="max-w-chat-max mx-auto ">
       <Card class="reverted-card rounded-b-none border-b-0">
         <div class="reverted-header" @click="collapsed = !collapsed">
           <div class="header-left">
@@ -27,7 +27,7 @@ async function handleRecover(messageId: string) {
           </div>
         </div>
 
-        <div class="reverted-list" :class="{ collapsed }">
+        <div class="reverted-list  pb-2 pt-2" :class="{ collapsed }">
           <div class="reverted-list-inner">
             <div
               v-for="msg in messages"
@@ -53,7 +53,7 @@ async function handleRecover(messageId: string) {
 
 <style scoped>
 .reverted-panel-container {
-  margin-bottom: -16px;
+  margin-bottom: -10px;
   position: relative;
   z-index: 0;
 }
@@ -66,7 +66,7 @@ async function handleRecover(messageId: string) {
   border-radius: 8px 8px 0 0;
   border-bottom-width: 0;
   box-shadow: none;
-  gap: 1 !important;
+  gap: 0 !important;
 }
 
 :deep(.reverted-card > div[data-slot="card"]) {

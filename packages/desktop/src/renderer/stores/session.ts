@@ -1136,27 +1136,15 @@ export const useSessionStore = defineStore('session', () => {
     console.log('[recoverMessage] ENTRY:', targetMessageId)
     if (isReverting.value) return
 
-    const revertedList = revertedMessages.value
-    const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
-    console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
-    if (targetIndex === -1) return
-
-    const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
-    
-    // Optimistic update: calculate new revertPoint immediately
-    const previousRevertPoint = revertPoint.value
-    const optimisticRevertPoint = nextUserMessage ? nextUserMessage.id : null
-    console.log('[recoverMessage] OPTIMISTIC: previous:', previousRevertPoint, '-> new:', optimisticRevertPoint)
-    
-    // Apply optimistic update immediately
-    if (sessionId === currentSessionId.value) {
-      revertPoint.value = optimisticRevertPoint
-      saveRevertedMessages(sessionId, optimisticRevertPoint)
-    }
-    
     isReverting.value = true
     try {
-      // Background API call
+      const revertedList = revertedMessages.value
+      const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
+      console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
+      if (targetIndex === -1) { isReverting.value = false; return }
+
+      const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
+
       let result: unknown
       if (nextUserMessage) {
         result = await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
@@ -1167,23 +1155,16 @@ export const useSessionStore = defineStore('session', () => {
 
       const res = result as Record<string, unknown>
       const revertInfo = res?.revert as Record<string, unknown> | undefined
-      const actualRevertPoint = (revertInfo?.messageID as string) || null
-      console.log('[recoverMessage] ACTUAL revertPoint:', actualRevertPoint)
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[recoverMessage] new revertPoint:', newRevertPoint)
 
-      // Update with actual value if different
-      if (sessionId === currentSessionId.value && actualRevertPoint !== optimisticRevertPoint) {
-        console.log('[recoverMessage] Correcting revertPoint from', optimisticRevertPoint, 'to', actualRevertPoint)
-        revertPoint.value = actualRevertPoint
-        saveRevertedMessages(sessionId, actualRevertPoint)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[recoverMessage] complete, hidden:', revertedMessages.value.length)
       }
     } catch (error) {
       console.error('[recoverMessage] Failed:', error)
-      // Rollback on error
-      if (sessionId === currentSessionId.value) {
-        console.log('[recoverMessage] ROLLBACK to:', previousRevertPoint)
-        revertPoint.value = previousRevertPoint
-        saveRevertedMessages(sessionId, previousRevertPoint)
-      }
       state.error = error instanceof Error ? error.message : 'Failed to recover message'
     } finally {
       isReverting.value = false
