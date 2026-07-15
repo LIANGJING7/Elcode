@@ -12,6 +12,7 @@ import type {
   ToolProgress
 } from './types'
 import { createInitialState } from './types'
+import { useQuestionStore } from '../question'
 
 // ============================================
 // Reducer
@@ -62,6 +63,18 @@ export function streamingReducer(
       state.status = 'error'
       state.stepError = action.error
       return state
+
+    case 'QUESTION_ASKED': {
+      const questionStore = useQuestionStore()
+      questionStore.addQuestion(action.request)
+      return state
+    }
+
+    case 'QUESTION_RESOLVED': {
+      const questionStore = useQuestionStore()
+      questionStore.removeQuestion(action.sessionID, action.requestID)
+      return state
+    }
 
     // ============================================
     // Text
