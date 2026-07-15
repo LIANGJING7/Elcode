@@ -1070,6 +1070,10 @@ export const useSessionStore = defineStore('session', () => {
   // ========================================
 
   async function revertMessage(sessionId: string, messageId: string) {
+    console.log('[revertMessage] ENTRY: sessionId:', sessionId, 'messageId:', messageId)
+    console.log('[revertMessage] isReverting:', isReverting.value)
+    console.log('[revertMessage] isStreaming:', streamingStore.isCurrentStreaming.value)
+
     if (isReverting.value) {
       console.log('[revertMessage] Already reverting, skipping')
       return
@@ -1085,13 +1089,15 @@ export const useSessionStore = defineStore('session', () => {
 
     try {
       const message = currentMessages.value.find(m => m.id === messageId)
+      console.log('[revertMessage] Found message:', message ? { id: message.id, role: message.role } : 'NOT FOUND')
       if (!message || message.role !== 'user') {
         console.error('[revertMessage] Message not found or not user message')
         return
       }
 
-      await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
-      console.log('[revertMessage] Revert API called successfully')
+      console.log('[revertMessage] Calling backend.session.revert, directory:', workspaceStore.currentWorkspace?.path)
+      const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
+      console.log('[revertMessage] Backend returned:', result)
     } catch (error) {
       console.error('[revertMessage] Revert failed:', error)
       state.error = error instanceof Error ? error.message : 'Failed to revert message'

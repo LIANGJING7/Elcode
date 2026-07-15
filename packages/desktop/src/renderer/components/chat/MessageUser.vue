@@ -20,8 +20,14 @@ watch(() => props.message, (msg) => {
 }, { immediate: true })
 
 async function handleRevert() {
-  if (!sessionStore.currentSessionId || !props.message.id) return
+  console.log('[MessageUser] handleRevert called, sessionId:', sessionStore.currentSessionId, 'messageId:', props.message.id)
+  if (!sessionStore.currentSessionId || !props.message.id) {
+    console.log('[MessageUser] handleRevert skipped: missing sessionId or messageId')
+    return
+  }
+  console.log('[MessageUser] calling revertMessage...')
   await sessionStore.revertMessage(sessionStore.currentSessionId, props.message.id)
+  console.log('[MessageUser] revertMessage returned')
 }
 
 // Compute highlighted segments based on agent mentions
