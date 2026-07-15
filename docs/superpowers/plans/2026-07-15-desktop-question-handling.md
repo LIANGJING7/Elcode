@@ -23,13 +23,14 @@
 - `packages/desktop/src/renderer/components/question/QuestionPanel.vue` - Question UI panel
 
 ### Modified Files
+- `packages/desktop/src/renderer/stores/streaming/types.ts` - Add question action types
 - `packages/desktop/src/renderer/stores/streaming/normalizer.ts` - Add question event parsing
 - `packages/desktop/src/renderer/stores/streaming/reducer.ts` - Add QUESTION_ASKED/RESOLVED actions
-- `packages/desktop/src/renderer/stores/streaming/types.ts` - Add action types
-- `packages/desktop/src/renderer/stores/streaming/store.ts` - Import questionStore
 - `packages/desktop/src/renderer/components/chat/ChatView.vue` - Conditional render QuestionPanel
-- `packages/desktop/src/main/ipc/handlers-session.ts` - Add questionReply/questionReject IPC
-- `packages/desktop/src/preload/index.d.ts` - Add type declarations
+- `packages/desktop/src/main/backend-client.ts` - Add questionReply/questionReject HTTP methods
+- `packages/desktop/src/types/ipc.ts` - Add IPC channels
+- `packages/desktop/src/main/ipc/handlers-session.ts` - Add IPC handlers
+- `packages/desktop/src/preload/api.ts` - Add preload API methods
 
 ---
 
@@ -138,19 +139,14 @@ export const useQuestionStore = defineStore('question', () => {
   async function reply(answers: string[][]) {
     const question = current.value
     if (!question) return
-    await window.desktop.session.questionReply({
-      requestID: question.id,
-      answers
-    })
+    await window.desktop.session.questionReply(question.id, answers)
     requests.value.delete(question.sessionID)
   }
   
   async function reject() {
     const question = current.value
     if (!question) return
-    await window.desktop.session.questionReject({
-      requestID: question.id
-    })
+    await window.desktop.session.questionReject(question.id)
     requests.value.delete(question.sessionID)
   }
   
@@ -290,49 +286,105 @@ git commit -m "feat(question): add question action handlers in reducer"
 
 ---
 
-### Task 5: Add IPC Handlers
+### Task 5: Add Backend Client Methods
+
+**Files:**
+- Modify: `packages/desktop/src/main/backend-client.ts`
+
+**Interfaces:**
+- Consumes: `backend.session` object
+- Produces: `questionReply(requestID, answers?, directory?)` and `questionReject(requestID, directory?)` methods
+
+- [ ] **Step 1: Add question methods to backend.session object**
+
+```ts
+// In packages/desktop/src/main/backend-client.ts
+// Add inside the session object (after agents method, around line 333)
+
+    questionReply: async (requestID: string, answers?: string[][], directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reply${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url, answers ? { answers } : undefined)
+    },
+    
+    questionReject: async (requestID: string, directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reject${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url)
+    },
+```
+
+- [ ] **Step 2: Verify backend-client compiles**
+
+Run: `cd packages/desktop && npm run typecheck`
+Expected: No errors
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/desktop/src/main/backend-client.ts
+git commit -m "feat(question): add questionReply and questionReject to backend client"
+```
+
+---
+
+### Task 6: Add IPC Channels
+
+**Files:**
+- Modify: `packages/desktop/src/types/ipc.ts`
+
+**Interfaces:**
+- Produces: `SESSION_QUESTION_REPLY` and `SESSION_QUESTION_REJECT` channel names
+
+- [ ] **Step 1: Add IPC channels**
+
+```ts
+// In packages/desktop/src/types/ipc.ts
+// Add inside IPC_CHANNELS object (after SESSION_AGENTS, around line 312)
+
+  SESSION_QUESTION_REPLY: 'session:question-reply',
+  SESSION_QUESTION_REJECT: 'session:question-reject',
+```
+
+- [ ] **Step 2: Verify types compile**
+
+Run: `cd packages/desktop && npm run typecheck`
+Expected: No errors
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/desktop/src/types/ipc.ts
+git commit -m "feat(question): add question IPC channels"
+```
+
+---
+
+### Task 7: Add IPC Handlers
 
 **Files:**
 - Modify: `packages/desktop/src/main/ipc/handlers-session.ts`
 
 **Interfaces:**
-- Consumes: `window.desktop.session.questionReply(params)` from renderer
-- Produces: POST to `/question/{requestID}/reply` and `/question/{requestID}/reject`
+- Consumes: `backend.session.questionReply()` and `backend.session.questionReject()`
+- Produces: IPC handlers for `session:question-reply` and `session:question-reject`
 
-- [ ] **Step 1: Add questionReply IPC handler**
+- [ ] **Step 1: Add question IPC handlers**
 
 ```ts
 // In packages/desktop/src/main/ipc/handlers-session.ts
 // Add at end of registerIpcHandlers function (before the last closing brace)
 
   // Question reply
-  ipcMain.handle('session:questionReply', async (_, params: {
-    requestID: string
-    directory?: string
-    workspace?: string
-    answers?: string[][]
-  }) => {
-    const client = getBackendClient()
-    await client.question.reply({
-      requestID: params.requestID,
-      directory: params.directory,
-      workspace: params.workspace,
-      answers: params.answers
-    })
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REPLY, async (_, requestID: string, answers?: string[][], directory?: string) => {
+    await backend.session.questionReply(requestID, answers, directory)
   })
 
   // Question reject
-  ipcMain.handle('session:questionReject', async (_, params: {
-    requestID: string
-    directory?: string
-    workspace?: string
-  }) => {
-    const client = getBackendClient()
-    await client.question.reject({
-      requestID: params.requestID,
-      directory: params.directory,
-      workspace: params.workspace
-    })
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REJECT, async (_, requestID: string, directory?: string) => {
+    await backend.session.questionReject(requestID, directory)
   })
 ```
 
@@ -350,49 +402,50 @@ git commit -m "feat(question): add questionReply and questionReject IPC handlers
 
 ---
 
-### Task 6: Add Preload Type Declarations
+### Task 8: Add Preload API Methods
 
 **Files:**
-- Modify: `packages/desktop/src/preload/index.d.ts`
+- Modify: `packages/desktop/src/preload/api.ts`
 
 **Interfaces:**
-- Produces: TypeScript declarations for `window.desktop.session.questionReply` and `questionReject`
+- Produces: `window.desktop.session.questionReply()` and `window.desktop.session.questionReject()` methods
 
-- [ ] **Step 1: Add type declarations to preload**
+- [ ] **Step 1: Add question methods to desktopAPI.session**
 
 ```ts
-// In packages/desktop/src/preload/index.d.ts
-// Find the session interface and add these methods
+// In packages/desktop/src/preload/api.ts
+// Add inside session object (after agents method, around line 61)
 
-interface DesktopSessionApi {
-  // ... existing methods ...
-  
-  questionReply(params: {
-    requestID: string
-    answers?: string[][]
-  }): Promise<void>
-  
-  questionReject(params: {
-    requestID: string
-  }): Promise<void>
-}
+    questionReply: (requestID: string, answers?: string[][], directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REPLY, requestID, answers, directory),
+
+    questionReject: (requestID: string, directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REJECT, requestID, directory),
 ```
 
-- [ ] **Step 2: Verify types compile**
+- [ ] **Step 2: Add IPC_CHANNELS import if not present**
+
+```ts
+// Verify that IPC_CHANNELS is imported at top of packages/desktop/src/preload/api.ts
+// If not, add it:
+import { IPC_CHANNELS } from '../types/ipc'
+```
+
+- [ ] **Step 3: Verify preload compiles**
 
 Run: `cd packages/desktop && npm run typecheck`
 Expected: No errors
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add packages/desktop/src/preload/index.d.ts
-git commit -m "feat(question): add questionReply and questionReject type declarations"
+git add packages/desktop/src/preload/api.ts
+git commit -m "feat(question): add questionReply and questionReject to preload API"
 ```
 
 ---
 
-### Task 7: Create QuestionPanel Component
+### Task 9: Create QuestionPanel Component
 
 **Files:**
 - Create: `packages/desktop/src/renderer/components/question/QuestionPanel.vue`
@@ -607,7 +660,7 @@ git commit -m "feat(question): add QuestionPanel component"
 
 ---
 
-### Task 8: Integrate QuestionPanel in ChatView
+### Task 10: Integrate QuestionPanel in ChatView
 
 **Files:**
 - Modify: `packages/desktop/src/renderer/components/chat/ChatView.vue`
@@ -666,7 +719,7 @@ git commit -m "feat(question): integrate QuestionPanel in ChatView"
 
 ---
 
-### Task 9: End-to-End Verification
+### Task 11: End-to-End Verification
 
 **Files:**
 - None (verification only)
