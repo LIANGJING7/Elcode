@@ -9,7 +9,7 @@ const ui = useUiStore()
 const sections: { id: SettingsSection; label: string }[] = [
   { id: 'models', label: '模型' },
   { id: 'mcp', label: 'MCP' },
-  { id: 'skills', label: 'Skills' },
+  { id: 'skills', label: '技能' },
 ]
 </script>
 

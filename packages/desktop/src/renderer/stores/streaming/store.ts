@@ -85,9 +85,8 @@ let schedulerRunning = false
 // Used to classify message.part.delta events without explicit partType
 const partTypeMap = new Map<string, 'text' | 'reasoning'>()
 
-// V2 processed IDs - used to skip V1 duplicate processing
+// V2 processed reasoning IDs - used to skip V1 duplicate processing
 const v2ReasoningIds = new Set<string>()
-const v2TextIds = new Set<string>()
 
 /**
  * Create or get streaming store singleton
@@ -128,21 +127,18 @@ export function useStreamingStore(): StreamingStore {
   function handleEvent(sessionId: string, rawEvent: unknown) {
     const state = ensureStream(sessionId)
     
-    // Pre-process message.part.updated to build partTypeMap and flush pending deltas
     const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
     const props = event?.data ?? event?.properties ?? {}
+    const eventSessionID = props?.sessionID as string | undefined
     
-    // Track V2 IDs to avoid V1/V2 duplicate processing
-    if (event?.type === 'session.next.text.started') {
-      const textID = props.textID as string
-      if (textID) {
-        v2TextIds.add(textID)
-      }
-    }
+    console.log('[RENDERER] handleEvent:', event?.type, 'eventSessionID:', eventSessionID, 'targetSessionID:', sessionId, 'match:', eventSessionID === sessionId)
+    
+    // Track V2 reasoning IDs to avoid V1/V2 duplicate processing
     if (event?.type === 'session.next.reasoning.started') {
       const reasoningID = props.reasoningID as string
       if (reasoningID) {
         v2ReasoningIds.add(reasoningID)
+        console.log('[RENDERER] Added V2 reasoning ID:', reasoningID)
       }
     }
     
@@ -244,12 +240,11 @@ export function useStreamingStore(): StreamingStore {
           state.message.id = part.messageID
         }
         
-        // Skip V1 processing if already handled by V2 events
-        const v2Processed = 
-          (partType === 'text' && v2TextIds.has(part.id)) ||
-          (partType === 'reasoning' && v2ReasoningIds.has(part.id))
-        
-        if (!v2Processed) {
+        // Skip V1 reasoning processing if already handled by V2 events
+        if (partType === 'reasoning' && v2ReasoningIds.has(part.id)) {
+          console.log('[STORE] Skipping V1 reasoning flush - already in v2ReasoningIds:', part.id)
+        } else {
+          console.log('[STORE] Flushing pending deltas for part:', part.id, 'type:', partType, 'pending count:', state.pendingDeltas.get(part.id)?.length || 0)
           flushPendingDeltas(sessionId, part.id, partType)
         }
       }
@@ -274,32 +269,26 @@ export function useStreamingStore(): StreamingStore {
     if (!state) return
     
     const pending = state.pendingDeltas.get(partId)
-    if (!pending || pending.length === 0) return
+    console.log('[FLUSH] partId:', partId, 'partType:', partType, 'pending count:', pending?.length || 0)
     
     if (partType === 'reasoning') {
-      state.reasoning.status = 'thinking'
-      state.reasoning.id = partId
-      if (!state.reasoning.startedAt) {
-        state.reasoning.startedAt = Date.now()
+      if (pending && pending.length > 0) {
+        const mergedDelta = pending.join('')
+        console.log('[FLUSH] merging pending deltas, length:', mergedDelta.length)
+        state.reasoning.content = state.reasoning.content + mergedDelta
+        state.pendingDeltas.delete(partId)
       }
-    }
-    
-    const mergedDelta = pending.join('')
-    
-    if (partType === 'reasoning') {
-      state.reasoning.status = 'thinking'
-      state.reasoning.id = partId
-      if (!state.reasoning.startedAt) {
-        state.reasoning.startedAt = Date.now()
-      }
-      state.reasoning.content = state.reasoning.content + mergedDelta
       state.reasoning.status = 'done'
       state.reasoning.endedAt = Date.now()
+      state.reasoning.id = partId
+      console.log('[FLUSH] reasoning.status set to done, content length:', state.reasoning.content.length)
     } else {
-      state.message.content = state.message.content + mergedDelta
+      if (pending && pending.length > 0) {
+        const mergedDelta = pending.join('')
+        state.message.content = state.message.content + mergedDelta
+        state.pendingDeltas.delete(partId)
+      }
     }
-    
-    state.pendingDeltas.delete(partId)
   }
 
   // Clean up completed session's streaming state
@@ -337,7 +326,6 @@ export function useStreamingStore(): StreamingStore {
       state.stepError = null
       // Clear V1/V2 dedup tracking
       v2ReasoningIds.clear()
-      v2TextIds.clear()
       partTypeMap.clear()
     }
   }
@@ -360,7 +348,6 @@ export function useStreamingStore(): StreamingStore {
     state.stepError = null
     // Clear V1/V2 dedup tracking
     v2ReasoningIds.clear()
-    v2TextIds.clear()
     partTypeMap.clear()
   }
 

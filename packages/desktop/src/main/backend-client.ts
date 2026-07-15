@@ -50,11 +50,10 @@ let backendProcess: ChildProcess | null = null
 let backendPort: number | null = null
 let backendReady = false
 
-// Global SSE connection - single connection shared across all sessions
-let globalEventsController: AbortController | null = null
-let globalEventsDirectory = ''
-let globalEventsPromise: Promise<void> | null = null
-const globalEventCallbacks: Array<(event: unknown) => void> = []
+const directoryStreams = new Map<string, {
+  controller: AbortController
+  listeners: Map<string, (event: unknown) => void>
+}>()
 
 // Safety net: if the Electron main process is about to exit for any reason
 // (user Ctrl+C, hard kill, crash, Vite restart in dev), Node still runs the
@@ -251,7 +250,6 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 }
 
 export async function stopBackend(): Promise<void> {
-  stopGlobalEvents()
   const proc = backendProcess
   if (proc) {
     try {
@@ -261,53 +259,6 @@ export async function stopBackend(): Promise<void> {
       backendReady = false
     }
   }
-}
-
-function ensureGlobalEvents(directory?: string) {
-  const dir = directory || ''
-  
-  // If already running for the same directory, do nothing
-  if (globalEventsController && globalEventsDirectory === dir) return
-  // If running for a different directory, restart
-  if (globalEventsController) stopGlobalEvents()
-
-  const controller = new AbortController()
-  globalEventsController = controller
-  globalEventsDirectory = dir
-
-  console.log('[SSE GLOBAL] Starting global SSE connection, directory:', dir)
-
-  globalEventsPromise = (async () => {
-    const sdk = createOpencodeClient({
-      baseUrl: `http://localhost:${backendPort}`,
-      directory: dir || undefined,
-    })
-    try {
-      const result = await sdk.event.subscribe(
-        dir ? { directory: dir } : undefined,
-        { signal: controller.signal }
-      )
-
-      for await (const event of result.stream) {
-        if (controller.signal.aborted) break
-        for (const cb of globalEventCallbacks) {
-          try { cb(event) } catch {}
-        }
-      }
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        console.error('[SSE GLOBAL] error:', err)
-      }
-    }
-  })()
-}
-
-function stopGlobalEvents() {
-  globalEventsController?.abort()
-  globalEventsController = null
-  globalEventsDirectory = ''
-  globalEventCallbacks.length = 0
-  globalEventsPromise = null
 }
 
 export const backend = {
@@ -401,22 +352,119 @@ export const backend = {
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
 
-      // Ensure global SSE connection is running
-      ensureGlobalEvents(directory)
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      console.log('[SSE CONNECT] port:', backendPort, 'sessionID:', sessionID, 'directory:', directory)
 
-      // Register callback
-      globalEventCallbacks.push(onEvent)
-      let removed = false
+      const controller = new AbortController()
+
+      ;(async () => {
+        try {
+          const sdk = createOpencodeClient({
+            baseUrl: `http://localhost:${backendPort}`,
+            directory,
+          })
+          const result = await sdk.event.subscribe(
+            { directory },
+            { signal: controller.signal }
+          )
+
+          for await (const event of result.stream) {
+            if (controller.signal.aborted) break
+            onEvent(event)
+          }
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[SSE] error:', err)
+          }
+        }
+      })()
 
       return () => {
-        if (removed) return
-        removed = true
-        const idx = globalEventCallbacks.indexOf(onEvent)
-        if (idx >= 0) globalEventCallbacks.splice(idx, 1)
+        console.log('[SSE] aborting for', sessionID)
+        controller.abort()
+      }
+    },
 
-        // Stop global connection when no more listeners
-        if (globalEventCallbacks.length === 0) {
-          stopGlobalEvents()
+eventsWithDispatch: (sessionID: string, onEvent: (event: unknown) => void, directory: string): (() => void) => {
+      if (!backendPort) return () => {}
+
+      const dir = storagePath(directory)
+      let stream = directoryStreams.get(dir)
+
+      if (!stream) {
+        const controller = new AbortController()
+        const listeners = new Map<string, (event: unknown) => void>()
+
+        stream = { controller, listeners }
+        directoryStreams.set(dir, stream)
+
+        console.log('[SSE] === CREATING SHARED STREAM ===')
+        console.log('[SSE] directory:', dir)
+        console.log('[SSE] initial sessionID:', sessionID)
+
+        ;(async () => {
+          try {
+            const sdk = createOpencodeClient({
+              baseUrl: `http://localhost:${backendPort}`,
+              directory: dir,
+            })
+            const result = await sdk.event.subscribe(
+              { directory: dir },
+              { signal: controller.signal }
+            )
+
+            console.log('[SSE] Stream connected for directory:', dir)
+
+            for await (const event of result.stream) {
+              if (controller.signal.aborted) break
+              const evt = event as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
+              const eventType = evt?.type as string | undefined
+              const props = evt?.data ?? evt?.properties ?? {}
+              const eventSessionID = props?.sessionID as string | undefined
+
+              console.log('[SSE] EVENT:', eventType, 'sessionID:', eventSessionID, 'target listeners:', Array.from(stream.listeners.keys()))
+
+              if (eventSessionID) {
+                const handler = stream.listeners.get(eventSessionID)
+                if (handler) {
+                  console.log('[SSE] -> Dispatching to session:', eventSessionID)
+                  handler(event)
+                } else {
+                  console.log('[SSE] -> NO HANDLER for session:', eventSessionID)
+                }
+              } else {
+                console.log('[SSE] -> Broadcasting to all listeners:', stream.listeners.size)
+                for (const handler of stream.listeners.values()) {
+                  handler(event)
+                }
+              }
+            }
+          } catch (err) {
+            if (!controller.signal.aborted) {
+              console.error('[SSE] Shared stream error:', err)
+            }
+          } finally {
+            console.log('[SSE] Stream closed for directory:', dir)
+            directoryStreams.delete(dir)
+          }
+        })()
+      } else {
+        console.log('[SSE] === REUSING EXISTING STREAM ===')
+        console.log('[SSE] directory:', dir)
+        console.log('[SSE] existing listeners:', Array.from(stream.listeners.keys()))
+      }
+
+      stream.listeners.set(sessionID, onEvent)
+      console.log('[SSE] Added listener for session:', sessionID, 'total:', stream.listeners.size)
+      console.log('[SSE] All listeners:', Array.from(stream.listeners.keys()))
+
+      return () => {
+        const s = directoryStreams.get(dir)
+        if (s) {
+          s.listeners.delete(sessionID)
+          console.log('[SSE] Removed listener for session:', sessionID, 'remaining:', s.listeners.size)
+          console.log('[SSE] Remaining listeners:', Array.from(s.listeners.keys()))
         }
       }
     },

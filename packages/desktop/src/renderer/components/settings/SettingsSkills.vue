@@ -5,10 +5,10 @@
       class="skill-list flex flex-col flex-1 min-w-0 bg-bg transition-all duration-300"
       :class="{ 'panel-open': panelOpen }"
     >
-      <h2 class="text-lg font-medium text-text px-4 py-3 border-b border-border">Skills</h2>
+      <h2 class="text-lg font-medium text-text px-4 py-3 border-b border-border">技能</h2>
 
       <!-- Search input -->
-      <div class="px-4 py-2 border-b border-border">
+      <div class="px-4 py-2 ">
         <div class="relative">
           <SearchIcon class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <Input

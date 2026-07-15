@@ -4,11 +4,6 @@ import { backend } from '../backend-client'
 import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../../types/session'
 
-// Per-session unsubscribers — each removes its listener from the shared SSE connection.
-// The shared connection in backend-client.ts handles multiplexing so events are
-// delivered exactly once regardless of how many sessions are listening.
-const sessionStreams = new Map<string, () => void>()
-
 /**
  * Shared tool state shape for both V1 and V2 messages.
  */
@@ -701,47 +696,33 @@ export function registerSessionHandlers() {
       payload.agent = options.agent
     }
 
-    // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
-    // Only clean up this session's old subscription (not all sessions anymore)
-    if (sessionStreams.has(sessionID)) {
-      sessionStreams.get(sessionID)!()
-      sessionStreams.delete(sessionID)
-    }
-    
-    console.log('[PROMPT] registering SSE listener for', sessionID)
+    console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID, 'directory:', directory)
     let loggedFirstEvent = false
     let eventCount = 0
     try {
-      const sender = event.sender
-      const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
-        const e = evt as Record<string, unknown>
-        // Filter by event's internal sessionID - global connection sends ALL events
-        const props = (e?.data ?? e?.properties) as Record<string, unknown> | undefined
-        const eventSessionID = props?.sessionID as string | undefined
-        if (eventSessionID && eventSessionID !== sessionID) return
-
+      const unsubscribe = backend.session.eventsWithDispatch(sessionID, (evt: unknown) => {
+        const e = evt as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
+        const props = e?.data ?? e?.properties ?? {}
         eventCount++
         const eventType = e?.type as string | undefined
+        const eventSessionID = props?.sessionID as string | undefined
         if (eventType) {
-          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'keys:', Object.keys(e).slice(0, 5))
+          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'sessionID:', eventSessionID, 'target:', sessionID, 'match:', eventSessionID === sessionID)
           if (!loggedFirstEvent) {
-            console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
+            console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 1000))
             loggedFirstEvent = true
           }
-          if (eventType.startsWith('session.next.')) {
-            console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
-          }
         }
-        if (!sender.isDestroyed()) {
-          sender.send(CHANNELS.SESSION_STREAM_EVENT, {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
             sessionID,
             event: evt
           })
         } else {
           console.log('[SSE MAIN] WebContents destroyed, stopping stream for', sessionID)
+          return false
         }
-      }, directory)
-      sessionStreams.set(sessionID, unsubscribe)
+      }, directory!)
       console.log('[PROMPT] SSE stream set up for', sessionID)
       } catch (e) {
         console.error('[PROMPT] SSE stream setup FAILED for', sessionID, ':', e)
@@ -752,7 +733,6 @@ export function registerSessionHandlers() {
       console.log('[PROMPT] session.prompt succeeded for', sessionID)
     } catch (e) {
       console.error('[PROMPT] session.prompt FAILED for', sessionID, ':', e)
-      stopSessionStream(sessionID)
       throw e
     }
 
@@ -771,7 +751,6 @@ export function registerSessionHandlers() {
 
   ipcMain.handle(CHANNELS.SESSION_DELETE, async (_event, sessionID: string, directory?: string) => {
     const removed = await backend.session.remove(sessionID, directory)
-    stopSessionStream(sessionID)
     return removed
   })
 
@@ -886,40 +865,4 @@ export function registerSessionHandlers() {
   ipcMain.handle(CHANNELS.SESSION_QUESTION_REJECT, async (_, requestID: string, directory?: string) => {
     await backend.session.questionReject(requestID, directory)
   })
-}
-
-export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
-  // Clean up old subscription for this session only
-  if (sessionStreams.has(sessionID)) {
-    sessionStreams.get(sessionID)!()
-    sessionStreams.delete(sessionID)
-  }
-  
-  const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
-      // Filter by event's internal sessionID
-      const e = event as Record<string, unknown>
-      const props = (e?.data ?? e?.properties) as Record<string, unknown> | undefined
-      const eventSessionID = props?.sessionID as string | undefined
-      if (eventSessionID && eventSessionID !== sessionID) return
-
-      if (webContents.isDestroyed()) {
-        console.log('[SSE] WebContents destroyed, stopping stream for', sessionID)
-        stopSessionStream(sessionID)
-        return
-      }
-      const serializedEvent = JSON.parse(JSON.stringify(event))
-      webContents.send(CHANNELS.SESSION_STREAM_EVENT, {
-        sessionID,
-        event: serializedEvent
-      })
-    })
-  sessionStreams.set(sessionID, unsubscribe)
-}
-
-export function stopSessionStream(sessionID: string) {
-  const unsubscribe = sessionStreams.get(sessionID)
-  if (unsubscribe) {
-    unsubscribe()
-    sessionStreams.delete(sessionID)
-  }
 }
