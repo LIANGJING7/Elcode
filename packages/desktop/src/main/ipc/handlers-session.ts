@@ -844,6 +844,14 @@ export function registerSessionHandlers() {
     return result
   })
 
+  ipcMain.handle(CHANNELS.SESSION_REVERT, async (_event, sessionID: string, messageID: string, directory?: string) => {
+    return await backend.session.revert(sessionID, messageID, directory)
+  })
+
+  ipcMain.handle(CHANNELS.SESSION_UNREVERT, async (_event, sessionID: string, directory?: string) => {
+    return await backend.session.unrevert(sessionID, directory)
+  })
+
   // Provider handlers
   ipcMain.handle(CHANNELS.PROVIDER_AUTH_METHODS, async (_event, directory?: string) => {
     return await backend.provider.authMethods(directory)

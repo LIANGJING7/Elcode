@@ -59,6 +59,12 @@ export const desktopAPI = {
 
     agents: (directory?: string): Promise<Agent[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory),
+
+    revert: (sessionID: string, messageID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_REVERT, sessionID, messageID, directory),
+
+    unrevert: (sessionID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UNREVERT, sessionID, directory),
   },
 
   file: {
