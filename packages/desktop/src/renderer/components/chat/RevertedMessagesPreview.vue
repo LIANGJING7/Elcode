@@ -55,7 +55,7 @@ async function handleRecover(messageId: string) {
 .reverted-panel-container {
   margin-bottom: -24px;
   position: relative;
-  z-index: 1;
+  z-index: 0;
 }
 
 .reverted-card {
