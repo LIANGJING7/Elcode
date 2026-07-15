@@ -110,7 +110,11 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @open-diff-file="emit('openDiffFile', $event)"
     />
     <ChatTodo class="flex-shrink-0" />
-    <QuestionPanel v-if="questionStore.hasPending" class="flex-shrink-0" />
+    <div v-if="questionStore.hasPending" class="pt-0 pb-6 mx-6 flex-shrink-0">
+      <div class="max-w-chat-max mx-auto">
+        <QuestionPanel />
+      </div>
+    </div>
     <Composer
       v-else
       :has-active-session="true"

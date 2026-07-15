@@ -15,23 +15,11 @@
         </button>
       </div>
 
-      <!-- 中间: 会话标题 + 菜单 (拖拽区域, 交互元素除外) -->
+      <!-- 中间: 会话标题 (拖拽区域) -->
       <div v-if="effectiveView === 'chat'" class="drag flex-1 flex items-center gap-2 px-4 min-w-0">
-        <button
-          v-if="!editingTitle"
-          class="no-drag text-lg font-medium truncate hover:bg-bg-hover px-2 py-1 rounded text-text"
-          @click="startEditTitle"
-        >
+        <span class="text-lg font-medium truncate px-2 py-1 text-text">
           {{ currentConversation?.title ?? 'New Chat' }}
-        </button>
-        <input
-          v-else
-          v-model="titleDraft"
-          class="no-drag text-lg font-medium px-2 py-1 rounded border border-accent bg-bg-elevated text-text focus:outline-none focus:ring-1 focus:ring-accent min-w-0"
-          @keyup.enter="commitEditTitle"
-          @blur="commitEditTitle"
-        />
-
+        </span>
       </div>
       <div v-else class="drag flex-1"></div>
 
@@ -119,21 +107,6 @@ const currentSessionId = computed(() => sessionStore.currentSessionId)
 const currentConversation = computed(() => sessionStore.currentConversation)
 const currentMessages = computed(() => sessionStore.currentMessages)
 const hasCurrentWorkspace = computed(() => workspaceStore.hasCurrentWorkspace)
-
-// 标题栏 rename 状态
-const editingTitle = ref(false)
-const titleDraft = ref('')
-function startEditTitle() {
-  editingTitle.value = true
-  titleDraft.value = currentConversation.value?.title ?? ''
-}
-
-function commitEditTitle() {
-  editingTitle.value = false
-  if (titleDraft.value && titleDraft.value !== currentConversation.value?.title) {
-    handleRename(titleDraft.value)
-  }
-}
 
 // view 由业务状态决定默认页面，临时 UI 状态只表示用户操作。
 const effectiveView = computed<'welcome' | 'newSession' | 'chat' | 'skills' | 'mcp' | 'settings'>(() => {
