@@ -78,7 +78,7 @@ async function handleRecover(messageId: string) {
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  padding: 8px 0 5px 8px;
+  padding: 8px 0 0 8px;
 }
 
 .header-left {
@@ -113,8 +113,8 @@ async function handleRecover(messageId: string) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 8px 8px 8px;
+  gap: 6px;
+  padding: 4px 8px 8px 8px;
 }
 
 .reverted-item {
