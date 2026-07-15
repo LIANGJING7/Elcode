@@ -40,7 +40,7 @@ async function handleRecover(messageId: string) {
                 :disabled="sessionStore.isReverting"
                 class="recover-btn"
               >
-                <Undo2 class="w-3.5 h-3.5" />
+            
                 <span>恢复消息</span>
               </button>
             </div>
@@ -53,7 +53,7 @@ async function handleRecover(messageId: string) {
 
 <style scoped>
 .reverted-panel-container {
-  margin-bottom: -24px;
+  margin-bottom: -16px;
   position: relative;
   z-index: 0;
 }
@@ -66,7 +66,7 @@ async function handleRecover(messageId: string) {
   border-radius: 8px 8px 0 0;
   border-bottom-width: 0;
   box-shadow: none;
-  gap: 0 !important;
+  gap: 1 !important;
 }
 
 :deep(.reverted-card > div[data-slot="card"]) {
