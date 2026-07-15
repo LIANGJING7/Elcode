@@ -14,6 +14,9 @@ const DEFAULT_START_TIME = Date.now() - 30 * 24 * 60 * 60 * 1000
 // Default page size
 const DEFAULT_LIMIT = 50
 
+// localStorage key for reverted messages persistence
+const REVERTED_MESSAGES_STORAGE_KEY = 'opencode_reverted_messages'
+
 // Helper to parse model ID
 function parseModelId(modelId: string): ModelRef | undefined {
   if (!modelId) return undefined
@@ -28,6 +31,30 @@ function parseModelId(modelId: string): ModelRef | undefined {
 let cachedAgentNames: Set<string> | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// localStorage helpers for reverted messages
+function saveRevertedMessages(sessionId: string, messages: Message[]) {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    const all = data ? JSON.parse(data) : {}
+    all[sessionId] = messages
+    localStorage.setItem(REVERTED_MESSAGES_STORAGE_KEY, JSON.stringify(all))
+  } catch (error) {
+    console.error('[saveRevertedMessages] Failed:', error)
+  }
+}
+
+function loadRevertedMessages(sessionId: string): Message[] {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    if (!data) return []
+    const all = JSON.parse(data)
+    return all[sessionId] || []
+  } catch (error) {
+    console.error('[loadRevertedMessages] Failed:', error)
+    return []
+  }
+}
 
 /**
  * Result of parsing @mentions in text
@@ -655,6 +682,9 @@ export const useSessionStore = defineStore('session', () => {
     isPendingNewSession.value = false
     streamingStore.setCurrentSession(sessionId)
 
+    // Load reverted messages from localStorage
+    revertedMessages.value = loadRevertedMessages(sessionId)
+
     // Remember this session for current workspace
     if (workspaceStore.currentWorkspace) {
       lastSessionByWorkspace.set(workspaceStore.currentWorkspace.id, sessionId)
@@ -743,6 +773,9 @@ export const useSessionStore = defineStore('session', () => {
 
     if (revertedMessages.value.length > 0) {
       revertedMessages.value = []
+      if (currentSessionId.value) {
+        saveRevertedMessages(currentSessionId.value, [])
+      }
     }
 
     // 如果正在流式，将消息加入队列（不调用 backend）
@@ -1180,6 +1213,7 @@ export const useSessionStore = defineStore('session', () => {
 
               if (removedMsg.role === 'user') {
                 revertedMessages.value.unshift(removedMsg)
+                saveRevertedMessages(sessionId, revertedMessages.value)
               }
             }
           }
