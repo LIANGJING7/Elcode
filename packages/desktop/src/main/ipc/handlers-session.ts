@@ -4,10 +4,54 @@ import { backend } from '../backend-client'
 import type { Conversation, LocationRef, Message, PromptInput, ToolCall, PromptOptions } from '../../types/ipc'
 import type { SessionListQuery, SessionListResult } from '../../types/session'
 
-// Per-session unsubscribers — each removes its listener from the shared SSE connection.
-// The shared connection in backend-client.ts handles multiplexing so events are
-// delivered exactly once regardless of how many sessions are listening.
-const sessionStreams = new Map<string, () => void>()
+/**
+ * Shared tool state shape for both V1 and V2 messages.
+ */
+interface ToolPartState {
+  status: string
+  input?: Record<string, unknown> | string
+  result?: unknown
+  structured?: Record<string, unknown>
+  content?: unknown[]
+  error?: { message?: string }
+}
+
+/**
+ * V1 part types — discriminated union so .filter(p => p.type === '…') narrows correctly.
+ */
+interface V1TextPart {
+  type: 'text'
+  text?: string
+  synthetic?: boolean
+}
+
+interface V1ToolPart {
+  type: 'tool'
+  callID?: string
+  tool?: string
+  state?: ToolPartState
+}
+
+interface V1ReasoningPart {
+  type: 'reasoning'
+  text?: string
+}
+
+interface V1FilePart {
+  type: 'file'
+  mime?: string
+  url?: string
+  filename?: string
+  name?: string
+}
+
+interface V1AgentPart {
+  type: 'agent'
+  name?: string
+  source?: { value?: string; start: number; end: number }
+}
+
+type V1Part = V1TextPart | V1ToolPart | V1ReasoningPart | V1FilePart | V1AgentPart
 
 /**
  * V1 backend message (SessionV1.WithParts) — returned when limit=0 or undefined
@@ -20,22 +64,42 @@ interface V1BackendMessage {
     timestamp: number
     [key: string]: unknown
   }
-  parts: Array<{
-    type: string
-    text?: string
-    callID?: string
-    tool?: string
-    state?: {
-      status: string
-      input?: Record<string, unknown> | string
-      result?: unknown
-      structured?: Record<string, unknown>
-      content?: unknown[]
-      error?: { message?: string }
-    }
-    [key: string]: unknown
-  }>
+  parts: V1Part[]
 }
+
+interface V2ContentText {
+  type: 'text'
+  id: string
+  text: string
+  [key: string]: unknown
+}
+
+interface V2ContentReasoning {
+  type: 'reasoning'
+  id: string
+  text: string
+  [key: string]: unknown
+}
+
+interface V2ContentTool {
+  type: 'tool'
+  id: string
+  name: string
+  state: ToolPartState
+  time?: { created?: number; ran?: number; completed?: number }
+  [key: string]: unknown
+}
+
+interface V2ContentFile {
+  type: 'file'
+  mime?: string
+  url?: string
+  filename?: string
+  name?: string
+  [key: string]: unknown
+}
+
+type V2ContentPart = V2ContentText | V2ContentReasoning | V2ContentTool | V2ContentFile
 
 /**
  * V2 backend message (SessionMessage.Message) — returned when limit > 0
@@ -46,22 +110,7 @@ interface V2BackendMessage {
   type: 'user' | 'assistant' | 'system' | 'shell' | 'synthetic' | 'agent-switched' | 'model-switched' | 'compaction'
   time: { created: number; completed?: number }
   text?: string | string[]
-  content?: Array<{
-    type: string
-    id?: string
-    text?: string
-    name?: string
-    state?: {
-      status: string
-      input?: Record<string, unknown> | string
-      result?: unknown
-      structured?: Record<string, unknown>
-      content?: unknown[]
-      error?: { message?: string }
-    }
-    time?: { created?: number; ran?: number; completed?: number }
-    [key: string]: unknown
-  }>
+  content?: V2ContentPart[]
   [key: string]: unknown
 }
 
@@ -86,7 +135,7 @@ function toToolCall(
     result?: unknown
     structured?: Record<string, unknown>
     content?: unknown[]
-    error?: { message?: string }
+    error?: { type?: string; message?: string }
   } | undefined,
   time?: { created?: number; ran?: number; completed?: number },
 ): ToolCall {
@@ -110,30 +159,19 @@ function toToolCall(
   
   if (!state?.result && !state?.structured && !state?.content && typeof state?.output === 'string') {
     const outputStr = state.output
-    console.log('[DEBUG toToolCall] V1 output detected for tool:', name, 'id:', id)
-    console.log('[DEBUG toToolCall]   state.output:', outputStr.slice(0, 300))
     
-    // Try JSON format first: {"structured": {...}, "text": "..."}
     try {
       parsedOutput = JSON.parse(outputStr)
-      const structuredStr = JSON.stringify(parsedOutput?.structured)
-      console.log('[DEBUG toToolCall]   JSON parse success, structured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
     } catch (e) {
-      // Fall back to XML format: <task id="sessionId" state="...">
-      console.log('[DEBUG toToolCall]   JSON parse failed, trying XML extraction')
       parsedOutput = undefined
       
-      // Extract sessionId from <task id="xxx"> attribute
       const taskIdMatch = outputStr.match(/<task\s+id="([^"]+)"/)
       if (taskIdMatch) {
         extractedSessionId = taskIdMatch[1]
-        console.log('[DEBUG toToolCall]   XML extraction success, sessionId:', extractedSessionId)
         
-        // Also try to extract state attribute
         const stateMatch = outputStr.match(/<task[^>]+state="([^"]+)"/)
         const taskState = stateMatch ? stateMatch[1] : 'completed'
         
-        // Build structured from XML attributes
         parsedOutput = {
           structured: {
             type: 'task',
@@ -143,8 +181,6 @@ function toToolCall(
           },
           text: outputStr,
         }
-      } else {
-        console.log('[DEBUG toToolCall]   XML extraction failed, no <task id=...> found')
       }
     }
   }
@@ -152,13 +188,6 @@ function toToolCall(
   const actualStructured = (state?.structured ?? parsedOutput?.structured) as Record<string, unknown> | undefined
   const actualResult = state?.result ?? (parsedOutput && !actualStructured ? parsedOutput : undefined)
   const hasOutput = actualResult !== undefined || actualStructured !== undefined || state?.content
-
-  console.log('[DEBUG toToolCall] final output for tool:', name)
-  const structuredStr = JSON.stringify(actualStructured)
-  console.log('[DEBUG toToolCall]   actualStructured:', structuredStr ? structuredStr.slice(0, 300) : 'undefined')
-  const resultStr = typeof actualResult === 'string' ? actualResult : JSON.stringify(actualResult)
-  console.log('[DEBUG toToolCall]   actualResult:', resultStr ? resultStr.slice(0, 100) : 'undefined')
-  console.log('[DEBUG toToolCall]   hasOutput:', hasOutput)
 
   const toolCall: ToolCall = {
     id,
@@ -170,16 +199,14 @@ function toToolCall(
           output: {
             ...(actualResult !== undefined ? { result: actualResult } : {}),
             ...(actualStructured ? { structured: actualStructured as never } : {}),
-            ...(state?.content ? { content: state.content as never } : {}),
+            ...(state && state.content ? { content: state.content as never } : {}),
           },
         }
       : {}),
-    ...(state?.error?.message ? { error: state.error.message } : {}),
+    ...(state && state.error ? { error: { type: state.error.type || 'APIError', message: state.error.message || '' } } : {}),
     ...(duration !== undefined ? { duration } : {}),
   }
   
-  const outputStr = JSON.stringify(toolCall.output)
-  console.log('[DEBUG toToolCall]   returning toolCall.output:', outputStr ? outputStr.slice(0, 300) : 'undefined')
   return toolCall
 }
 
@@ -212,8 +239,8 @@ function safeParseToolArgs(raw: string): Record<string, unknown> {
  * Reconstructed: "@AI-Engineer" + " 111 " + "@Account-Strategist"
  */
 function reconstructOriginalText(
-  textParts: Array<{ text?: string }>,
-  agentParts: Array<{ type: 'agent'; name?: string; source?: { value?: string; start: number; end: number } }>
+  textParts: V1TextPart[],
+  agentParts: V1AgentPart[]
 ): string {
   const segments: string[] = []
   const textContent = textParts.map(p => p.text || '').join('')
@@ -265,33 +292,19 @@ function reconstructOriginalText(
  */
 function toMessage(msg: BackendMessage): Message | null {
   if (isV1Message(msg)) {
-    // V1 format: SessionV1.WithParts
-    // Filter out synthetic text parts (expanded agent prompts)
-    console.log('[toMessage V1] Processing message:', msg.info.id, 'role:', msg.info.role)
-    console.log('[toMessage V1] Total parts:', msg.parts.length, 'types:', msg.parts.map(p => p.type))
-    
     const allTextParts = msg.parts.filter(p => p.type === 'text')
-    console.log('[toMessage V1] Text parts:', allTextParts.length, 
-      allTextParts.map(p => ({ text: (p.text || '').slice(0, 30), synthetic: (p as any).synthetic })))
     
     const textParts = msg.parts.filter(p => 
-      p.type === 'text' && p.text && !(p as any).synthetic
-    )
-    const toolParts = msg.parts.filter(p => p.type === 'tool')
-    const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text)
-    const fileParts = msg.parts.filter(p => p.type === 'file')
-    const agentParts = msg.parts.filter(p => p.type === 'agent')
+      p.type === 'text' && p.text && !p.synthetic
+    ) as V1TextPart[]
+    const toolParts = msg.parts.filter(p => p.type === 'tool') as V1ToolPart[]
+    const reasoningParts = msg.parts.filter(p => p.type === 'reasoning' && p.text) as V1ReasoningPart[]
+    const fileParts = msg.parts.filter(p => p.type === 'file') as V1FilePart[]
+    const agentParts = msg.parts.filter(p => p.type === 'agent') as V1AgentPart[]
 
-    console.log('[toMessage V1] Filtered text parts:', textParts.length)
-    console.log('[toMessage V1] Agent parts:', agentParts.length, 
-      agentParts.map(p => ({ name: (p as any).name, source: (p as any).source })))
-
-    // Reconstruct original text with @agent mentions
     let content: string
     if (agentParts.length > 0) {
-      console.log('[toMessage V1] === RECONSTRUCTING ORIGINAL TEXT ===')
       content = reconstructOriginalText(textParts, agentParts)
-      console.log('[toMessage V1] Reconstructed content:', JSON.stringify(content))
     } else {
       content = textParts.map(p => p.text!).join('\n')
     }
@@ -299,11 +312,6 @@ function toMessage(msg: BackendMessage): Message | null {
 
     const toolCalls: ToolCall[] | undefined = toolParts.length > 0
       ? toolParts.map(p => {
-        console.log('[DEBUG toMessage V1] tool part:', p.tool, 'callID:', p.callID)
-        console.log('[DEBUG toMessage V1]   p.state keys:', p.state ? Object.keys(p.state) : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.result:', p.state?.result !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.structured:', p.state?.structured !== undefined ? 'exists' : 'undefined')
-        console.log('[DEBUG toMessage V1]   p.state.content:', p.state?.content !== undefined ? 'exists' : 'undefined')
         return toToolCall(p.callID || '', p.tool || '', p.state)
       })
       : undefined
@@ -311,23 +319,34 @@ function toMessage(msg: BackendMessage): Message | null {
     const files = fileParts.length > 0
       ? fileParts.map(p => ({
           type: 'file' as const,
-          mime: (p as any).mime || 'application/octet-stream',
-          name: (p as any).filename || (p as any).name,
-          url: (p as any).url || ''
+          mime: p.mime || 'application/octet-stream',
+          name: p.filename || p.name,
+          url: p.url || ''
         }))
       : undefined
 
-    // Extract agent mentions for highlighting
     const agents = agentParts.length > 0
-      ? agentParts.map(p => ({
-          type: 'agent' as const,
-          name: (p as any).name,
-          source: (p as any).source
-        }))
+      ? agentParts
+          .filter(p => {
+            return !!(p.name && p.source?.value)
+          })
+          .map(p => ({
+            type: 'agent' as const,
+            name: p.name!,
+            source: {
+              value: p.source!.value!,
+              start: p.source!.start,
+              end: p.source!.end
+            }
+          }))
       : undefined
 
-    console.log('[toMessage V1] Result content:', content.slice(0, 100))
-    console.log('[toMessage V1] Result agents:', agents?.length || 0)
+    // Convert error format: { name, data: { message } } -> { type, message }
+    const rawError = (msg.info as any).error
+    const error = rawError ? {
+      type: rawError.name || 'unknown',
+      message: rawError.data?.message || rawError.message || 'Unknown error'
+    } : undefined
 
     return {
       id: msg.info.id,
@@ -338,6 +357,7 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(reasoning ? { reasoning } : {}),
       ...(files && files.length > 0 ? { files } : {}),
       ...(agents && agents.length > 0 ? { agents } : {}),
+      ...(error ? { error } : {}),
     }
   }
 
@@ -358,9 +378,9 @@ function toMessage(msg: BackendMessage): Message | null {
     const files = fileParts.length > 0
       ? fileParts.map(p => ({
           type: 'file' as const,
-          mime: (p as any).mime || 'application/octet-stream',
-          name: (p as any).filename || (p as any).name,
-          url: (p as any).url || ''
+          mime: p.mime || 'application/octet-stream',
+          name: p.filename || p.name,
+          url: p.url || ''
         }))
       : undefined
 
@@ -368,6 +388,15 @@ function toMessage(msg: BackendMessage): Message | null {
     const duration = msg.time.completed && msg.time.created
       ? msg.time.completed - msg.time.created
       : undefined
+
+    // Convert error format: { name, data: { message } } -> { type, message }
+    const rawError = (msg as any).error
+    const error = rawError ? {
+      type: rawError.name || rawError.type || 'unknown',
+      message: rawError.data?.message || rawError.message || 'Unknown error'
+    } : undefined
+
+    console.log('[toMessage V2 Assistant] error:', error)
 
     return {
       id: msg.id,
@@ -377,9 +406,14 @@ function toMessage(msg: BackendMessage): Message | null {
       ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(duration ? { duration } : {}),
-      ...(files && files.length > 0 ? { files } : {}),
+...(files && files.length > 0 ? { files } : {}),
+      ...(error ? { error } : {}),
     }
   }
+
+  console.log('[toMessage V2] Processing message:', msg.id, 'type:', msg.type)
+  console.log('[toMessage V2] msg keys:', Object.keys(msg))
+  console.log('[toMessage V2] (msg as any).error:', (msg as any).error)
 
   if (msg.type === 'user') {
     // V2 User message: text is already filtered (no synthetic), files/agents at top level
@@ -589,7 +623,6 @@ export function registerSessionHandlers() {
     return messages.map(msg => {
       let timestamp = msg.timestamp
       if (timestamp instanceof Date && isNaN(timestamp.getTime())) {
-        console.warn('[SESSION_MESSAGES] Invalid Date for msg:', msg.id)
         timestamp = new Date()
       }
       
@@ -663,43 +696,33 @@ export function registerSessionHandlers() {
       payload.agent = options.agent
     }
 
-    // 先订阅 SSE 事件，再发 prompt，避免事件在 prompt 和 SSE 之间丢失
-    // Always set up SSE stream (remove existing if present) to ensure fresh connection
-    if (sessionStreams.has(sessionID)) {
-      const oldUnsub = sessionStreams.get(sessionID)
-      if (oldUnsub) {
-        console.log('[PROMPT] removing old SSE stream for', sessionID)
-        oldUnsub()
-      }
-      sessionStreams.delete(sessionID)
-    }
-    
-    console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID)
+    console.log('[PROMPT] setting up SSE stream BEFORE prompt for', sessionID, 'directory:', directory)
     let loggedFirstEvent = false
     let eventCount = 0
     try {
-      const unsubscribe = backend.session.events(sessionID, (evt: unknown) => {
-        const e = evt as Record<string, unknown>
+      const unsubscribe = backend.session.eventsWithDispatch(sessionID, (evt: unknown) => {
+        const e = evt as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
+        const props = e?.data ?? e?.properties ?? {}
         eventCount++
         const eventType = e?.type as string | undefined
+        const eventSessionID = props?.sessionID as string | undefined
         if (eventType) {
-          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'keys:', Object.keys(e).slice(0, 5))
-          // Log first event structure in detail
+          console.log('[SSE MAIN #' + eventCount + '] type:', eventType, 'sessionID:', eventSessionID, 'target:', sessionID, 'match:', eventSessionID === sessionID)
           if (!loggedFirstEvent) {
-            console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 500))
+            console.log('[SSE MAIN] First event structure:', JSON.stringify(e, null, 2).slice(0, 1000))
             loggedFirstEvent = true
           }
-          // Log session events with more detail
-          if (eventType.startsWith('session.next.')) {
-            console.log('[SSE MAIN] SESSION EVENT:', JSON.stringify(e).slice(0, 300))
-          }
         }
-        event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
-          sessionID,
-          event: evt
-        })
-      }, directory)
-      sessionStreams.set(sessionID, unsubscribe)
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(CHANNELS.SESSION_STREAM_EVENT, {
+            sessionID,
+            event: evt
+          })
+        } else {
+          console.log('[SSE MAIN] WebContents destroyed, stopping stream for', sessionID)
+          return false
+        }
+      }, directory!)
       console.log('[PROMPT] SSE stream set up for', sessionID)
       } catch (e) {
         console.error('[PROMPT] SSE stream setup FAILED for', sessionID, ':', e)
@@ -710,6 +733,7 @@ export function registerSessionHandlers() {
       console.log('[PROMPT] session.prompt succeeded for', sessionID)
     } catch (e) {
       console.error('[PROMPT] session.prompt FAILED for', sessionID, ':', e)
+      throw e
     }
 
     return true
@@ -727,7 +751,6 @@ export function registerSessionHandlers() {
 
   ipcMain.handle(CHANNELS.SESSION_DELETE, async (_event, sessionID: string, directory?: string) => {
     const removed = await backend.session.remove(sessionID, directory)
-    stopSessionStream(sessionID)
     return removed
   })
 
@@ -742,6 +765,14 @@ export function registerSessionHandlers() {
 
   ipcMain.handle(CHANNELS.SESSION_AGENTS, async (_event, directory?: string) => {
     return await backend.session.agents(directory)
+  })
+
+  ipcMain.handle(CHANNELS.SESSION_REVERT, async (_event, sessionID: string, messageID: string, directory?: string) => {
+    return await backend.session.revert(sessionID, messageID, directory)
+  })
+
+  ipcMain.handle(CHANNELS.SESSION_UNREVERT, async (_event, sessionID: string, directory?: string) => {
+    return await backend.session.unrevert(sessionID, directory)
   })
 
   // Provider handlers
@@ -824,27 +855,14 @@ export function registerSessionHandlers() {
       return { success: false, error }
     }
   })
-}
 
-export function startSessionStream(sessionID: string, webContents: Electron.WebContents) {
-  if (!sessionStreams.has(sessionID)) {
-    const unsubscribe = backend.session.events(sessionID, (event: unknown) => {
-      // Deep serialize event to ensure IPC compatibility
-      // Some events may contain non-serializable objects
-      const serializedEvent = JSON.parse(JSON.stringify(event))
-      webContents.send(CHANNELS.SESSION_STREAM_EVENT, {
-        sessionID,
-        event: serializedEvent
-      })
-    })
-    sessionStreams.set(sessionID, unsubscribe)
-  }
-}
+  // Question reply
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REPLY, async (_, requestID: string, answers?: string[][], directory?: string) => {
+    await backend.session.questionReply(requestID, answers, directory)
+  })
 
-export function stopSessionStream(sessionID: string) {
-  const unsubscribe = sessionStreams.get(sessionID)
-  if (unsubscribe) {
-    unsubscribe()
-    sessionStreams.delete(sessionID)
-  }
+  // Question reject
+  ipcMain.handle(CHANNELS.SESSION_QUESTION_REJECT, async (_, requestID: string, directory?: string) => {
+    await backend.session.questionReject(requestID, directory)
+  })
 }

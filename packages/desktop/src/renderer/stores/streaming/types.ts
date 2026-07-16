@@ -27,6 +27,8 @@ export interface StreamingState {
   reasoningHistory: ReasoningBlock[]
   /** Stream start timestamp (optional, set when streaming starts) */
   startedAt?: number
+  /** Step-level error from STEP_FAILED event */
+  stepError: { type: string; message: string } | null
 }
 
 /** Completed reasoning block from a previous step */
@@ -84,8 +86,8 @@ export interface StreamingToolCall {
   /** Progress events (stdout, structured content) */
   progress: ToolProgress[]
   
-  /** Error message if failed */
-  error: string | null
+  /** Error object if failed */
+  error: { type: string; message: string } | null
   
   /** Start timestamp */
   startedAt: number
@@ -117,6 +119,35 @@ export interface ToolProgress {
 }
 
 // ============================================
+// Question Types
+// ============================================
+
+export interface QuestionOption {
+  label: string
+  description: string
+}
+
+export interface QuestionInfo {
+  question: string
+  header: string
+  options: QuestionOption[]
+  multiple?: boolean
+  custom?: boolean
+}
+
+export interface QuestionTool {
+  messageID: string
+  callID: string
+}
+
+export interface QuestionRequest {
+  id: string
+  sessionID: string
+  questions: QuestionInfo[]
+  tool?: QuestionTool
+}
+
+// ============================================
 // Action Types
 // ============================================
 
@@ -126,7 +157,7 @@ export type StreamAction =
   | { type: 'STREAM_START'; messageId: string; version: number }
   | { type: 'STREAM_DONE'; version: number }
   | { type: 'STEP_ENDED'; version: number }
-  | { type: 'STEP_FAILED'; error: string; version: number }
+  | { type: 'STEP_FAILED'; messageId: string; error: { type: string; message: string }; version: number }
   
   // Text
   | { type: 'TEXT_STARTED'; textId: string; messageId: string; version: number }
@@ -151,6 +182,13 @@ export type StreamAction =
   | { type: 'TOOL_PROGRESS'; callId: string; content: unknown[]; version: number }
   | { type: 'TOOL_SUCCESS'; callId: string; output: unknown; version: number }
   | { type: 'TOOL_FAILED'; callId: string; error: { type: string; message: string }; version: number }
+  
+  // Questions
+  | { type: 'QUESTION_ASKED'; request: QuestionRequest; version: number }
+  | { type: 'QUESTION_RESOLVED'; sessionID: string; requestID: string; version: number }
+  
+  // Message removed (for undo/redo)
+  | { type: 'MESSAGE_REMOVED'; messageID: string; sessionID: string; version: number }
 
 // ============================================
 // Helper Functions
@@ -180,7 +218,9 @@ export function createInitialState(version: number = 0): StreamingState {
     // Pending deltas for V1 message.part events - still needed
     pendingDeltas: new Map(),
     // Completed reasoning blocks from previous steps
-    reasoningHistory: []
+    reasoningHistory: [],
+    // Step-level error from STEP_FAILED event
+    stepError: null,
   }
 }
 
@@ -222,6 +262,15 @@ export function formatDuration(ms: number): string {
 
 /** Convert StreamingToolCall to ToolCall (for compatibility with presentation layer) */
 export function streamingToolToToolCall(tool: StreamingToolCall): ToolCall {
+  console.log('[streamingToolToToolCall] Converting tool:', tool.name, 'id:', tool.id)
+  console.log('[streamingToolToToolCall] lifecycle:', tool.lifecycle)
+  console.log('[streamingToolToToolCall] progress:', tool.progress?.length ?? 0, 'items')
+  if (tool.progress && tool.progress.length > 0) {
+    console.log('[streamingToolToToolCall] progress types:', tool.progress.map(p => p.type))
+    console.log('[streamingToolToToolCall] progress messages:', tool.progress.map(p => p.message?.slice(0, 100)))
+  }
+  console.log('[streamingToolToToolCall] rawOutput:', tool.rawOutput ? 'exists' : 'null')
+  
   const args = parseToolArgs(tool.rawInput)
   const output: ToolOutput = {}
   
@@ -242,10 +291,15 @@ export function streamingToolToToolCall(tool: StreamingToolCall): ToolCall {
     const content = tool.progress
       .filter(p => p.type === 'text')
       .map(p => ({ type: 'text' as const, text: p.message }))
+    console.log('[streamingToolToToolCall] Filtered text progress items:', content.length)
     if (content.length > 0) {
       output.content = content
+      console.log('[streamingToolToToolCall] Set output.content from progress')
     }
   }
+  
+  console.log('[streamingToolToToolCall] Final output:', output)
+  console.log('[streamingToolToToolCall] Final output.content:', output.content)
   
   if (tool.error && !output.result) {
     output.result = { error: tool.error }

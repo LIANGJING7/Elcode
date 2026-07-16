@@ -109,6 +109,8 @@ export interface Message {
   duration?: number
   /** Reasoning duration in milliseconds */
   reasoningDuration?: number
+  /** Error object if message failed */
+  error?: { type: string; message: string }
 }
 
 // ============================================
@@ -143,7 +145,7 @@ export interface ToolCall {
   status: 'pending' | 'running' | 'completed' | 'error'
   args: Record<string, unknown>
   output?: ToolOutput
-  error?: string
+  error?: string | { type: string; message: string }
   /** 执行时长 (ms)，流式和历史都填充 */
   duration?: number
 }
@@ -308,6 +310,10 @@ export const IPC_CHANNELS = {
   SESSION_UPDATE: 'session:update',    // 更新 title (后端支持)
   SESSION_TODO: 'session:todo',
   SESSION_AGENTS: 'session:agents',
+  SESSION_REVERT: 'session:revert',
+  SESSION_UNREVERT: 'session:unrevert',
+  SESSION_QUESTION_REPLY: 'session:question-reply',
+  SESSION_QUESTION_REJECT: 'session:question-reject',
 
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',

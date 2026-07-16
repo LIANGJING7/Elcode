@@ -6,11 +6,14 @@ import type { ChatTimelineExpose } from './ChatTimeline.vue'
 import ChatTimeline from './ChatTimeline.vue'
 import ChatTodo from './ChatTodo.vue'
 import Composer from '../Composer.vue'
+import RevertedMessagesPreview from './RevertedMessagesPreview.vue'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore, parseMentions } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
 import { useModelsStore } from '../../stores/models'
 import { useUiStore } from '../../stores/ui'
+import { useQuestionStore } from '../../stores/question'
+import QuestionPanel from '../question/QuestionPanel.vue'
 
 const props = defineProps<{
   sessionId: string
@@ -42,6 +45,7 @@ function goToModelSettings() {
   toastMessage.value = ''
   useUiStore().enterSettings()
 }
+const questionStore = useQuestionStore()
 
 async function handleSend(content: string, options: Record<string, unknown>, attachments: Array<{ type: string; name?: string; path?: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>) {
   if (!modelsStore.selectedModel) {
@@ -148,7 +152,15 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
       @open-diff-file="emit('openDiffFile', $event)"
     />
     <ChatTodo class="flex-shrink-0" />
+        <RevertedMessagesPreview  class="flex-shrink-0" />
+    <div v-if="questionStore.hasPending" class="pt-0 pb-6 mx-6 flex-shrink-0">
+      <div class="max-w-chat-max mx-auto">
+        <QuestionPanel />
+      </div>
+    </div>
+
     <Composer
+      v-else
       :has-active-session="true"
       :is-streaming="streamingStore.isCurrentStreaming.value"
       :queue-count="sessionStore.currentPendingQueue.length"

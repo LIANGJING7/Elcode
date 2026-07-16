@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { getErrorMessage, isDeniedErrorObject } from '../../utils/error-utils'
 
 const props = defineProps<{
   subagentType: string
@@ -10,7 +11,7 @@ const props = defineProps<{
   currentTool?: string
   toolcalls?: number
   duration?: number
-  error?: string
+  error?: string | { type: string; message: string }
   summary: string
 }>()
 
@@ -18,6 +19,17 @@ const emit = defineEmits<{
   navigate: [sessionId: string]
   openPanel: []
 }>()
+
+const errorExpanded = ref(false)
+
+const errorMessage = computed(() => getErrorMessage(props.error))
+
+const isDenied = computed(() => {
+  if (typeof props.error === 'object' && props.error !== null) {
+    return isDeniedErrorObject(props.error)
+  }
+  return false
+})
 
 const titleLabel = computed(() => {
   return props.description || props.summary || 'Subagent'
@@ -58,14 +70,19 @@ const handleClick = () => {
 </script>
 
 <template>
-  <div
-    class="subagent-tool flex items-center gap-1.5 px-3 py-2 rounded border cursor-pointer hover:bg-bg-surface transition-colors bg-bg-surface/50"
-    :class="state === 'error' ? 'border-error/30' : state === 'completed' ? 'border-success/30' : 'border-accent/30'"
-    @click="handleClick"
-  >
-    <span :class="['text-sm', statusColor]">{{ statusIcon }}</span>
-    <span class="text-sm text-text-primary">{{ titleLabel }}</span>
-    <span v-if="subtitleLabel" class="text-sm text-text-muted">{{ '  ' + subtitleLabel }}</span>
+  <div>
+    <div
+      class="subagent-tool flex items-center gap-1.5 px-3 py-2 rounded border cursor-pointer hover:bg-bg-surface transition-colors bg-bg-surface/50"
+      :class="[
+        state === 'error' ? 'border-error/30' : state === 'completed' ? 'border-success/30' : 'border-accent/30',
+        { 'opacity-60': isDenied }
+      ]"
+      @click="handleClick"
+    >
+      <span :class="['text-sm', statusColor]">{{ statusIcon }}</span>
+      <span :class="['text-sm text-text-primary', { 'line-through': isDenied }]">{{ titleLabel }}</span>
+    </div>
+
   </div>
 </template>
 

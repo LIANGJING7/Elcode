@@ -10,6 +10,7 @@ import { useStreamingStore } from '../../stores/streaming'
 import { groupedTimelineNodes, type TimelineNode } from '../../stores/streaming/selectors'
 import type { ToolCall } from '../../../types/ipc'
 import TimelineRenderer from '../timeline/TimelineRenderer.vue'
+import MessageError from '../part/MessageError.vue'
 
 const emit = defineEmits<{
   openFile: [tool: ToolCall]
@@ -27,6 +28,8 @@ const nodes = computed(() => {
 })
 
 const isStreaming = computed(() => streamingStore.isCurrentStreaming.value)
+
+const stepError = computed(() => stream.value?.stepError ?? null)
 </script>
 
 <template>
@@ -42,6 +45,12 @@ const isStreaming = computed(() => streamingStore.isCurrentStreaming.value)
 
       <div v-if="nodes.length === 0" class="flex items-center gap-2">
         <span class="text-xs text-text-muted thinking-text">思考中</span>
+      </div>
+
+      <MessageError v-if="stepError && stepError.type !== 'MessageAbortedError'" :error="stepError" />
+
+      <div v-if="stepError?.type === 'MessageAbortedError'" class="text-xs text-error mt-2">
+        手动中断
       </div>
     </div>
   </div>

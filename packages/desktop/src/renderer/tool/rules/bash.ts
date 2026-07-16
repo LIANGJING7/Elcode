@@ -10,6 +10,7 @@
 import type { ToolCall } from '../../../types/ipc'
 import type { ToolMeta, ToolViewModel } from '../registry'
 import { commandSummary } from '../summary'
+import { getErrorMessage } from '../../utils/error-utils'
 
 export interface BashViewModel extends ToolViewModel {
   _kind: 'bash'
@@ -41,7 +42,7 @@ export function createBashViewModel(tool: ToolCall): BashViewModel {
   const fromContent = joinTextContent(tool.output?.content)
   const resultObj = tool.output?.result as { output?: string; stdout?: string; stderr?: string; exitCode?: number } | undefined
   const stdout = fromContent || resultObj?.output || resultObj?.stdout || ''
-  const stderr = resultObj?.stderr ?? (tool.error || null)
+  const stderr = resultObj?.stderr ?? getErrorMessage(tool.error) ?? null
 
   return {
     _kind: 'bash',

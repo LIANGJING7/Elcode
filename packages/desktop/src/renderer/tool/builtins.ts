@@ -12,6 +12,7 @@ import {
   ICON_QUESTION, ICON_PATCH, ICON_TASK_RUNNING, ICON_TASK_DONE, ICON_TASK_ERROR
 } from './icons'
 import { truncate, firstArgString, PATH_KEYS, COMMAND_KEYS } from './summary'
+import { getErrorMessage } from '../utils/error-utils'
 
 // ============================================
 // Inline Tools
@@ -66,7 +67,6 @@ const readMeta: ToolMeta = {
     }
     return summary
   },
-  hideStatusIcon: true,
   title: () => '',
   detail: () => ''
 }
@@ -147,9 +147,9 @@ const bashMeta: ToolMeta = {
   error: (tool) => {
     const structured = tool.output?.structured as any
     if (structured?.type === 'bash' && structured.exitCode !== 0) {
-      return `Exit code ${structured.exitCode}: ${truncate(tool.error ?? '', 100)}`
+      return `Exit code ${structured.exitCode}: ${truncate(getErrorMessage(tool.error) ?? '', 100)}`
     }
-    return tool.error ?? 'Command failed'
+    return getErrorMessage(tool.error) ?? 'Command failed'
   }
 }
 registerTool('bash', bashMeta)
@@ -222,7 +222,7 @@ const todowriteMeta: ToolMeta = {
 registerTool('todowrite', todowriteMeta)
 
 const questionMeta: ToolMeta = {
-  display: 'block',
+  display: 'none',
   icon: ICON_QUESTION,
   pending: 'Waiting for answer...',
   summary: (tool) => {
@@ -313,7 +313,7 @@ const taskMeta: ToolMeta = {
     
     return `Task: ${truncate(description, 200)}\n\n${truncate(summary, 300)}`
   },
-  error: (tool) => tool.error ?? 'Subagent failed'
+  error: (tool) => getErrorMessage(tool.error) ?? 'Subagent failed'
 }
 registerTool('task', taskMeta)
 

@@ -12,6 +12,7 @@ import { getToolCategory } from '../../tool/registry'
 import TimelineRenderer from './TimelineRenderer.vue'
 import ReasoningBlock from '../chat/ReasoningBlock.vue'
 import CodeBlock from '../chat/CodeBlock.vue'
+import MessageError from '../part/MessageError.vue'
 
 const props = defineProps<{ message: Message }>()
 const emit = defineEmits<{
@@ -154,6 +155,12 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
 
     <div v-if="codeBlocks.length" class="mt-2">
       <CodeBlock v-for="(block, i) in codeBlocks" :key="i" :code="block.code" :lang="block.lang" />
+    </div>
+
+    <MessageError v-if="message.error && message.error.type !== 'MessageAbortedError'" :error="message.error" />
+
+    <div v-if="message.error?.type === 'MessageAbortedError'" class="message-interrupted text-xs text-error mt-2">
+      手动中断
     </div>
   </div>
 </template>

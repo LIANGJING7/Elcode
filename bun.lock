@@ -141,7 +141,6 @@
       "name": "@model-agent/desktop",
       "version": "1.0.0",
       "dependencies": {
-        "@model-agent/core": "workspace:*",
         "@radix-icons/vue": "^1.0.0",
         "@tailwindcss/vite": "^4.3.1",
         "@tanstack/vue-virtual": "^3.13.31",
@@ -167,6 +166,7 @@
         "xdg-basedir": "^5.1.0",
       },
       "devDependencies": {
+        "@model-agent/core": "workspace:*",
         "@playwright/test": "^1.49.1",
         "@types/markdown-it": "^14.1.2",
         "@types/node": "^26.0.0",

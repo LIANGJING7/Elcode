@@ -12,6 +12,7 @@ import type {
   ToolProgress
 } from './types'
 import { createInitialState } from './types'
+import { useQuestionStore } from '../question'
 
 // ============================================
 // Reducer
@@ -59,8 +60,25 @@ export function streamingReducer(
       return state
 
     case 'STEP_FAILED':
+      if (action.messageId && state.message.id && action.messageId !== state.message.id) {
+        console.log('[Reducer] STEP_FAILED for different message, ignoring', 'action:', action.messageId, 'state:', state.message.id)
+        return state
+      }
       state.status = 'error'
+      state.stepError = action.error
       return state
+
+    case 'QUESTION_ASKED': {
+      const questionStore = useQuestionStore()
+      questionStore.addQuestion(action.request)
+      return state
+    }
+
+    case 'QUESTION_RESOLVED': {
+      const questionStore = useQuestionStore()
+      questionStore.removeQuestion(action.sessionID, action.requestID)
+      return state
+    }
 
     // ============================================
     // Text
@@ -173,14 +191,24 @@ export function streamingReducer(
     case 'TOOL_PROGRESS':
       // Add progress event, transition to 'streaming' if not already
       const toolForProgress = state.tools.entities.get(action.callId)
-      if (!toolForProgress) return state
+      if (!toolForProgress) {
+        console.log('[Reducer] TOOL_PROGRESS - tool not found:', action.callId)
+        return state
+      }
+
+      console.log('[Reducer] TOOL_PROGRESS for tool:', toolForProgress.name, 'callId:', action.callId)
+      console.log('[Reducer] action.content:', action.content)
+      console.log('[Reducer] action.content types:', action.content.map(c => typeof c))
 
       const progressItems: ToolProgress[] = action.content.map(item => {
         if (typeof item === 'string') {
+          console.log('[Reducer] Progress item is string:', item.slice(0, 100))
           return { type: 'text', message: item, timestamp: Date.now() }
         }
         if (typeof item === 'object' && item !== null) {
           const obj = item as Record<string, unknown>
+          console.log('[Reducer] Progress item is object, keys:', Object.keys(obj))
+          console.log('[Reducer] Progress item obj.type:', obj.type, 'obj.message:', obj.message, 'obj.content:', obj.content)
           return {
             type: String(obj.type ?? 'structured'),
             message: String(obj.message ?? obj.content ?? ''),
@@ -191,9 +219,14 @@ export function streamingReducer(
         return { type: 'unknown', message: String(item), timestamp: Date.now() }
       })
 
+      console.log('[Reducer] Generated progressItems:', progressItems)
+      console.log('[Reducer] Before push, progress count:', toolForProgress.progress.length)
+
       toolForProgress.lifecycle = 'streaming'
       // Push progress items directly - Vue tracks array.push() on reactive arrays
       toolForProgress.progress.push(...progressItems)
+
+      console.log('[Reducer] After push, progress count:', toolForProgress.progress.length)
       return state
 
     case 'TOOL_SUCCESS':
@@ -225,8 +258,11 @@ export function streamingReducer(
       console.log('[Reducer] TOOL_FAILED:', action.callId, 'tool name:', toolForFailed.name, 'error:', action.error)
 
       toolForFailed.lifecycle = 'failed'
-      toolForFailed.error = action.error.message
+      toolForFailed.error = action.error
       toolForFailed.endedAt = Date.now()
+      return state
+
+    case 'MESSAGE_REMOVED':
       return state
 
     default:

@@ -5,10 +5,10 @@
       class="skill-list flex flex-col flex-1 min-w-0 bg-bg transition-all duration-300"
       :class="{ 'panel-open': panelOpen }"
     >
-      <h2 class="text-lg font-medium text-text px-4 py-3 border-b border-border">Skills</h2>
+      <h2 class="text-lg font-medium text-text px-4 py-3 border-b border-border">技能</h2>
 
       <!-- Search input -->
-      <div class="px-4 py-2 border-b border-border">
+      <div class="px-4 py-2 ">
         <div class="relative">
           <SearchIcon class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <Input
@@ -65,8 +65,6 @@
       v-if="panelOpen && selectedSkill"
       :skill="selectedSkill"
       @close="handleClosePanel"
-      @save="handleSaveSkill"
-      @refresh="loadSkills"
     />
   </div>
 </template>
@@ -138,51 +136,6 @@ function handleSelectSkill(skill: SkillInfo) {
 
 function handleClosePanel() {
   panelOpen.value = false
-}
-
-async function handleSaveSkill(skill: SkillInfo, content: string) {
-  console.log('Saving skill:', skill.name, 'location:', skill.location)
-  
-  if (!skill.location) {
-    console.error('Cannot save: missing location')
-    return
-  }
-  
-  // Check for built-in/embedded skills
-  // - '<built-in>' - legacy marker
-  // - '/builtin/...' - embedded skills from plugins
-  if (skill.location === '<built-in>' || skill.location.startsWith('/builtin/')) {
-    console.error('Cannot save built-in skills')
-    // TODO: Show toast notification
-    alert('Built-in skills cannot be modified')
-    return
-  }
-  
-  try {
-    // Write to skill file via dedicated skill IPC
-    await window.desktop.skill.write(skill.location, content)
-    console.log('Skill saved successfully')
-    
-    // Core caches skill content and doesn't reload after file changes.
-    // We need to manually update the skill in the store with the saved content.
-    // Find and update the skill in the local store
-    const skillIndex = skills.value.findIndex(s => s.location === skill.location)
-    if (skillIndex !== -1) {
-      // Update the skill content directly in the store
-      skills.value[skillIndex] = {
-        ...skills.value[skillIndex],
-        content: content  // Update with the saved content
-      }
-      
-      // Update selected skill to reflect the changes
-      selectedSkill.value = skills.value[skillIndex]
-    }
-    
-    // Optionally: try to reload from backend (may still return cached data)
-    // await loadSkills()
-  } catch (err) {
-    console.error('Failed to save skill:', err)
-  }
 }
 
 async function handleCreateSkill() {

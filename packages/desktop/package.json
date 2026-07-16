@@ -9,6 +9,7 @@
     "predev": "npm run build:preload",
     "build:preload": "vite build --config vite.config.preload.ts",
     "build": "npm run build:preload && vue-tsc --noEmit && vite build",
+        "build:prod": "npm run build:preload && vite build",
     "preview": "vite preview",
     "start": "electron .",
     "typecheck": "vue-tsc --noEmit",
@@ -16,13 +17,12 @@
     "test:watch": "vitest",
     "package": "electron-builder",
     "build:core": "cd ../core && bun run build --single",
-    "build:win": "npm run build:core && npm run build && electron-builder --win",
-    "build:mac": "npm run build:core && npm run build && electron-builder --mac",
-    "build:linux": "npm run build:core && npm run build && electron-builder --linux",
-    "build:all": "npm run build:core && npm run build && electron-builder"
+"build:win": "npm run build:core && npm run build:prod && electron-builder --win",
+        "build:mac": "npm run build:core && npm run build:prod && electron-builder --mac",
+        "build:linux": "npm run build:core && npm run build:prod && electron-builder --linux",
+        "build:all": "npm run build:core && npm run build:prod && electron-builder"
   },
   "dependencies": {
-    "@model-agent/core": "workspace:*",
     "@radix-icons/vue": "^1.0.0",
     "@tailwindcss/vite": "^4.3.1",
     "@tanstack/vue-virtual": "^3.13.31",
@@ -48,6 +48,7 @@
     "xdg-basedir": "^5.1.0"
   },
   "devDependencies": {
+    "@model-agent/core": "workspace:*",
     "@playwright/test": "^1.49.1",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^26.0.0",

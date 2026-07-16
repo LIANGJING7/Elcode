@@ -5,7 +5,7 @@
  * This layer isolates the reducer from raw SSE event format changes.
  */
 
-import type { StreamAction } from './types'
+import type { StreamAction, QuestionInfo, QuestionTool } from './types'
 
 // ============================================
 // Types
@@ -54,7 +54,7 @@ export function createNormalizer(ctx: NormalizerContext) {
         'session.next.step.started', 'session.next.step.ended', 'session.next.step.failed',
         'stream.ended',
         // SessionV1 events (legacy)
-        'session.diff', 'message.updated', 'message.part.updated', 'session.status',
+        'session.diff', 'message.updated', 'message.part.updated', 'message.removed', 'session.status', 'session.error',
       ]
       if (type && !knownTypes.includes(type) && !type.startsWith('server.')) {
         console.log('[Normalizer] Unknown event type:', type, 'keys:', Object.keys(event), 'props keys:', Object.keys(props))
@@ -150,6 +150,20 @@ export function createNormalizer(ctx: NormalizerContext) {
       return null
     }
     
+    // Handle session.error - V1 error event
+    if (type === 'session.error') {
+      const error = props.error as { name?: string; data?: { message?: string } } | undefined
+      console.log('[Normalizer] session.error received:', error)
+      return {
+        type: 'STEP_FAILED',
+        error: {
+          type: error?.name ?? 'unknown',
+          message: error?.data?.message ?? 'Session error'
+        },
+        version
+      }
+    }
+    
     // Handle session.idle - V1 idle event
     // Note: session.status idle already triggers STREAM_DONE, so we skip this
     // to avoid duplicate STREAM_DONE events that would clear the content
@@ -176,6 +190,15 @@ export function createNormalizer(ctx: NormalizerContext) {
         console.log('[Normalizer] message.part.updated part type:', part.type, 'id:', part.id)
       }
       return null  // No action - partTypeMap updated in store.ts
+    }
+
+    if (type === 'message.removed') {
+      return {
+        type: 'MESSAGE_REMOVED',
+        messageID: props.messageID as string,
+        sessionID: props.sessionID as string,
+        version
+      }
     }
 
     // Text events
@@ -275,6 +298,16 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.tool.progress':
+        console.log('[Normalizer] session.next.tool.progress received')
+        console.log('[Normalizer] props.callID:', props.callID)
+        console.log('[Normalizer] props.content:', props.content)
+        console.log('[Normalizer] props.content type:', typeof props.content, Array.isArray(props.content))
+        if (Array.isArray(props.content)) {
+          console.log('[Normalizer] props.content length:', props.content.length)
+          props.content.forEach((item, idx) => {
+            console.log(`[Normalizer] content[${idx}] type:`, typeof item, item)
+          })
+        }
         return {
           type: 'TOOL_PROGRESS',
           callId: props.callID as string,
@@ -328,10 +361,38 @@ export function createNormalizer(ctx: NormalizerContext) {
         }
 
       case 'session.next.step.failed':
-        const stepError = props.error as { message?: string } | undefined
+        const stepError = props.error as { type?: string; message?: string } | undefined
         return {
           type: 'STEP_FAILED',
-          error: stepError?.message ?? 'Step failed',
+          messageId: props.assistantMessageID as string,
+          error: {
+            type: stepError?.type ?? 'unknown',
+            message: stepError?.message ?? 'Step failed'
+          },
+          version
+        }
+    }
+
+    // Question events
+    switch (type) {
+      case 'question.asked':
+        return {
+          type: 'QUESTION_ASKED',
+          request: {
+            id: props.id as string,
+            sessionID: props.sessionID as string,
+            questions: props.questions as QuestionInfo[],
+            tool: props.tool as QuestionTool | undefined
+          },
+          version
+        }
+
+      case 'question.replied':
+      case 'question.rejected':
+        return {
+          type: 'QUESTION_RESOLVED',
+          sessionID: props.sessionID as string,
+          requestID: props.requestID as string,
           version
         }
     }

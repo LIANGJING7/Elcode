@@ -446,9 +446,11 @@ const selectedProvider = computed(() =>
 
 const modelEntries = computed(() => {
   if (!selectedProvider.value) return []
-  return Object.entries(selectedProvider.value.models || {}).map(([id, model]) => ({
+  const entries = Object.entries(selectedProvider.value.models || {})
+  console.log('[modelEntries] provider:', selectedProvider.value.id, 'raw entries:', entries.map(([id, m]) => ({ id, name: (m as any)?.name })))
+  return entries.map(([id, model]) => ({
     id,
-    name: model.name || id
+    name: (model as any)?.name || id
   }))
 })
 
@@ -650,12 +652,17 @@ async function handleTest(providerId: string) {
 
 async function handleRefreshModels(providerId: string) {
   refreshingProviders.value.add(providerId)
-  const result = await modelsStore.refreshModels(providerId, directory.value)
-  refreshingProviders.value.delete(providerId)
-
-  if (result.success && result.changed) {
-    console.log('Models updated')
+  
+  // 先清除所有缓存
+  try {
+    await window.desktop.provider.refreshAll(directory.value)
+  } catch (e) {
+    console.error('[handleRefreshModels] refreshAll error:', e)
   }
+  
+  // 然后重新加载模型列表
+  await modelsStore.loadModels(directory.value)
+  refreshingProviders.value.delete(providerId)
 }
 
 function handleDelete(providerId: string) {
@@ -685,7 +692,11 @@ async function confirmDelete() {
 }
 
 function handleDeleteModel(modelId: string) {
+  console.log('[handleDeleteModel] modelId:', modelId, 'type:', typeof modelId)
+  console.log('[handleDeleteModel] modelEntries:', modelEntries.value.map(m => ({ id: m.id, name: m.name })))
+  console.log('[handleDeleteModel] selectedProvider.models:', selectedProvider.value ? Object.keys(selectedProvider.value.models || {}) : 'no provider')
   const model = modelEntries.value.find(m => m.id === modelId)
+  console.log('[handleDeleteModel] found model:', model)
   if (model) {
     deletingModelId.value = modelId
     deletingModelName.value = model.name

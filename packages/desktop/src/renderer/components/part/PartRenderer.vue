@@ -9,6 +9,8 @@ import ToolDisplay from './ToolDisplay.vue'
 import ReasoningBlock from './ReasoningBlock.vue'
 import type { TimelineNode } from '../../stores/streaming/selectors'
 import type { ToolCall } from '../../../types/ipc'
+import type { StreamingToolCall } from '../../stores/streaming/types'
+import { streamingToolToToolCall } from '../../stores/streaming/types'
 
 const props = defineProps<{
   node: TimelineNode
@@ -24,13 +26,16 @@ const emit = defineEmits<{
 }>()
 
 function handleOpenSubagentPanel(sessionId: string) {
-  console.log('[PartRenderer] handleOpenSubagentPanel:', sessionId)
   emit('openSubagentPanel', sessionId)
 }
 
 const textPayload = computed(() => props.node.payload as { content: string })
 const toolPayload = computed(() => {
   const payload = props.node.payload
+  if ('lifecycle' in payload || 'progress' in payload) {
+    const streamingTool = payload as StreamingToolCall
+    return streamingToolToToolCall(streamingTool)
+  }
   return payload as ToolCall
 })
 const reasoningPayload = computed(() => props.node.payload as { content: string; status: 'idle' | 'thinking' | 'done'; duration: string | null })

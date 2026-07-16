@@ -20,7 +20,9 @@ export function useMention() {
     if (agentsLoaded.value) return
     try {
       loading.value = true
+      console.log('[useMention] Loading agents for directory:', directory.value)
       const agents = await window.desktop.session.agents(directory.value)
+      console.log('[useMention] Raw agents response:', agents)
       cachedAgents.value = agents
         .filter((a: any) => a.mode !== 'primary')
         .map((a: any) => ({
@@ -29,8 +31,10 @@ export function useMention() {
           display: `@${a.name}`,
           description: a.description
         }))
+      console.log('[useMention] Filtered agents:', cachedAgents.value)
       agentsLoaded.value = true
     } catch (err) {
+      console.error('[useMention] Failed to load agents:', err)
       error.value = err instanceof Error ? err.message : 'Failed to get agents'
     } finally {
       loading.value = false
@@ -81,10 +85,12 @@ export function useMention() {
   
   async function searchAll(query: string): Promise<MentionItem[]> {
     const nonFiles = [...cachedAgents.value, ...cachedResources.value]
+    console.log('[searchAll] query:', query, 'cachedAgents:', cachedAgents.value.length, 'cachedResources:', cachedResources.value.length, 'nonFiles:', nonFiles.length)
     
     const files = await searchFiles(query)
     
     if (!query) {
+      console.log('[searchAll] No query, returning first 10 nonFiles:', nonFiles.slice(0, 10))
       return [...nonFiles.slice(0, 10), ...files.slice(0, 10)]
     }
     
@@ -101,6 +107,7 @@ export function useMention() {
       },
     }).map(r => r.obj)
     
+    console.log('[searchAll] fuzzied results:', fuzzied.length, fuzzied)
     return [...fuzzied, ...files.slice(0, 10)]
   }
   

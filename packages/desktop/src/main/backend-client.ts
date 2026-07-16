@@ -6,6 +6,7 @@ import fs from "fs"
 import { app } from "electron"
 import type { SessionListQuery, SessionListResult } from "../types/session"
 import type { Conversation } from "../types/ipc"
+import { createOpencodeClient } from "@model-agent/core/sdk/v2"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -17,24 +18,19 @@ function storagePath(input: string): string {
 
 // Resolve the backend executable path based on development vs production mode
 function getBackendExecutablePath(): { command: string; args: string[]; cwd: string } {
-  // In packaged mode, use the compiled elcode.exe
   if (app.isPackaged) {
     const resourcesPath = process.resourcesPath
     const backendExe = path.join(resourcesPath, "backend", "elcode.exe")
     
     if (fs.existsSync(backendExe)) {
-      console.log(`[Backend] Using packaged backend: ${backendExe}`)
-      // Use serve command with dynamic port allocation
       return { command: backendExe, args: ["serve", "--port", "0", "--hostname", "localhost"], cwd: resourcesPath }
     }
     
-    // Fallback: try to find bun in resources
     const bunExe = process.platform === "win32"
       ? path.join(resourcesPath, "bun", "bun.exe")
       : path.join(resourcesPath, "bun", "bun")
     
     if (fs.existsSync(bunExe)) {
-      console.log(`[Backend] Using bundled bun: ${bunExe}`)
       const launcherPath = path.join(__dirname, "backend-launcher.js")
       return { command: bunExe, args: ["run", launcherPath], cwd: resourcesPath }
     }
@@ -42,19 +38,22 @@ function getBackendExecutablePath(): { command: string; args: string[]; cwd: str
     throw new Error(`Backend executable not found at ${backendExe}`)
   }
   
-  // Development mode: use bun to run the launcher
   const projectRoot = path.resolve(__dirname, "../../../..")
   const launcherPath = path.resolve(__dirname, "./backend-launcher.js")
   const fallbackLauncherPath = path.resolve(__dirname, "../../src/main/backend-launcher.ts")
   const actualLauncherPath = fs.existsSync(launcherPath) ? launcherPath : fallbackLauncherPath
   
-  console.log(`[Backend] Development mode, using bun with launcher: ${actualLauncherPath}`)
   return { command: "bun", args: ["run", actualLauncherPath], cwd: projectRoot }
 }
 
 let backendProcess: ChildProcess | null = null
 let backendPort: number | null = null
 let backendReady = false
+
+const directoryStreams = new Map<string, {
+  controller: AbortController
+  listeners: Map<string, (event: unknown) => void>
+}>()
 
 // Safety net: if the Electron main process is about to exit for any reason
 // (user Ctrl+C, hard kill, crash, Vite restart in dev), Node still runs the
@@ -153,12 +152,13 @@ export async function startBackend(): Promise<{ port: number }> {
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_PASSWORD
     delete (childEnv as Record<string, string | undefined>).LCODE_SERVER_USERNAME
     
+    const isDevMode = !app.isPackaged
     backendProcess = spawn(command, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
-      shell: process.platform === "win32",
       windowsHide: true,
+      shell: isDevMode && process.platform === "win32",
     })
 
     let portFound = false
@@ -177,7 +177,6 @@ export async function startBackend(): Promise<{ port: number }> {
     backendProcess.stdout?.on("data", (data: Buffer) => {
       const text = data.toString()
       stdout += text
-      console.log("[Backend]", text.trim())
 
       // Support two output formats:
       // 1. PORT:${port} - from backend-launcher.ts
@@ -253,9 +252,12 @@ async function killProcessTree(proc: ChildProcess): Promise<void> {
 export async function stopBackend(): Promise<void> {
   const proc = backendProcess
   if (proc) {
-    backendProcess = null
-    backendReady = false
-    await killProcessTree(proc)
+    try {
+      await killProcessTree(proc)
+    } finally {
+      backendProcess = null
+      backendReady = false
+    }
   }
 }
 
@@ -321,52 +323,149 @@ export const backend = {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
       return request("GET", `/agent?${params}`) as Promise<unknown[]>
     },
+
+    revert: async (sessionID: string, messageID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/revert?${params}`, { messageID })
+    },
+
+    unrevert: async (sessionID: string, directory?: string): Promise<unknown> => {
+      const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
+      return request("POST", `/session/${sessionID}/unrevert?${params}`)
+    },
+    
+
+    questionReply: async (requestID: string, answers?: string[][], directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reply${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url, answers ? { answers } : undefined)
+    },
+
+    questionReject: async (requestID: string, directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/question/${requestID}/reject${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url)
+    },
     
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
-      
+
       const params = new URLSearchParams()
       if (directory) params.set("directory", storagePath(directory))
-      // 后端 SSE 端点是 /event（不是 /session/:id/events）
-      const url = `http://localhost:${backendPort}/event?${params.toString()}`
-      console.log('[SSE CONNECT] url:', url)
-      console.log('[SSE CONNECT] sessionID:', sessionID)
-      console.log('[SSE CONNECT] directory param:', directory)
-      const req = http.request(url, { method: "GET" }, (res) => {
-        if (res.statusCode !== 200) {
-          console.error('[SSE CONNECT] HTTP', res.statusCode, res.statusMessage)
-          return
+      console.log('[SSE CONNECT] port:', backendPort, 'sessionID:', sessionID, 'directory:', directory)
+
+      const controller = new AbortController()
+
+      ;(async () => {
+        try {
+          const sdk = createOpencodeClient({
+            baseUrl: `http://localhost:${backendPort}`,
+            directory,
+          })
+          const result = await sdk.event.subscribe(
+            { directory },
+            { signal: controller.signal }
+          )
+
+          for await (const event of result.stream) {
+            if (controller.signal.aborted) break
+            onEvent(event)
+          }
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[SSE] error:', err)
+          }
         }
-        console.log('[SSE CONNECT] connected (200)')
-        let buffer = ""
-        let eventCount = 0
-        res.on("data", (chunk) => {
-          buffer += chunk.toString()
-          const lines = buffer.split("\n")
-          buffer = lines.pop() || ""
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (trimmed.startsWith("data:")) {
-              try {
-                const payload = JSON.parse(trimmed.slice(5))
-                eventCount++
-                onEvent(payload)
-              } catch (e) {
-                console.error('[SSE PARSE] failed:', trimmed.slice(0, 100), e)
+      })()
+
+      return () => {
+        console.log('[SSE] aborting for', sessionID)
+        controller.abort()
+      }
+    },
+
+eventsWithDispatch: (sessionID: string, onEvent: (event: unknown) => void, directory: string): (() => void) => {
+      if (!backendPort) return () => {}
+
+      const dir = storagePath(directory)
+      let stream = directoryStreams.get(dir)
+
+      if (!stream) {
+        const controller = new AbortController()
+        const listeners = new Map<string, (event: unknown) => void>()
+
+        stream = { controller, listeners }
+        directoryStreams.set(dir, stream)
+
+        console.log('[SSE] === CREATING SHARED STREAM ===')
+        console.log('[SSE] directory:', dir)
+        console.log('[SSE] initial sessionID:', sessionID)
+
+        ;(async () => {
+          try {
+            const sdk = createOpencodeClient({
+              baseUrl: `http://localhost:${backendPort}`,
+              directory: dir,
+            })
+            const result = await sdk.event.subscribe(
+              { directory: dir },
+              { signal: controller.signal }
+            )
+
+            console.log('[SSE] Stream connected for directory:', dir)
+
+            for await (const event of result.stream) {
+              if (controller.signal.aborted) break
+              const evt = event as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
+              const eventType = evt?.type as string | undefined
+              const props = evt?.data ?? evt?.properties ?? {}
+              const eventSessionID = props?.sessionID as string | undefined
+
+              console.log('[SSE] EVENT:', eventType, 'sessionID:', eventSessionID, 'target listeners:', Array.from(stream.listeners.keys()))
+
+              if (eventSessionID) {
+                const handler = stream.listeners.get(eventSessionID)
+                if (handler) {
+                  console.log('[SSE] -> Dispatching to session:', eventSessionID)
+                  handler(event)
+                } else {
+                  console.log('[SSE] -> NO HANDLER for session:', eventSessionID)
+                }
+              } else {
+                console.log('[SSE] -> Broadcasting to all listeners:', stream.listeners.size)
+                for (const handler of stream.listeners.values()) {
+                  handler(event)
+                }
               }
             }
+          } catch (err) {
+            if (!controller.signal.aborted) {
+              console.error('[SSE] Shared stream error:', err)
+            }
+          } finally {
+            console.log('[SSE] Stream closed for directory:', dir)
+            directoryStreams.delete(dir)
           }
-        })
-        res.on("end", () => {
-          console.log('[SSE] stream ended, total events:', eventCount)
-        })
-      })
-      req.on("error", (e) => console.error('[SSE CONNECT] request error:', e.message))
-      req.end()
-      
+        })()
+      } else {
+        console.log('[SSE] === REUSING EXISTING STREAM ===')
+        console.log('[SSE] directory:', dir)
+        console.log('[SSE] existing listeners:', Array.from(stream.listeners.keys()))
+      }
+
+      stream.listeners.set(sessionID, onEvent)
+      console.log('[SSE] Added listener for session:', sessionID, 'total:', stream.listeners.size)
+      console.log('[SSE] All listeners:', Array.from(stream.listeners.keys()))
+
       return () => {
-        console.log('[SSE] destroying request for', sessionID)
-        req.destroy()
+        const s = directoryStreams.get(dir)
+        if (s) {
+          s.listeners.delete(sessionID)
+          console.log('[SSE] Removed listener for session:', sessionID, 'remaining:', s.listeners.size)
+          console.log('[SSE] Remaining listeners:', Array.from(s.listeners.keys()))
+        }
       }
     },
   },
@@ -501,18 +600,12 @@ export const backend = {
   mcp: {
     status: async (directory?: string): Promise<unknown> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.status GET /mcp?' + params)
-      const result = await request("GET", `/mcp?${params}`)
-      console.log('[Backend] mcp.status response:', JSON.stringify(result).slice(0, 500))
-      return result
+      return request("GET", `/mcp?${params}`)
     },
     
     config: async (directory?: string): Promise<Record<string, unknown>> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.config GET /mcp/config?' + params)
-      const result = await request("GET", `/mcp/config?${params}`) as Record<string, unknown>
-      console.log('[Backend] mcp.config response:', JSON.stringify(result).slice(0, 500))
-      return result
+      return request("GET", `/mcp/config?${params}`) as Promise<Record<string, unknown>>
     },
     
     add: async (name: string, config: unknown, directory?: string): Promise<unknown> => {
@@ -532,10 +625,7 @@ export const backend = {
     
     remove: async (name: string, directory?: string): Promise<{ success: boolean }> => {
       const params = directory ? new URLSearchParams({ directory: storagePath(directory) }).toString() : ""
-      console.log('[Backend] mcp.remove DELETE /mcp/' + name + '?' + params)
-      const result = await request("DELETE", `/mcp/${name}?${params}`) as { success: boolean }
-      console.log('[Backend] mcp.remove result:', result)
-      return result
+      return request("DELETE", `/mcp/${name}?${params}`) as Promise<{ success: boolean }>
     },
     
     tools: async (directory?: string): Promise<Record<string, unknown[]>> => {
@@ -569,7 +659,6 @@ export const backend = {
        */
       list: async (query: SessionListQuery): Promise<SessionListResult> => {
         if (!backendPort || !backendReady) {
-          console.error('[BACKEND_SESSION_LIST] Backend not ready - port:', backendPort, 'ready:', backendReady)
           throw new Error("Backend not ready")
         }
         
@@ -586,40 +675,29 @@ export const backend = {
         if (query.limit) params.set('limit', String(query.limit))
         
         const url = `http://localhost:${backendPort}/session?${params.toString()}`
-        console.log('[BACKEND_SESSION_LIST] Requesting:', url)
         
         return new Promise((resolve, reject) => {
           const req = http.request(url, { method: "GET" }, (res) => {
-            console.log('[BACKEND_SESSION_LIST] Response status:', res.statusCode)
             let data = ""
             res.on("data", chunk => data += chunk)
             res.on("end", () => {
-              console.log('[BACKEND_SESSION_LIST] Response data length:', data.length)
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const rawSessions = data ? JSON.parse(data) : []
-                  console.log('[BACKEND_SESSION_LIST] Raw sessions count:', Array.isArray(rawSessions) ? rawSessions.length : 'not array')
-                  if (Array.isArray(rawSessions) && rawSessions.length > 0) {
-                    console.log('[BACKEND_SESSION_LIST] First session:', JSON.stringify(rawSessions[0]).slice(0, 200))
-                  }
                   const conversations = (rawSessions as Array<Record<string, unknown>>).map(toConversation)
-                  console.log('[BACKEND_SESSION_LIST] Converted conversations:', conversations.length)
                   resolve({
                     conversations: conversations,
-                    nextCursor: undefined  // Instance API doesn't support cursor pagination
+                    nextCursor: undefined
                   })
                 } catch (parseError) {
-                  console.error('[BACKEND_SESSION_LIST] Parse error:', parseError, 'Data:', data.slice(0, 200))
                   reject(new Error(`Failed to parse response: ${data}`))
                 }
               } else {
-                console.error('[BACKEND_SESSION_LIST] HTTP error:', res.statusCode, data.slice(0, 200))
                 reject(new Error(`HTTP ${res.statusCode}: ${data}`))
               }
             })
           })
           req.on("error", (err) => {
-            console.error('[BACKEND_SESSION_LIST] Request error:', err)
             reject(err)
           })
           req.end()

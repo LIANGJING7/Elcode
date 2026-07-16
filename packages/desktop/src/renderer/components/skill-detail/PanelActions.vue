@@ -1,47 +1,47 @@
 <template>
   <div class="panel-actions flex items-center justify-end gap-2 px-4 py-3 border-t border-border">
-    <!-- View mode actions -->
-    <template v-if="mode === 'view'">
-      <button
-        class="action-btn px-3 py-1.5 rounded bg-bg-hover hover:bg-bg-elevated border border-border text-text text-sm font-medium transition-colors"
-        @click="emit('copy')"
-      >
-        Copy
-      </button>
-    </template>
-    
-    <!-- Edit mode actions -->
-    <template v-else>
-      <button
-        class="action-btn px-3 py-1.5 rounded bg-bg-hover hover:bg-bg-elevated border border-border text-text text-sm font-medium transition-colors"
-        @click="emit('cancel')"
-        :disabled="saving"
-      >
-        Cancel
-      </button>
-      
-      <button
-        class="action-btn px-3 py-1.5 rounded bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
-        @click="emit('save')"
-        :disabled="saving"
-      >
-        {{ saving ? 'Saving...' : 'Save' }}
-      </button>
-    </template>
+    <button
+      class="action-btn"
+      :class="{ copied }"
+      @click="handleCopy"
+    >
+      <span class="btn-label relative inline-flex items-center gap-1.5">
+        <Transition name="copy-feedback" mode="out-in">
+          <span v-if="copied" key="copied">
+            <span class="check-icon">&#10003;</span>
+            复制成功!
+          </span>
+          <span v-else key="copy">复制</span>
+        </Transition>
+      </span>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
 const props = defineProps<{
-  mode: 'view' | 'edit'
-  saving?: boolean
+  content?: string
 }>()
 
-const emit = defineEmits<{
-  'copy': []
-  'cancel': []
-  'save': []
-}>()
+const copied = ref(false)
+let timer: ReturnType<typeof setTimeout>
+
+async function handleCopy() {
+  if (!props.content) return
+
+  try {
+    await navigator.clipboard.writeText(props.content)
+    copied.value = true
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
+  }
+}
 </script>
 
 <style scoped>
@@ -51,10 +51,52 @@ const emit = defineEmits<{
 
 .action-btn {
   cursor: pointer;
+  min-width: 80px;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.action-btn:hover {
+  background: var(--bg-elevated);
+}
+
+.action-btn.copied {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.copy-feedback-enter-active {
+  transition: all 0.25s ease-out;
+}
+
+.copy-feedback-leave-active {
+  transition: all 0.15s ease-in;
+}
+
+.copy-feedback-enter-from {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.copy-feedback-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.check-icon {
+  font-size: 0.75rem;
 }
 </style>

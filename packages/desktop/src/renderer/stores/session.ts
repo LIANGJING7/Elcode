@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick, markRaw, shallowRef } from 'vue'
 import type { Conversation, Message, LocationRef, PromptInput, PromptOptions, ModelRef, TodoItem, FilePromptInput, FilePart, AgentPart, AgentPromptInput } from '../../types/ipc'
 import type { SessionListQuery } from '../../types/session'
 import { useWorkspaceStore } from './workspace'
@@ -13,6 +13,9 @@ import { mapLifecycleToStatus, parseToolArgs } from './streaming/types'
 const DEFAULT_START_TIME = Date.now() - 30 * 24 * 60 * 60 * 1000
 // Default page size
 const DEFAULT_LIMIT = 50
+
+// localStorage key for reverted messages persistence
+const REVERTED_MESSAGES_STORAGE_KEY = 'opencode_reverted_messages'
 
 // Helper to parse model ID
 function parseModelId(modelId: string): ModelRef | undefined {
@@ -28,6 +31,34 @@ function parseModelId(modelId: string): ModelRef | undefined {
 let cachedAgentNames: Set<string> | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// localStorage helpers for reverted messages
+function saveRevertedMessages(sessionId: string, revertPoint: string | null) {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    const all = data ? JSON.parse(data) : {}
+    if (revertPoint) {
+      all[sessionId] = revertPoint
+    } else {
+      delete all[sessionId]
+    }
+    localStorage.setItem(REVERTED_MESSAGES_STORAGE_KEY, JSON.stringify(all))
+  } catch (error) {
+    console.error('[saveRevertedMessages] Failed:', error)
+  }
+}
+
+function loadRevertedMessages(sessionId: string): string | null {
+  try {
+    const data = localStorage.getItem(REVERTED_MESSAGES_STORAGE_KEY)
+    if (!data) return null
+    const all = JSON.parse(data)
+    return all[sessionId] || null
+  } catch (error) {
+    console.error('[loadRevertedMessages] Failed:', error)
+    return null
+  }
+}
 
 /**
  * Result of parsing @mentions in text
@@ -247,6 +278,16 @@ export const useSessionStore = defineStore('session', () => {
   let flushInProgress = false
   // Flag to track if user manually interrupted - should not auto-send queue (persists until user clicks "立即")
   let manuallyInterrupted = false
+  // Flag to prevent concurrent processQueue calls
+  let processingQueue = false
+
+  // Revert point: messages with id >= this are hidden (null = no revert active)
+  const revertPoint = ref<string | null>(null)
+  watch(revertPoint, (newVal, oldVal) => {
+    console.log('[WATCH revertPoint] CHANGED:', { from: oldVal, to: newVal })
+  })
+  // Lock for preventing concurrent revert operations
+  const isReverting = ref(false)
   
   // Helper: get or create queue array for a session
   function getQueue(sessionId: string): PendingMessage[] {
@@ -276,9 +317,22 @@ export const useSessionStore = defineStore('session', () => {
     state.conversations.find(c => c.id === currentSessionId.value)
   )
 
-  const currentMessages = computed(() =>
-    currentConversation.value?.messages || []
-  )
+  const currentMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    console.log('[currentMessages] msgs:', msgs.length, 'revertPoint:', revertPoint.value, 'first 3 ids:', msgs.slice(0, 3).map(m => m.id))
+    if (!revertPoint.value) return msgs
+    const filtered = msgs.filter(m => m.id.startsWith('temp-') || m.id < revertPoint.value!)
+    console.log('[currentMessages] filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
+  })
+
+  const revertedMessages = computed(() => {
+    const msgs = currentConversation.value?.messages || []
+    if (!revertPoint.value) return []
+    const filtered = msgs.filter(m => !m.id.startsWith('temp-') && m.id >= revertPoint.value! && m.role === 'user')
+    console.log('[revertedMessages] revertPoint:', revertPoint.value, 'filtered:', filtered.length, 'ids:', filtered.map(m => m.id))
+    return filtered
+  })
 
   const hasActiveSession = computed(() =>
     currentSessionId.value !== null && workspaceStore.hasCurrentWorkspace
@@ -650,6 +704,9 @@ export const useSessionStore = defineStore('session', () => {
     isPendingNewSession.value = false
     streamingStore.setCurrentSession(sessionId)
 
+    // Load revert point from localStorage
+    revertPoint.value = loadRevertedMessages(sessionId)
+
     // Remember this session for current workspace
     if (workspaceStore.currentWorkspace) {
       lastSessionByWorkspace.set(workspaceStore.currentWorkspace.id, sessionId)
@@ -670,34 +727,81 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function loadMessages(sessionId: string) {
-    if (!workspaceStore.currentWorkspace?.path) return
+    const loadStart = Date.now()
+    console.log('[LOAD_MSG] ========== START ==========')
+    console.log('[LOAD_MSG] Time:', new Date().toISOString())
+    console.log('[LOAD_MSG] sessionId:', sessionId)
+    console.log('[LOAD_MSG] Stack:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
+    
+    if (!workspaceStore.currentWorkspace?.path) {
+      console.log('[LOAD_MSG] No workspace path - skip')
+      return
+    }
+    
     try {
+      console.log('[LOAD_MSG] Fetching messages from backend...')
       const msgs = await window.desktop.session.messages(sessionId, 100, workspaceStore.currentWorkspace?.path)
-      console.log('[DEBUG loadMessages] received msgs count:', msgs.length)
+      console.log('[LOAD_MSG] Received msgs count:', msgs.length)
+      console.log('[LOAD_MSG] Backend msg IDs:', msgs.map(m => m.id))
+      
       // Log tool calls structured data
       msgs.forEach((msg, idx) => {
         if (msg.toolCalls && msg.toolCalls.length > 0) {
           msg.toolCalls.forEach((tc, tcIdx) => {
-            console.log(`[DEBUG loadMessages] msg[${idx}] toolCall[${tcIdx}] name:`, tc.name)
-            console.log(`[DEBUG loadMessages]   tc.output keys:`, tc.output ? Object.keys(tc.output) : 'undefined')
-            console.log(`[DEBUG loadMessages]   tc.output.structured:`, tc.output?.structured ? JSON.stringify(tc.output.structured).slice(0, 200) : 'undefined')
+            console.log(`[LOAD_MSG] msg[${idx}] toolCall[${tcIdx}] name:`, tc.name)
+            console.log(`[LOAD_MSG]   tc.output keys:`, tc.output ? Object.keys(tc.output) : 'undefined')
+            console.log(`[LOAD_MSG]   tc.output.structured:`, tc.output?.structured ? JSON.stringify(tc.output.structured).slice(0, 200) : 'undefined')
           })
         }
       })
+      
       const conv = state.conversations.find(c => c.id === sessionId)
       if (conv) {
-        const existingMap = new Map(conv.messages.map(m => [m.id, m]))
-        const merged = msgs.map(m => {
-          const existing = existingMap.get(m.id)
-          if (existing && !m.content && existing.content) {
-            return { ...existing, id: m.id }
+        console.log('[LOAD_MSG] Before merge - conv.messages count:', conv.messages.length)
+        console.log('[LOAD_MSG] Before merge - conv.messages IDs:', conv.messages.map(m => m.id))
+        
+        // 收集后端用户消息的内容，用于匹配 temp 消息
+        const backendUserMessages = new Map<string, Message>()
+        for (const msg of msgs) {
+          if (msg.role === 'user') {
+            backendUserMessages.set(msg.content, msg)
+          }
+        }
+        
+        // 合并消息：用后端消息替换 temp 消息（通过内容匹配）
+        const merged = conv.messages.map(m => {
+          // 如果是 temp 用户消息，检查后端是否有相同内容的消息
+          if (m.id.startsWith('temp-') && m.role === 'user') {
+            const backendMsg = backendUserMessages.get(m.content)
+            if (backendMsg) {
+              console.log('[LOAD_MSG] Replacing temp message with backend message:', m.id, '->', backendMsg.id)
+              return backendMsg
+            }
           }
           return m
         })
-        conv.messages = merged
+        
+        // 添加后端有但前端没有的消息（assistant 回复等）
+        const frontendIds = new Set(merged.map(m => m.id))
+        for (const msg of msgs) {
+          if (!frontendIds.has(msg.id)) {
+            console.log('[LOAD_MSG] Adding new message from backend:', msg.id)
+            merged.push(msg)
+          }
+        }
+        
+        conv.messages = merged.map(m => markRaw(m))
+        
+        console.log('[LOAD_MSG] After merge - conv.messages count:', conv.messages.length)
+        console.log('[LOAD_MSG] After merge - conv.messages IDs:', conv.messages.map(m => m.id))
+      } else {
+        console.log('[LOAD_MSG] No conversation found for sessionId:', sessionId)
       }
+      
+      console.log('[LOAD_MSG] ========== END (success), elapsed:', Date.now() - loadStart, 'ms ==========')
     } catch (e) {
-      console.error('Failed to load messages:', e)
+      console.error('[LOAD_MSG] ERROR:', e)
+      console.log('[LOAD_MSG] ========== END (error) ==========')
     }
   }
 
@@ -735,6 +839,25 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     state.error = null
+
+    console.log('[sendMessage] BEFORE: revertPoint:', revertPoint.value, 'msgs:', currentMessages.value.length, 'reverted:', revertedMessages.value.length)
+
+    if (revertPoint.value) {
+      const conv = currentConversation.value
+      if (conv) {
+        const idx = conv.messages.findIndex(m => m.id === revertPoint.value)
+        console.log('[sendMessage] revertPoint:', revertPoint.value, 'found idx:', idx, 'total msgs:', conv.messages.length)
+        if (idx !== -1) {
+          console.log('[sendMessage] Splicing from idx', idx, 'msg IDs:', conv.messages.slice(idx).map(m => m.id))
+          conv.messages.splice(idx)
+        }
+      }
+      revertPoint.value = null
+      if (currentSessionId.value) {
+        saveRevertedMessages(currentSessionId.value, null)
+      }
+      console.log('[sendMessage] AFTER CLEAR: revertPoint:', revertPoint.value, 'msgs:', currentConversation.value?.messages.length)
+    }
 
     // 如果正在流式，将消息加入队列（不调用 backend）
     if (streamingStore.isCurrentStreaming.value && currentSessionId.value) {
@@ -872,7 +995,7 @@ export const useSessionStore = defineStore('session', () => {
       if (!currentConversation.value.messages) {
         currentConversation.value.messages = []
       }
-      currentConversation.value.messages.push(userMessage)
+      currentConversation.value.messages.push(markRaw(userMessage))
       console.log('[DEBUG sendMessage] messages.length:', currentConversation.value.messages.length)
     }
 
@@ -901,31 +1024,57 @@ export const useSessionStore = defineStore('session', () => {
    * Called by STREAM_DONE event, selectSession, retry, resume, etc.
    */
   async function processQueue() {
+    const startTime = Date.now()
+    console.log('[QUEUE] ========== processQueue CALLED ==========')
+    console.log('[QUEUE] Time:', new Date().toISOString())
+    console.log('[QUEUE] Stack:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
+    
+    // 防止并发调用
+    if (processingQueue) {
+      console.log('[QUEUE] Already processing - skip')
+      return
+    }
+    
     // 如果正在流式，不处理队列
-    if (streamingStore.isCurrentStreaming.value) {
-      console.log('[DEBUG processQueue] Streaming active - skip')
+    const isStreaming = streamingStore.isCurrentStreaming.value
+    console.log('[QUEUE] isCurrentStreaming:', isStreaming)
+    if (isStreaming) {
+      console.log('[QUEUE] Streaming active - skip')
       return
     }
     
     // 检查当前会话是否有队列
     if (!currentSessionId.value) {
-      console.log('[DEBUG processQueue] No current session - skip')
+      console.log('[QUEUE] No current session - skip')
       return
     }
     
     const queue = getQueue(currentSessionId.value)
+    console.log('[QUEUE] Queue length:', queue.length)
     
     // 取出第一条排队消息
     const pending = queue.shift()
     if (!pending) {
-      console.log('[DEBUG processQueue] Queue empty - nothing to send')
+      console.log('[QUEUE] Queue empty - nothing to send')
       return
     }
     
-    console.log('[DEBUG processQueue] Processing queued message:', pending.id, 'session:', currentSessionId.value)
+    processingQueue = true
+    console.log('[QUEUE] Processing queued message:', pending.id)
+    console.log('[QUEUE]   pending.content:', pending.content?.slice(0, 50))
+    console.log('[QUEUE]   pending.agent:', pending.agent)
+    console.log('[QUEUE]   pending.inputs count:', pending.inputs?.length)
     
-    // 发送（调用 backend）
-    await sendPending(pending)
+    try {
+      // 发送（调用 backend）
+      await sendPending(pending)
+      console.log('[QUEUE] sendPending completed, elapsed:', Date.now() - startTime, 'ms')
+    } catch (e) {
+      console.error('[QUEUE] sendPending ERROR:', e)
+    } finally {
+      processingQueue = false
+      console.log('[QUEUE] ========== processQueue END ==========')
+    }
   }
 
   /**
@@ -934,29 +1083,57 @@ export const useSessionStore = defineStore('session', () => {
    * @param fromFlush - If true, reset flushInProgress after streaming starts
    */
   async function sendPending(pending: PendingMessage, fromFlush = false) {
+    const sendPendingStart = Date.now()
+    console.log('[SEND_PENDING] ========== START ==========')
+    console.log('[SEND_PENDING] Time:', new Date().toISOString())
+    console.log('[SEND_PENDING] pending.id:', pending.id)
+    console.log('[SEND_PENDING] pending.content:', pending.content?.slice(0, 50))
+    
     if (!currentSessionId.value) {
-      console.log('[DEBUG sendPending] No currentSessionId - cannot send')
+      console.log('[SEND_PENDING] ERROR: No currentSessionId')
       state.error = 'No active session'
       return
+    }
+
+    // Clear revert point before sending - same behavior as sendMessage
+    console.log('[SEND_PENDING] revertPoint:', revertPoint.value)
+    if (revertPoint.value) {
+      const conv = currentConversation.value
+      if (conv) {
+        const idx = conv.messages.findIndex(m => m.id === revertPoint.value)
+        console.log('[SEND_PENDING] splice idx:', idx, 'msgs before:', conv.messages.length)
+        if (idx !== -1) {
+          conv.messages.splice(idx)
+          console.log('[SEND_PENDING] splice done, msgs after:', conv.messages.length)
+        }
+      }
+      revertPoint.value = null
+      saveRevertedMessages(currentSessionId.value, null)
     }
 
     // 获取选择的模型
     const modelsStore = useModelsStore()
     const modelRef = parseModelId(modelsStore.selectedModel)
+    console.log('[SEND_PENDING] model:', modelRef)
     // Merge model with agent from pending message
     const promptOptions: PromptOptions = {
       model: modelRef,
       agent: pending.agent
     }
+    console.log('[SEND_PENDING] promptOptions:', promptOptions)
 
     // Set streaming store to current session
+    console.log('[SEND_PENDING] Before resetStream - stream status:', streamingStore.currentStream.value?.status, 'version:', streamingStore.currentStream.value?.version)
     streamingStore.setCurrentSession(currentSessionId.value)
 
     // IMPORTANT: Start streaming BEFORE adding user message
     // This ensures Vue's reactive update sees streaming status as 'streaming'
     // and displays the "Thinking..." animation immediately
     streamingStore.resetStream(currentSessionId.value)
+    console.log('[SEND_PENDING] After resetStream - stream status:', streamingStore.currentStream.value?.status, 'version:', streamingStore.currentStream.value?.version)
+    
     streamingStore.startStreaming(currentSessionId.value)
+    console.log('[SEND_PENDING] After startStreaming - stream status:', streamingStore.currentStream.value?.status, 'version:', streamingStore.currentStream.value?.version)
     
     // Reset flushInProgress after streaming starts (if from flushMessage)
     if (fromFlush) {
@@ -980,8 +1157,11 @@ export const useSessionStore = defineStore('session', () => {
       timestamp: new Date(),
       files: fileParts.length > 0 ? fileParts : undefined
     }
+    console.log('[SEND_PENDING] Created temp user message:', userMessage.id)
+    console.log('[SEND_PENDING] conv.messages before push:', currentConversation.value?.messages?.length)
 
     if (!currentConversation.value) {
+      console.log('[SEND_PENDING] No currentConversation, creating new one')
       const tempConv: Conversation = {
         id: currentSessionId.value,
         title: 'New Chat',
@@ -995,31 +1175,67 @@ export const useSessionStore = defineStore('session', () => {
       if (!currentConversation.value.messages) {
         currentConversation.value.messages = []
       }
-      currentConversation.value.messages.push(userMessage)
+      currentConversation.value.messages.push(markRaw(userMessage))
+      console.log('[SEND_PENDING] Pushed user message, conv.messages length:', currentConversation.value.messages.length)
     }
 
-    try {
-      console.log('[DEBUG sendPending] Sending queued message:', pending.id, 'with agent:', pending.agent)
+    const maxRetries = 3
+    const retryDelay = 1000
 
-      // Use pending.inputs if available (already parsed), otherwise parse mentions
-      let inputs: PromptInput[]
-      if (pending.inputs) {
-        inputs = pending.inputs
-      } else {
-        const result = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
-        inputs = result.parts
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log('[SEND_PENDING] Calling prompt, attempt:', attempt + 1, 'time:', Date.now() - sendPendingStart, 'ms')
+
+        // Use pending.inputs if available (already parsed), otherwise parse mentions
+        let inputs: PromptInput[]
+        if (pending.inputs) {
+          // Deep clone to remove Vue reactive Proxy wrapper (IPC cannot serialize Proxy)
+          inputs = JSON.parse(JSON.stringify(pending.inputs))
+          console.log('[SEND_PENDING] Using cached inputs (cloned), count:', inputs.length)
+        } else {
+          console.log('[SEND_PENDING] Parsing mentions from content...')
+          const result = await parseMentions(pending.content, workspaceStore.currentWorkspace?.path)
+          inputs = result.parts
+          console.log('[SEND_PENDING] Parsed inputs, count:', inputs.length)
+        }
+        
+        console.log('[SEND_PENDING] === CALLING PROMPT ===')
+        console.log('[SEND_PENDING] sessionId:', currentSessionId.value)
+        console.log('[SEND_PENDING] inputs types:', inputs.map(i => i.type))
+        console.log('[SEND_PENDING] promptOptions:', promptOptions)
+        
+        await window.desktop.session.prompt(
+          currentSessionId.value,
+          inputs,
+          promptOptions,
+          workspaceStore.currentWorkspace?.path
+        )
+        console.log('[SEND_PENDING] ✓ Prompt returned successfully, elapsed:', Date.now() - sendPendingStart, 'ms')
+        console.log('[SEND_PENDING] ========== END (success) ==========')
+        return
+      } catch (e) {
+        console.log('[SEND_PENDING] ✗ Prompt failed (attempt ' + (attempt + 1) + '/' + maxRetries + '):', e)
+        const isBusyError = e instanceof Error && (
+          e.message.includes('Session is busy') ||
+          e.message.includes('SessionBusy') ||
+          e.message.includes('busy')
+        )
+
+        if (isBusyError && attempt < maxRetries - 1) {
+          console.log('[SEND_PENDING] Session busy, retrying in', retryDelay, 'ms...')
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+          continue
+        }
+
+        state.error = e instanceof Error ? e.message : 'Failed to send queued message'
+        console.log('[SEND_PENDING] ERROR, resetting stream:', state.error)
+        // 出错时重置流式状态，防止一直显示"思考中"
+        if (currentSessionId.value) {
+          streamingStore.resetStream(currentSessionId.value)
+        }
+        console.log('[SEND_PENDING] ========== END (error) ==========')
+        return
       }
-      
-      await window.desktop.session.prompt(
-        currentSessionId.value,
-        inputs,
-        promptOptions,
-        workspaceStore.currentWorkspace?.path
-      )
-      console.log('[DEBUG sendPending] ✓ Prompt sent successfully')
-    } catch (e) {
-      console.log('[DEBUG sendPending] ✗ Prompt failed:', e)
-      state.error = e instanceof Error ? e.message : 'Failed to send queued message'
     }
   }
 
@@ -1027,12 +1243,125 @@ export const useSessionStore = defineStore('session', () => {
   // SSE Event Handlers
   // ========================================
 
+  async function revertMessage(sessionId: string, messageId: string) {
+    console.log('[revertMessage] ENTRY: sessionId:', sessionId, 'messageId:', messageId)
+    if (isReverting.value) return
+    if (streamingStore.isCurrentStreaming.value) {
+      console.log('[revertMessage] Interrupting streaming before revert')
+      await window.desktop.session.interrupt(sessionId, workspaceStore.currentWorkspace?.path)
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
+    isReverting.value = true
+
+    const prevRevertPoint = revertPoint.value
+    const msgs = currentConversation.value?.messages || []
+    const targetIdx = msgs.findIndex(m => m.id === messageId)
+    const targetMsg = targetIdx >= 0 ? msgs[targetIdx] : null
+    let optimisticPoint: string | null = null
+    if (targetMsg) {
+      if (targetMsg.role === 'user') {
+        optimisticPoint = targetMsg.id
+      } else {
+        for (let i = targetIdx - 1; i >= 0; i--) {
+          if (msgs[i].role === 'user') {
+            optimisticPoint = msgs[i].id
+            break
+          }
+        }
+        if (!optimisticPoint) optimisticPoint = messageId
+      }
+    }
+
+    if (sessionId === currentSessionId.value && optimisticPoint) {
+      revertPoint.value = optimisticPoint
+      saveRevertedMessages(sessionId, optimisticPoint)
+    }
+
+    try {
+      const result = await window.desktop.session.revert(sessionId, messageId, workspaceStore.currentWorkspace?.path)
+      console.log('[revertMessage] FULL response:', JSON.stringify(result))
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[revertMessage] new revertPoint:', newRevertPoint)
+
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[revertMessage] revertPoint set, hidden msgs:', revertedMessages.value.length)
+      }
+    } catch (error) {
+      console.error('[revertMessage] Failed:', error)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = prevRevertPoint
+        saveRevertedMessages(sessionId, prevRevertPoint)
+      }
+      state.error = error instanceof Error ? error.message : 'Failed to revert message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
+  async function recoverMessage(sessionId: string, targetMessageId: string) {
+    console.log('[recoverMessage] ENTRY:', targetMessageId)
+    if (isReverting.value) return
+
+    isReverting.value = true
+    const prevRevertPoint = revertPoint.value
+
+    const revertedList = revertedMessages.value
+    const targetIndex = revertedList.findIndex(m => m.id === targetMessageId)
+    console.log('[recoverMessage] targetIndex:', targetIndex, 'of', revertedList.length)
+    if (targetIndex === -1) { isReverting.value = false; return }
+
+    const nextUserMessage = revertedList.slice(targetIndex + 1).find(m => m.role === 'user')
+    const optimisticPoint = nextUserMessage ? nextUserMessage.id : null
+
+    if (sessionId === currentSessionId.value) {
+      revertPoint.value = optimisticPoint
+      saveRevertedMessages(sessionId, optimisticPoint)
+    }
+
+    try {
+      let result: unknown
+      if (nextUserMessage) {
+        result = await window.desktop.session.revert(sessionId, nextUserMessage.id, workspaceStore.currentWorkspace?.path)
+      } else {
+        result = await window.desktop.session.unrevert(sessionId, workspaceStore.currentWorkspace?.path)
+      }
+      console.log('[recoverMessage] FULL response:', JSON.stringify(result))
+
+      const res = result as Record<string, unknown>
+      const revertInfo = res?.revert as Record<string, unknown> | undefined
+      const newRevertPoint = (revertInfo?.messageID as string) || null
+      console.log('[recoverMessage] new revertPoint:', newRevertPoint)
+
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = newRevertPoint
+        saveRevertedMessages(sessionId, newRevertPoint)
+        console.log('[recoverMessage] complete, hidden:', revertedMessages.value.length)
+      }
+    } catch (error) {
+      console.error('[recoverMessage] Failed:', error)
+      if (sessionId === currentSessionId.value) {
+        revertPoint.value = prevRevertPoint
+        saveRevertedMessages(sessionId, prevRevertPoint)
+      }
+      state.error = error instanceof Error ? error.message : 'Failed to recover message'
+    } finally {
+      isReverting.value = false
+    }
+  }
+
   function setupStreamListeners() {
     const removeStream = window.desktop.session.onStreamEvent((data) => {
       const event = data.event as Record<string, unknown>
       const eventType = event?.type as string
-
       const props = (event?.data ?? event?.properties) as Record<string, unknown> | undefined
+
+      console.log('[SSE] eventType:', eventType, 'props:', JSON.stringify(props).slice(0, 200))
+
       const eventSessionId = props?.sessionID as string | undefined
 
       if (eventType?.startsWith('server.')) return
@@ -1094,6 +1423,11 @@ export const useSessionStore = defineStore('session', () => {
         }
       }
 
+      if (eventType === 'message.removed') {
+        // No action needed - revert state managed through API response
+        return
+      }
+
       if (eventSessionId) {
         const rawEvent = data.event as { type?: string }
         if (rawEvent.type === 'todo.updated') {
@@ -1117,17 +1451,28 @@ export const useSessionStore = defineStore('session', () => {
         // session.idle: V1 idle status event (interrupt completion)
         // Skip if flushInProgress (race condition protection)
         // Skip if manuallyInterrupted (user clicked interrupt button - persists until user clicks "立即")
-        console.log('[SSE STREAM_DONE] Event received:', eventType, 'manuallyInterrupted:', manuallyInterrupted, 'flushInProgress:', flushInProgress)
+        console.log('[SSE_HANDLER] ========== EVENT CHECK ==========')
+        console.log('[SSE_HANDLER] eventType:', eventType)
+        console.log('[SSE_HANDLER] eventSessionId:', eventSessionId)
+        console.log('[SSE_HANDLER] currentSessionId:', currentSessionId.value)
+        console.log('[SSE_HANDLER] manuallyInterrupted:', manuallyInterrupted)
+        console.log('[SSE_HANDLER] flushInProgress:', flushInProgress)
+        console.log('[SSE_HANDLER] stream status:', streamingStore.currentStream.value?.status)
+        console.log('[SSE_HANDLER] stream version:', streamingStore.currentStream.value?.version)
+        
         if (eventType === 'stream.ended' || eventType === 'session.idle') {
+          console.log('[SSE_HANDLER] === STREAM END EVENT ===')
           if (flushInProgress) {
-            console.log('[SSE STREAM_DONE] Skipping processQueue - flushInProgress')
+            console.log('[SSE_HANDLER] Skipping processQueue - flushInProgress')
           } else if (manuallyInterrupted) {
-            console.log('[SSE STREAM_DONE] Skipping processQueue - manually interrupted (persisted)')
+            console.log('[SSE_HANDLER] Skipping processQueue - manually interrupted (persisted)')
           } else {
-            console.log('[SSE STREAM_DONE] Triggering processQueue')
+            console.log('[SSE_HANDLER] ⚡ TRIGGERING processQueue')
+            console.log('[SSE_HANDLER] Stack:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
             processQueue()
           }
         }
+        console.log('[SSE_HANDLER] ========== EVENT CHECK END ==========')
       }
     })
 
@@ -1137,12 +1482,29 @@ export const useSessionStore = defineStore('session', () => {
     watch(
       () => streamingStore.currentStream.value?.status,
       (status) => {
-        console.log('[WATCH] Streaming status changed to:', status)
+        const watchTime = Date.now()
+        console.log('[WATCH] ========== STATUS CHANGE ==========')
+        console.log('[WATCH] Time:', new Date().toISOString())
+        console.log('[WATCH] Status changed to:', status)
+        console.log('[WATCH] Stack:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
         
         if (status === 'done' && currentConversation.value) {
           const stream = streamingStore.currentStream.value
           if (!stream) {
             console.log('[WATCH] No stream - skipping')
+            return
+          }
+
+          console.log('[WATCH] Stream version:', stream.version)
+          console.log('[WATCH] Current stream version:', streamingStore.currentStream.value?.version)
+
+          // 检查流是否已经被新流替换（version 检查）
+          // 如果 version 已经改变，说明新流已经启动，跳过处理
+          const currentVersion = streamingStore.currentStream.value?.version
+          if (currentVersion !== stream.version) {
+            console.log('[WATCH] ⚠️ VERSION MISMATCH - skipping')
+            console.log('[WATCH]   stream.version:', stream.version)
+            console.log('[WATCH]   currentVersion:', currentVersion)
             return
           }
 
@@ -1175,28 +1537,44 @@ export const useSessionStore = defineStore('session', () => {
               : undefined,
             reasoning: stream.reasoning.status === 'done'
               ? streamingStore.displayedReasoning.value
-              : undefined
+              : undefined,
+            error: stream.stepError || undefined
           }
 
           console.log('[WATCH] Final message reasoning:', finalMsg.reasoning?.slice(0, 100) || 'undefined')
           console.log('[WATCH] Final message content:', finalMsg.content?.slice(0, 100) || 'empty')
+          console.log('[WATCH] Final message error:', finalMsg.error)
 
           const exists = currentConversation.value.messages.some(m => m.id === finalMsg.id)
           console.log('[WATCH] Message exists:', exists)
 
-          if (!exists && finalMsg.content) {
-            currentConversation.value.messages.push(finalMsg)
-            console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no')
+          // Add message if it doesn't exist and has content OR error
+          if (!exists && (finalMsg.content || finalMsg.error)) {
+            currentConversation.value.messages.push(markRaw(finalMsg))
+            console.log('[WATCH] ✓ Assistant message added with reasoning:', finalMsg.reasoning ? 'yes' : 'no', 'error:', finalMsg.error ? 'yes' : 'no')
           } else {
-            console.log('[WATCH] Skipped - exists or no content')
+            console.log('[WATCH] Skipped - exists or no content/error')
           }
 
-          // Reset stream synchronously (no nextTick needed with sync watch)
-          if (currentSessionId.value) {
-            console.log('[WATCH] Resetting stream for session:', currentSessionId.value)
+          // Only reset and loadMessages if this is still the current stream
+          // (new stream may have started during this handler)
+          const stillCurrent = streamingStore.currentStream.value?.version === stream.version
+          console.log('[WATCH] stillCurrent:', stillCurrent, 'version check:', streamingStore.currentStream.value?.version, '===', stream.version)
+          
+          if (currentSessionId.value && stillCurrent) {
+            console.log('[WATCH] === CALLING RESET STREAM ===')
+            console.log('[WATCH] conv.messages before reset:', currentConversation.value.messages.length)
             streamingStore.resetStream(currentSessionId.value)
+            console.log('[WATCH] Stream reset, version now:', streamingStore.currentStream.value?.version)
+            // Refresh messages from backend to get real IDs (replaces temp messages)
+            console.log('[WATCH] === CALLING LOAD MESSAGES ===')
+            loadMessages(currentSessionId.value)
+            console.log('[WATCH] loadMessages called')
+          } else if (!stillCurrent) {
+            console.log('[WATCH] ⚠️ SKIPPING reset - new stream started (version changed)')
           }
         }
+        console.log('[WATCH] ========== STATUS CHANGE END ==========')
       },
       { flush: 'sync' }  // Sync watch to prevent race condition with processQueue
     )
@@ -1296,6 +1674,12 @@ export const useSessionStore = defineStore('session', () => {
     flushMessage,
     removeMessage,
     editMessage,
+
+    // Revert/Recover
+    revertedMessages,
+    isReverting,
+    revertMessage,
+    recoverMessage,
 
     // Setup
     setupStreamListeners,

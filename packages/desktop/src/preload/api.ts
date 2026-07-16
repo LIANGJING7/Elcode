@@ -47,19 +47,7 @@ export const desktopAPI = {
       const handler = (_event: Electron.IpcRendererEvent, data: { sessionID: string; event: unknown }) => {
         const e = data.event as { type?: string } & Record<string, unknown>
         // Log all events with more detail for session events
-        if (e?.type) {
-          // DEBUG: Enhanced logging for content events
-          if (e.type.startsWith('session.next.') || e.type.startsWith('message.part')) {
-            console.log('[SSE PRELOAD] CONTENT event:', e.type, 'full:', JSON.stringify(e).slice(0, 500))
-          } else if (e.type.startsWith('server.')) {
-            console.log('[SSE PRELOAD] server event:', e.type)
-          } else if (e.type.startsWith('session.')) {
-            console.log('[SSE PRELOAD] SESSION event:', e.type)
-            console.log('[SSE PRELOAD] SESSION full:', JSON.stringify(e).slice(0, 300))
-          } else {
-            console.log('[SSE PRELOAD] unknown event:', e.type, 'keys:', Object.keys(e).slice(0, 10))
-          }
-        }
+        
         callback(data)
       }
       ipcRenderer.on(IPC_CHANNELS.SESSION_STREAM_EVENT, handler)
@@ -71,6 +59,18 @@ export const desktopAPI = {
 
     agents: (directory?: string): Promise<Agent[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_AGENTS, directory),
+
+    questionReply: (requestID: string, answers?: string[][], directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REPLY, requestID, answers, directory),
+
+    questionReject: (requestID: string, directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REJECT, requestID, directory),
+
+    revert: (sessionID: string, messageID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_REVERT, sessionID, messageID, directory),
+
+    unrevert: (sessionID: string, directory?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_UNREVERT, sessionID, directory),
   },
 
   file: {

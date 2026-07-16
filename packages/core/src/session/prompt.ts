@@ -61,6 +61,7 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@/llm"
+import { getBootstrapContent } from "@/skill/superpowers-builtin"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1404,6 +1405,29 @@ export const layer = Layer.effect(
             }
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+
+            if (step === 1) {
+              const bootstrap = getBootstrapContent()
+              if (bootstrap) {
+                const firstUser = msgs.find((m) => m.info.role === "user")
+                if (firstUser && firstUser.parts.length > 0) {
+                  const hasBootstrap = firstUser.parts.some(
+                    (p) => p.type === "text" && p.text.includes("EXTREMELY_IMPORTANT"),
+                  )
+                  if (!hasBootstrap) {
+                    const ref = firstUser.parts[0]
+                    if (ref && ref.type === "text") {
+                      firstUser.parts.unshift({
+                        ...ref,
+                        id: ulid(),
+                        type: "text",
+                        text: bootstrap,
+                      })
+                    }
+                  }
+                }
+              }
+            }
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),

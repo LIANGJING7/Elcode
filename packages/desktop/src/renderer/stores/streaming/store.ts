@@ -85,6 +85,9 @@ let schedulerRunning = false
 // Used to classify message.part.delta events without explicit partType
 const partTypeMap = new Map<string, 'text' | 'reasoning'>()
 
+// V2 processed reasoning IDs - used to skip V1 duplicate processing
+const v2ReasoningIds = new Set<string>()
+
 /**
  * Create or get streaming store singleton
  */
@@ -124,143 +127,175 @@ export function useStreamingStore(): StreamingStore {
   function handleEvent(sessionId: string, rawEvent: unknown) {
     const state = ensureStream(sessionId)
     
-    // Pre-process message.part.updated to build partTypeMap and flush pending deltas
     const event = rawEvent as { type?: string; properties?: Record<string, unknown>; data?: Record<string, unknown> }
     const props = event?.data ?? event?.properties ?? {}
+    const eventSessionID = props?.sessionID as string | undefined
     
-    console.log('[handleEvent] Processing event type:', event?.type, 'for session:', sessionId)
+    console.log('[RENDERER] handleEvent:', event?.type, 'eventSessionID:', eventSessionID, 'targetSessionID:', sessionId, 'match:', eventSessionID === sessionId)
+    
+    // Track V2 reasoning IDs to avoid V1/V2 duplicate processing
+    if (event?.type === 'session.next.reasoning.started') {
+      const reasoningID = props.reasoningID as string
+      if (reasoningID) {
+        v2ReasoningIds.add(reasoningID)
+        console.log('[RENDERER] Added V2 reasoning ID:', reasoningID)
+      }
+    }
     
     if (event?.type === 'message.part.updated') {
-      const part = props.part as { id?: string; type?: string; text?: string; time?: { end?: number }; messageID?: string } | undefined
-      console.log('[handleEvent] message.part.updated - part:', part)
+      const part = props.part as { 
+        id?: string
+        type?: string
+        text?: string
+        time?: { end?: number }
+        messageID?: string
+        tool?: string
+        callID?: string
+        state?: { 
+          status?: string
+          input?: unknown
+          raw?: string
+          output?: string
+          metadata?: { output?: string; [key: string]: unknown }
+          time?: { start?: number; end?: number }
+          title?: string
+        }
+      } | undefined
+      
+      // Handle tool parts - V1 format uses message.part.updated for tool progress
+      if (part?.type === 'tool' && part.callID && part.state) {
+        const toolStatus = part.state.status
+        const toolName = part.tool || 'unknown'
+        const toolCallID = part.callID
+        
+        // Handle pending tool - create tool in preparing state
+        if (toolStatus === 'pending') {
+          const action = {
+            type: 'TOOL_INPUT_STARTED' as const,
+            callId: toolCallID,
+            name: toolName,
+            messageId: part.messageID || '',
+            version: state.version
+          }
+          streamingReducer(state, action)
+        }
+        // Handle running tool with output (bash progress)
+        else if (toolStatus === 'running') {
+          const existingTool = state.tools.entities.get(toolCallID)
+          if (!existingTool) {
+            const startAction = {
+              type: 'TOOL_INPUT_STARTED' as const,
+              callId: toolCallID,
+              name: toolName,
+              messageId: part.messageID || '',
+              version: state.version
+            }
+            streamingReducer(state, startAction)
+          }
+          
+          const calledAction = {
+            type: 'TOOL_CALLED' as const,
+            callId: toolCallID,
+            input: part.state.input as Record<string, unknown> || {},
+            messageId: part.messageID || '',
+            version: state.version
+          }
+          streamingReducer(state, calledAction)
+          
+          // Send progress if output exists (for bash tool)
+          if (part.state.metadata?.output) {
+            const progressAction = {
+              type: 'TOOL_PROGRESS' as const,
+              callId: toolCallID,
+              content: [part.state.metadata.output],
+              version: state.version
+            }
+            streamingReducer(state, progressAction)
+          }
+        }
+        // Handle completed tool
+        else if (toolStatus === 'completed') {
+          const successAction = {
+            type: 'TOOL_SUCCESS' as const,
+            callId: toolCallID,
+            output: {
+              structured: part.state.metadata,
+              result: part.state.output,
+              content: undefined
+            },
+            version: state.version
+          }
+          streamingReducer(state, successAction)
+        }
+        // Handle error tool
+        else if (toolStatus === 'error') {
+        }
+      }
+      
       if (part?.id && part?.type) {
         const partType = part.type === 'reasoning' ? 'reasoning' : 'text'
         partTypeMap.set(part.id, partType)
-        console.log('[handleEvent] partTypeMap updated:', part.id, '→', partType)
         
-        // Capture messageID from text parts to set stream.message.id
-        // This is needed because V1 format doesn't have TEXT_STARTED event with messageID
         if (partType === 'text' && part.messageID) {
           state.message.id = part.messageID
-          console.log('[handleEvent] Set message.id to:', part.messageID)
         }
         
-        // For reasoning part, set reasoning status to done
-        // This is needed because V1 format doesn't have REASONING_ENDED event
-        // The message.part.updated with reasoning part marks the end of reasoning
-        if (partType === 'reasoning') {
-          state.reasoning.status = 'done'
-          state.reasoning.id = part.id
-          state.reasoning.endedAt = part.time?.end ? new Date(part.time.end).getTime() : Date.now()
-          if (!state.reasoning.startedAt) {
-            state.reasoning.startedAt = Date.now()
-          }
-          console.log('[handleEvent] Reasoning status set to done for partId:', part.id)
+        // Skip V1 reasoning processing if already handled by V2 events
+        if (partType === 'reasoning' && v2ReasoningIds.has(part.id)) {
+          console.log('[STORE] Skipping V1 reasoning flush - already in v2ReasoningIds:', part.id)
+        } else {
+          console.log('[STORE] Flushing pending deltas for part:', part.id, 'type:', partType, 'pending count:', state.pendingDeltas.get(part.id)?.length || 0)
+          flushPendingDeltas(sessionId, part.id, partType)
         }
-        
-        // Flush pending deltas for this partId
-        console.log('[handleEvent] Calling flushPendingDeltas for partId:', part.id, 'type:', partType)
-        flushPendingDeltas(sessionId, part.id, partType)
-      } else {
-        console.log('[handleEvent] message.part.updated - missing part.id or part.type')
       }
     }
     
     const action = normalizeEvent(rawEvent, state.version, partTypeMap)
-    if (!action) {
-      console.log('[handleEvent] No action returned from normalizer for type:', event?.type)
-      return
-    }
+    if (!action) return
 
-    // Version check (per session)
-    if ('version' in action && action.version < state.version) {
-      console.log('[handleEvent] Discarding stale event for session:', sessionId, 'v:', action.version, 'current:', state.version)
-      return
-    }
+    if ('version' in action && action.version < state.version) return
 
-    // Auto-transition to streaming if idle and receiving streaming event
     if (state.status === 'idle' && isStreamingEvent(action)) {
-      console.log('[handleEvent] Auto-transitioning to streaming for session:', sessionId)
       state.status = 'streaming'
       state.startedAt = Date.now()
     }
 
-    // Dispatch action to this session's reducer
-    console.log('[handleEvent] Dispatching action:', action.type, 'to session:', sessionId)
     streamingReducer(state, action)
-    console.log('[handleEvent] After dispatch - status:', state.status, 'message.content:', state.message.content.length, 'reasoning.content:', state.reasoning.content.length)
   }
   
   // Flush pending deltas for a partId after receiving message.part.updated
   function flushPendingDeltas(sessionId: string, partId: string, partType: 'reasoning' | 'text') {
     const state = streams[sessionId]
-    if (!state) {
-      console.log('[flushPendingDeltas] No state for session:', sessionId)
-      return
-    }
+    if (!state) return
     
     const pending = state.pendingDeltas.get(partId)
-    if (!pending || pending.length === 0) {
-      console.log('[flushPendingDeltas] No pending deltas for partId:', partId)
-      return
-    }
+    console.log('[FLUSH] partId:', partId, 'partType:', partType, 'pending count:', pending?.length || 0)
     
-    console.log('[flushPendingDeltas] Flushing pending deltas for partId:', partId, 'type:', partType, 'count:', pending.length)
-    console.log('[flushPendingDeltas] Before flush - reasoning.status:', state.reasoning.status, 'reasoning.content length:', state.reasoning.content.length)
-    console.log('[flushPendingDeltas] Before flush - message.content length:', state.message.content.length)
-    
-    // For reasoning type, set reasoning status before dispatching deltas
     if (partType === 'reasoning') {
-      // Set reasoning status to 'thinking' first, then 'done' after all deltas
-      state.reasoning.status = 'thinking'
-      state.reasoning.id = partId
-      if (!state.reasoning.startedAt) {
-        state.reasoning.startedAt = Date.now()
+      if (pending && pending.length > 0) {
+        const mergedDelta = pending.join('')
+        console.log('[FLUSH] merging pending deltas, length:', mergedDelta.length)
+        state.reasoning.content = state.reasoning.content + mergedDelta
+        state.pendingDeltas.delete(partId)
       }
-      console.log('[flushPendingDeltas] Reasoning status set to thinking for partId:', partId)
-    }
-    
-    // Merge all pending deltas into one string
-    const mergedDelta = pending.join('')
-    
-    console.log('[flushPendingDeltas] Merged delta length:', mergedDelta.length)
-    
-    // For reasoning type, set content directly (avoid multiple dispatches)
-    if (partType === 'reasoning') {
-      state.reasoning.status = 'thinking'
-      state.reasoning.id = partId
-      if (!state.reasoning.startedAt) {
-        state.reasoning.startedAt = Date.now()
-      }
-      // Directly append to content, skip pending array to avoid race condition
-      state.reasoning.content = state.reasoning.content + mergedDelta
-      // Mark as done
       state.reasoning.status = 'done'
       state.reasoning.endedAt = Date.now()
-      console.log('[flushPendingDeltas] Reasoning content directly set, status: done')
+      state.reasoning.id = partId
+      console.log('[FLUSH] reasoning.status set to done, content length:', state.reasoning.content.length)
     } else {
-      // For text type, also set content directly
-      state.message.content = state.message.content + mergedDelta
-      console.log('[flushPendingDeltas] Text content directly set')
+      if (pending && pending.length > 0) {
+        const mergedDelta = pending.join('')
+        state.message.content = state.message.content + mergedDelta
+        state.pendingDeltas.delete(partId)
+      }
     }
-    
-    console.log('[flushPendingDeltas] After flush - reasoning.status:', state.reasoning.status, 'reasoning.content length:', state.reasoning.content.length)
-    console.log('[flushPendingDeltas] After flush - message.content length:', state.message.content.length)
-    
-    // Clear pending deltas for this partId
-    state.pendingDeltas.delete(partId)
-    console.log('[flushPendingDeltas] Pending deltas cleared for partId:', partId)
   }
 
   // Clean up completed session's streaming state
   function cleanupSession(sessionId: string) {
     const state = streams[sessionId]
-    if (state) {
-      // Only clean up if done/error (keep streaming states)
-      if (state.status === 'done' || state.status === 'error') {
-        delete streams[sessionId]
-        console.log('[Store] Cleaned up session:', sessionId)
-      }
+    if (state && (state.status === 'done' || state.status === 'error')) {
+      delete streams[sessionId]
     }
   }
 
@@ -274,13 +309,9 @@ export function useStreamingStore(): StreamingStore {
   function resetStream(sessionId: string) {
     const state = streams[sessionId]
     if (state) {
-      // Increment version to reject stale events
       const newVersion = state.version + 1
-      // Clear the tools Map
       state.tools.entities.clear()
-      // Clear pending deltas map
       state.pendingDeltas.clear()
-      // Reset state
       state.version = newVersion
       state.status = 'idle'
       state.message.id = null
@@ -292,18 +323,18 @@ export function useStreamingStore(): StreamingStore {
       state.reasoning.endedAt = null
       state.reasoningHistory.length = 0
       state.startedAt = undefined
-      console.log('[Store] Reset session:', sessionId, 'new version:', newVersion)
+      state.stepError = null
+      // Clear V1/V2 dedup tracking
+      v2ReasoningIds.clear()
+      partTypeMap.clear()
     }
   }
 
   // Start streaming state for a session (call before sending prompt)
   function startStreaming(sessionId: string) {
     const state = ensureStream(sessionId)
-    // Clear the tools Map
     state.tools.entities.clear()
-    // Clear pending deltas map
     state.pendingDeltas.clear()
-    // Set streaming status
     state.status = 'streaming'
     state.startedAt = Date.now()
     state.message.id = null
@@ -314,7 +345,10 @@ export function useStreamingStore(): StreamingStore {
     state.reasoning.startedAt = null
     state.reasoning.endedAt = null
     state.reasoningHistory.length = 0
-    console.log('[Store] Start streaming for session:', sessionId)
+    state.stepError = null
+    // Clear V1/V2 dedup tracking
+    v2ReasoningIds.clear()
+    partTypeMap.clear()
   }
 
   // Computed: ordered tools for current session

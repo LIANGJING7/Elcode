@@ -24,12 +24,7 @@ const emit = defineEmits<{
   openSubagentPanel: [sessionId: string]  // New
 }>()
 
-const meta = computed(() => {
-  const toolMeta = getToolMeta(props.tool?.name ?? '')
-  console.log('[ToolDisplay] Tool name:', props.tool?.name)
-  console.log('[ToolDisplay] Tool meta display:', toolMeta.display)
-  return toolMeta
-})
+const meta = computed(() => getToolMeta(props.tool?.name ?? ''))
 
 const inlineProps = computed(() => ({
   icon: meta.value.icon,
@@ -50,13 +45,6 @@ const blockProps = computed(() => ({
 // EditBlockTool props with extra data
 const editBlockProps = computed(() => {
   const filePath = firstArgString(props.tool.args, PATH_KEYS)
-  console.log('[ToolDisplay] editBlockProps:', {
-    toolName: props.tool.name,
-    args: props.tool.args,
-    filePath,
-    structured: props.tool.output?.structured,
-    result: props.tool.output?.result
-  })
   const structured = props.tool.output?.structured as any
   const editStructured = structured && structured.type === 'edit' ? structured : undefined
   
@@ -111,28 +99,17 @@ const editBlockProps = computed(() => {
 })
 
 const subagentProps = computed(() => {
-  console.log('[ToolDisplay] Computing subagentProps for tool:', props.tool.name)
-  
   let structured = props.tool.output?.structured as any
-  console.log('[ToolDisplay] tool.output?.structured:', structured)
   
   if (!structured && props.tool.output?.result) {
     try {
       const result = props.tool.output.result
-      console.log('[ToolDisplay] tool.output.result:', result, 'type:', typeof result)
       if (typeof result === 'string') {
         const parsed = JSON.parse(result)
         structured = parsed?.structured
-        console.log('[ToolDisplay] parsed.result.structured:', structured)
       }
-    } catch (e) {
-      console.warn('[ToolDisplay] Failed to parse output.result:', e)
-    }
+    } catch {}
   }
-  
-  console.log('[ToolDisplay] Final structured:', structured)
-  console.log('[ToolDisplay] sessionId from structured:', structured?.sessionId)
-  console.log('[ToolDisplay] sessionID from structured:', structured?.sessionID)
   
   const sessionId = structured?.sessionId ?? structured?.sessionID
   
@@ -141,7 +118,7 @@ const subagentProps = computed(() => {
   const description = String(args.description ?? structured?.summary ?? '')
   const state = structured?.state ?? (props.tool.status === 'completed' ? 'completed' : props.tool.status === 'error' ? 'error' : 'running')
   
-  const propsData = {
+  return {
     subagentType,
     description,
     state,
@@ -150,11 +127,8 @@ const subagentProps = computed(() => {
     currentTool: structured?.currentTool,
     toolcalls: structured?.toolCalls,
     duration: props.tool.duration,
-    error: props.tool.error,
     summary: meta.value.summary(props.tool),
   }
-  console.log('[ToolDisplay] subagentProps:', propsData)
-  return propsData
 })
 
 const genericProps = computed(() => ({ tool: props.tool }))
@@ -163,28 +137,21 @@ const shellProps = computed(() => ({ tool: props.tool }))
 
 // Handle SubagentTool events
 function handleNavigate(sessionId: string) {
-  console.log('[ToolDisplay] handleNavigate:', sessionId)
   emit('navigateSession', sessionId)
 }
 
 function handleOpenPanel() {
-  console.log('[ToolDisplay] handleOpenPanel triggered, sessionId:', subagentProps.value.sessionId)
   if (subagentProps.value.sessionId) {
-    console.log('[ToolDisplay] Emitting openSubagentPanel')
     emit('openSubagentPanel', subagentProps.value.sessionId)
-  } else {
-    console.log('[ToolDisplay] No sessionId in subagentProps')
   }
 }
 
 // Handle EditBlockTool events
 function handleOpenOriginalFile(event: { filePath: string; diff: string }) {
-  console.log('[ToolDisplay] handleOpenOriginalFile:', event.filePath)
   emit('openOriginalFile', event)
 }
 
 function handleOpenDiffFile(filePath: string) {
-  console.log('[ToolDisplay] handleOpenDiffFile:', filePath)
   emit('openDiffFile', filePath)
 }
 

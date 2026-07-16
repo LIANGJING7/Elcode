@@ -51,7 +51,14 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist/renderer'
+    outDir: 'dist/renderer',
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        loading: path.resolve(__dirname, 'src/renderer/loading.html'),
+        error: path.resolve(__dirname, 'src/renderer/error.html')
+      }
+    }
   },
   test: {
     environment: 'jsdom',

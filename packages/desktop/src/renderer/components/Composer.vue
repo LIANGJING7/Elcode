@@ -150,6 +150,7 @@ import QueuedMessageChip from './composer/QueuedMessageChip.vue'
 import MentionAutocomplete from './composer/MentionAutocomplete.vue'
 import { useMention } from '../composables/useMention'
 import { useModelsStore } from '../stores/models'
+import { useSessionStore } from '../stores/session'
 import type { PendingMessage } from '../stores/session'
 import type { MentionItem, MentionState } from '../../types/mention'
 
@@ -203,6 +204,7 @@ const emit = defineEmits<{
 }>()
 
 const modelsStore = useModelsStore()
+const sessionStore = useSessionStore()
 
 const inputRef = ref<{ focus: () => void } | null>(null)
 const inputValue = ref('')
@@ -243,6 +245,18 @@ watch(() => props.disabled, (val) => {
     nextTick(() => inputRef.value?.focus())
   }
 })
+
+watch(
+  () => sessionStore.revertedMessages.length,
+  (newLength, oldLength) => {
+    if (newLength > oldLength && sessionStore.revertedMessages.length > 0) {
+      const latestReverted = sessionStore.revertedMessages[0]
+      if (latestReverted && latestReverted.content) {
+        inputValue.value = latestReverted.content
+      }
+    }
+  }
+)
 
 function handleSend(content: string) {
   console.log('[DEBUG Composer] === handleSend CALLED ===')
@@ -382,11 +396,14 @@ onMounted(() => {
 })
 
 async function showMentionMenu(atIndex: number, query: string) {
-  const seq = ++mentionQuerySeq
-  mentionState.value = { visible: true, query, atIndex, selectedIndex: 0, items: [] }
-  const items = await searchAll(query)
-  if (seq === mentionQuerySeq) mentionState.value.items = items
-}
+    const seq = ++mentionQuerySeq
+    mentionState.value = { visible: true, query, atIndex, selectedIndex: 0, items: [] }
+    const items = await searchAll(query)
+    console.log('[showMentionMenu] seq:', seq, 'items:', items.length, items)
+    if (seq === mentionQuerySeq) {
+      mentionState.value = { ...mentionState.value, items }
+    }
+  }
 
 function hideMention() {
   mentionState.value.visible = false
@@ -405,8 +422,11 @@ function handleMentionSelect(item: MentionItem) {
   }
 
 function checkMentionTrigger(text: string, cursorPos: number) {
+  if (text.length > 10000) { hideMention(); return }
   let atIndex = -1
-  for (let i = cursorPos - 1; i >= 0; i--) {
+  const maxSearchLen = 50
+  const startIdx = Math.max(0, cursorPos - maxSearchLen)
+  for (let i = cursorPos - 1; i >= startIdx; i--) {
     if (text[i] === '@') { atIndex = i; break }
     if (text[i] === ' ' || text[i] === '\n') break
   }
