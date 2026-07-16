@@ -5,10 +5,10 @@ import type { ToolCall } from '../../../types/ipc'
 
 const props = defineProps<{ tool: ToolCall }>()
 
-const title = computed(() => {
-  const name = props.tool.name
-  const args = Object.entries(props.tool.args).slice(0, 3).map(([k, v]) => `${k}=${typeof v === 'string' ? truncate(v, 20) : '…'}`).join(', ')
-  return `# ${name} [${args}]`
+const name = computed(() => props.tool.name)
+const summary = computed(() => {
+  const firstArg = Object.values(props.tool.args).find((v) => typeof v === 'string')
+  return typeof firstArg === 'string' ? truncate(firstArg, 60) : ''
 })
 
 const body = computed(() => {
@@ -25,5 +25,12 @@ function truncate(str: string, max: number): string {
 </script>
 
 <template>
-  <BlockTool :title="title" :body="body" :status="tool.status" :error="tool.error" />
+  <BlockTool :title="`调用了 \`${name}\` ${summary}`" :body="body" :status="tool.status" :error="tool.error" hide-arrow>
+    <template #header>
+      <div class="flex items-center gap-1 min-w-0">
+        <span class="text-xs font-medium shrink-0">调用了 <code class="text-xs">{{ name }}</code></span>
+        <span v-if="summary" class="text-xs text-text-muted truncate">{{ summary }}</span>
+      </div>
+    </template>
+  </BlockTool>
 </template>

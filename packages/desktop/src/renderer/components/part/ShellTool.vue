@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { ToolCall } from '../../../types/ipc'
+import { getErrorMessage } from '../../utils/error-utils'
 
 const props = defineProps<{ tool: ToolCall }>()
 
@@ -58,6 +59,8 @@ const displayOutput = computed(() => {
   return out
 })
 
+const errorMessage = computed(() => getErrorMessage(props.tool.error))
+
 function toggle() {
   collapsed.value = !collapsed.value
 }
@@ -99,8 +102,8 @@ function toggle() {
       </div>
     </div>
 
-    <div v-if="tool.error" class="shell-error border-t border-error/30 px-3 py-1.5 bg-error/5">
-      <span class="text-xs text-error font-mono">{{ tool.error }}</span>
+    <div v-if="errorMessage" class="shell-error border-t border-error/30 px-3 py-1.5 bg-error/5">
+      <span class="text-xs text-error font-mono">{{ errorMessage }}</span>
     </div>
   </div>
 </template>

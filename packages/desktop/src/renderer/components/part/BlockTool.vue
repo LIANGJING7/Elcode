@@ -8,6 +8,7 @@ const props = defineProps<{
   body: string
   status: 'pending' | 'running' | 'completed' | 'error'
   error?: string | { type: string; message: string }
+  hideArrow?: boolean
 }>()
 
 const emit = defineEmits<{ click: [] }>()
@@ -31,7 +32,12 @@ const isDenied = computed(() => {
 </script>
 
 <template>
-  <CollapsiblePanel :title="title" :spinner="status === 'running'" :default-collapsed="!body">
+    <CollapsiblePanel :title="title" :spinner="status === 'running'" :default-collapsed="!body" :hide-arrow="hideArrow">
+    <template #header>
+      <slot name="header">
+        <span class="text-xs font-medium">{{ title }}</span>
+      </slot>
+    </template>
     <template #header-extra>
       <span v-if="status === 'running'" class="text-xs text-text-muted ml-2">running...</span>
       <span v-else-if="collapsed.lineCount" class="text-xs text-text-muted ml-2">{{ collapsed.lineCount }} 行</span>
