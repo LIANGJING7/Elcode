@@ -13,8 +13,7 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
  * Windows requires .ico format for proper display in dev mode
  */
 function getIconPath(): string {
-  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
-  return join(__dirname, '../../build', iconName)
+  return join(__dirname, '../../build', 'icon.png')
 }
 
 export async function createWindow(): Promise<BrowserWindow> {

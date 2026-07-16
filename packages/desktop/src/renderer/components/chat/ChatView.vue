@@ -11,7 +11,9 @@ import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore, parseMentions } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
 import { useQuestionStore } from '../../stores/question'
+import { usePermissionStore } from '../../stores/permission'
 import QuestionPanel from '../question/QuestionPanel.vue'
+import PermissionPrompt from '../permission/PermissionPrompt.vue'
 
 const props = defineProps<{
   sessionId: string
@@ -31,6 +33,7 @@ const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const questionStore = useQuestionStore()
+const permissionStore = usePermissionStore()
 
 async function handleSend(content: string, options: Record<string, unknown>, attachments: Array<{ type: string; name?: string; path?: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>) {
   const mode = options.mode as string | undefined
@@ -115,6 +118,12 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
     <div v-if="questionStore.hasPending" class="pt-0 pb-6 mx-6 flex-shrink-0">
       <div class="max-w-chat-max mx-auto">
         <QuestionPanel />
+      </div>
+    </div>
+
+    <div v-if="permissionStore.hasPending" class="pt-0 pb-2 mx-6 flex-shrink-0">
+      <div class="max-w-chat-max mx-auto">
+        <PermissionPrompt />
       </div>
     </div>
 

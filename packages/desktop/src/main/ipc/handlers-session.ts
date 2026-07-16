@@ -865,4 +865,9 @@ export function registerSessionHandlers() {
   ipcMain.handle(CHANNELS.SESSION_QUESTION_REJECT, async (_, requestID: string, directory?: string) => {
     await backend.session.questionReject(requestID, directory)
   })
+
+  // Permission reply
+  ipcMain.handle(CHANNELS.SESSION_PERMISSION_REPLY, async (_, requestID: string, reply: "once" | "always" | "reject", directory?: string) => {
+    await backend.session.permissionReply(requestID, reply, directory)
+  })
 }

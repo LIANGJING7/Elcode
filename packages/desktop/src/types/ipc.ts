@@ -314,6 +314,7 @@ export const IPC_CHANNELS = {
   SESSION_UNREVERT: 'session:unrevert',
   SESSION_QUESTION_REPLY: 'session:question-reply',
   SESSION_QUESTION_REJECT: 'session:question-reject',
+  SESSION_PERMISSION_REPLY: 'session:permission-reply',
 
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',

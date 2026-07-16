@@ -66,6 +66,9 @@ export const desktopAPI = {
     questionReject: (requestID: string, directory?: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_QUESTION_REJECT, requestID, directory),
 
+    permissionReply: (requestID: string, reply: "once" | "always" | "reject", directory?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_PERMISSION_REPLY, requestID, reply, directory),
+
     revert: (sessionID: string, messageID: string, directory?: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC_CHANNELS.SESSION_REVERT, sessionID, messageID, directory),
 

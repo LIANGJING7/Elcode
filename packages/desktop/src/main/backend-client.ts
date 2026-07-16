@@ -99,6 +99,10 @@ const request = (method: string, pathname: string, body?: unknown): Promise<unkn
     throw new Error("Backend not ready")
   }
   
+  const requestStart = Date.now()
+  const requestId = `${method}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  console.log(`[HTTP ${requestId}] START ${method} ${pathname}`)
+  
   return new Promise((resolve, reject) => {
     const url = `http://localhost:${backendPort}${pathname}`
     const payload = body ? JSON.stringify(body) : undefined
@@ -110,6 +114,8 @@ const request = (method: string, pathname: string, body?: unknown): Promise<unkn
       let data = ""
       res.on("data", chunk => data += chunk)
       res.on("end", () => {
+        const elapsed = Date.now() - requestStart
+        console.log(`[HTTP ${requestId}] END ${res.statusCode} ${elapsed}ms`)
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           try {
             resolve(data ? JSON.parse(data) : null)
@@ -122,7 +128,19 @@ const request = (method: string, pathname: string, body?: unknown): Promise<unkn
       })
     })
     
-    req.on("error", reject)
+    // Set timeout to 30 seconds
+    req.setTimeout(30000, () => {
+      const elapsed = Date.now() - requestStart
+      console.log(`[HTTP ${requestId}] TIMEOUT after ${elapsed}ms`)
+      req.destroy()
+      reject(new Error(`Request timeout after ${elapsed}ms: ${method} ${pathname}`))
+    })
+    
+    req.on("error", (err) => {
+      const elapsed = Date.now() - requestStart
+      console.log(`[HTTP ${requestId}] ERROR ${elapsed}ms:`, err.message)
+      reject(err)
+    })
     if (payload) req.write(payload)
     req.end()
   })
@@ -348,7 +366,14 @@ export const backend = {
       const url = `/question/${requestID}/reject${params.toString() ? '?' + params.toString() : ''}`
       await request("POST", url)
     },
-    
+
+    permissionReply: async (requestID: string, reply: "once" | "always" | "reject", directory?: string): Promise<void> => {
+      const params = new URLSearchParams()
+      if (directory) params.set("directory", storagePath(directory))
+      const url = `/permission/${requestID}/reply${params.toString() ? '?' + params.toString() : ''}`
+      await request("POST", url, { reply })
+    },
+
     events: (sessionID: string, onEvent: (event: unknown) => void, directory?: string): (() => void) => {
       if (!backendPort) return () => {}
 
@@ -424,6 +449,14 @@ eventsWithDispatch: (sessionID: string, onEvent: (event: unknown) => void, direc
               const eventSessionID = props?.sessionID as string | undefined
 
               console.log('[SSE] EVENT:', eventType, 'sessionID:', eventSessionID, 'target listeners:', Array.from(stream.listeners.keys()))
+
+              // Log permission.asked events with full details
+              if (eventType === 'permission.asked') {
+                console.log('[SSE] ========== PERMISSION.ASKED EVENT ==========')
+                console.log('[SSE] Full event:', JSON.stringify(event, null, 2))
+                console.log('[SSE] props:', JSON.stringify(props, null, 2))
+                console.log('[SSE] ==========================================')
+              }
 
               if (eventSessionID) {
                 const handler = stream.listeners.get(eventSessionID)

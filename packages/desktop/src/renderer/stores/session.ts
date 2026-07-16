@@ -80,6 +80,15 @@ export async function parseMentions(text: string, directory?: string): Promise<P
     // Regex to find @mentions: @name or @path/to/file#10-20
     const mentionRegex = /@([a-zA-Z0-9_\-./]+(?:#\d+(?:-\d+)*)?)/g
 
+    // Early return if no @mentions in text - no need to load agents
+    if (!text.includes('@')) {
+      console.log('[parseMentions] No @mentions found, skipping agent load')
+      return {
+        parts: [{ type: 'text', text }],
+        rawText: text
+      }
+    }
+
     let lastIndex = 0
     let match: RegExpExecArray | null
 
@@ -1362,9 +1371,48 @@ export const useSessionStore = defineStore('session', () => {
 
       console.log('[SSE] eventType:', eventType, 'props:', JSON.stringify(props).slice(0, 200))
 
+      // FORCE RECOMPILE: permission handling v2
+      if (eventType === 'permission.asked' || eventType?.includes('permission')) {
+        console.log('[SSE] ========== PERMISSION EVENT V2 ==========')
+        console.log('[SSE] eventType:', eventType)
+        console.log('[SSE] Full event:', JSON.stringify(event, null, 2))
+        console.log('[SSE] props:', JSON.stringify(props, null, 2))
+        console.log('[SSE] =====================================')
+      }
+
       const eventSessionId = props?.sessionID as string | undefined
 
       if (eventType?.startsWith('server.')) return
+
+      // Handle permission.asked event - show UI for user to decide
+      if (eventType === 'permission.asked') {
+        const permissionId = props?.id as string | undefined
+        const permission = props?.permission as string | undefined
+        const sessionID = props?.sessionID as string | undefined
+        const patterns = props?.patterns as string[] | undefined
+        const metadata = props?.metadata as Record<string, unknown> | undefined
+        const always = props?.always as string[] | undefined
+        const tool = props?.tool as { messageID: string; callID: string } | undefined
+        
+        console.log('[SSE] permission.asked:', permission, 'id:', permissionId, 'sessionID:', sessionID)
+        
+        if (permissionId && sessionID) {
+          // Import permission store and add request
+          import('./permission').then(({ usePermissionStore }) => {
+            const permissionStore = usePermissionStore()
+            permissionStore.addRequest({
+              id: permissionId,
+              sessionID,
+              permission: permission ?? 'unknown',
+              patterns: patterns ?? [],
+              metadata: metadata ?? {},
+              always: always ?? [],
+              tool,
+            })
+          })
+        }
+        return
+      }
 
       if (eventType === 'session.updated') {
         const info = props?.info as Record<string, unknown> | undefined
