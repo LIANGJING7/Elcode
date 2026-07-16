@@ -75,8 +75,11 @@ const blockNodes = computed<BlockNode[]>(() => {
   const nodes: BlockNode[] = []
   let codeIdx = 0
   const all = tokens.value
+  // 记录已被父 block 覆盖的 token 索引，避免嵌套 token 被重复创建节点
+  let skipUntil = -1
   for (let i = 0; i < all.length; i++) {
     const t = all[i] as any
+    if (i <= skipUntil) continue
     // fence 是自闭合的 (无 open/close)
     if (t.type === 'fence' || t.type === 'code_block') {
       nodes.push({
@@ -103,6 +106,19 @@ const blockNodes = computed<BlockNode[]>(() => {
     const comp = BLOCK_MAP[t.type]
     if (comp && t.type.endsWith('_open')) {
       const inline = extractInlineTokens(all, i)
+      // 找到 close token 的位置，跳过该范围内的子 token
+      const closeType = t.type.replace('_open', '_close')
+      let depth = 0
+      let closeIdx = i
+      for (let j = i + 1; j < all.length; j++) {
+        const ct = all[j] as any
+        if (ct.type === t.type) depth++
+        if (ct.type === closeType) {
+          if (depth === 0) { closeIdx = j; break }
+          depth--
+        }
+      }
+      skipUntil = closeIdx
       nodes.push({
         key: `${props.messageId}-${t.type}-${i}`,
         component: comp,
