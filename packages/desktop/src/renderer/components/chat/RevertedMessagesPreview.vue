@@ -133,10 +133,11 @@ async function handleRecover(messageId: string) {
   font-size: 13px;
   color: #a1a1aa;
   line-height: 1.4;
-  word-wrap: break-word;
   flex: 1;
+  max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .recover-btn {
