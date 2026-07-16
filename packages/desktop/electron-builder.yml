@@ -1,6 +1,7 @@
 appId: com.elcode.desktop
 productName: Elcode
 npmRebuild: false
+artifactName: ${productName}.${ext}
 directories:
   buildResources: build
   output: release
@@ -28,6 +29,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Elcode
+  artifactName: ${productName} Setup.${ext}
 linux:
   icon: build/icon.png
   target:

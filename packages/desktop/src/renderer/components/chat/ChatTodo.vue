@@ -44,8 +44,8 @@ function getStatusIcon(status: string) {
           </div>
         </div>
 
-        <div class="todo-list" :class="{ collapsed }">
-          <div class="todo-list-inner">
+        <div class="todo-list pb-2 pt-2" :class="{ collapsed }">
+          <div class="todo-list-inner ">
             <div
               v-for="(item, i) in showItems"
               :key="i"
@@ -74,14 +74,13 @@ function getStatusIcon(status: string) {
 .todo-panel-container {
   margin-bottom: -24px;
   position: relative;
-  z-index: 1;
 }
 
 .todo-card {
   padding: 0 0 10px 0;
   margin-bottom: 0;
-  background: rgba(31, 31, 35, 0.5);
-  border-color: rgba(39, 39, 42, 0.6);
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
   border-radius: 8px 8px 0 0;
   border-bottom-width: 0;
   box-shadow: none;
@@ -108,12 +107,12 @@ function getStatusIcon(status: string) {
 
 .header-text {
   font-size: 14px;
-  color: #e4e4e7;
+  color: var(--color-text);
   font-weight: 500;
 }
 
 .header-chevron {
-  color: #71717a;
+  color: var(--color-text-muted);
   transition: transform 0.2s ease;
 }
 
@@ -148,16 +147,16 @@ function getStatusIcon(status: string) {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: #52525b;
+  color: var(--color-text-muted);
 }
 
 .todo-icon.icon-completed {
-  color: #71717a;
+  color: var(--color-text-muted);
 }
 
 .todo-icon.icon-progress {
-  color: #d4d0c8;
-  fill: #d4d0c8;
+  color: var(--color-accent);
+  fill: var(--color-accent);
   animation: pulse-ring 2s ease-in-out infinite;
 }
 
@@ -167,14 +166,14 @@ function getStatusIcon(status: string) {
 }
 
 .todo-content {
-  color: #e4e4e7;
+  color: var(--color-text);
   line-height: 1.5;
   word-wrap: break-word;
   flex: 1;
 }
 
 .todo-content.completed {
-  color: #71717a;
+  color: var(--color-text-muted);
   text-decoration: line-through;
 }
 
@@ -183,16 +182,16 @@ function getStatusIcon(status: string) {
 }
 
 .todo-list-inner::-webkit-scrollbar-track {
-  background: rgba(39, 39, 42, 0.3);
+  background: var(--color-bg-surface);
   border-radius: 2px;
 }
 
 .todo-list-inner::-webkit-scrollbar-thumb {
-  background: rgba(113, 113, 122, 0.5);
+  background: var(--color-border);
   border-radius: 2px;
 }
 
 .todo-list-inner::-webkit-scrollbar-thumb:hover {
-  background: rgba(113, 113, 122, 0.8);
+  background: var(--color-text-muted);
 }
 </style>

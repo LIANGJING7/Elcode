@@ -37,8 +37,12 @@ const themeOptions = [
   { value: 'light', label: '亮色' }
 ] as const
 
-function handleThemeChange(theme: 'dark' | 'light') {
-  themeStore.setTheme(theme)
+async function handleThemeChange(theme: 'dark' | 'light') {
+  try {
+    await themeStore.setTheme(theme)
+  } catch (e) {
+    console.error('[SettingsAppearance] Failed to change theme:', e)
+  }
 }
 </script>
 

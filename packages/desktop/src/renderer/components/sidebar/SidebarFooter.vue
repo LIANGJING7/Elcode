@@ -15,7 +15,9 @@ const isSettingsMode = computed(() => ui.view === 'settings')
 const isDark = computed(() => themeStore.theme === 'dark')
 
 function toggleTheme() {
-  themeStore.setTheme(isDark.value ? 'light' : 'dark')
+  themeStore.setTheme(isDark.value ? 'light' : 'dark').catch((e) => {
+    console.error('[SidebarFooter] Failed to toggle theme:', e)
+  })
 }
 </script>
 
