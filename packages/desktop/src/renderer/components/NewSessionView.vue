@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, nextTick } from 'vue'
+import { onMounted, nextTick, ref } from 'vue'
 import { watch } from 'vue'
 import { useSessionStore, parseMentions } from '../stores/session'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUiStore } from '../stores/ui'
+import { useModelsStore } from '../stores/models'
 import type { PromptInput, PromptOptions } from '../../types/ipc'
 import Composer from './Composer.vue'
 import WorkspaceSelector from './composer/WorkspaceSelector.vue'
@@ -11,6 +12,19 @@ import WorkspaceSelector from './composer/WorkspaceSelector.vue'
 const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
 const ui = useUiStore()
+const modelsStore = useModelsStore()
+
+const toastMessage = ref('')
+
+function showToast(message: string) {
+  toastMessage.value = message
+  setTimeout(() => { toastMessage.value = '' }, 5000)
+}
+
+function goToModelSettings() {
+  toastMessage.value = ''
+  ui.enterSettings()
+}
 
 onMounted(() => nextTick())
 
@@ -36,6 +50,11 @@ async function handleComposerSend(
   console.log('[DEBUG NewSessionView] Attachments:', attachments.length)
   console.log('[DEBUG NewSessionView] currentSessionId:', sessionStore.currentSessionId)
   console.log('[DEBUG NewSessionView] isPendingNewSession:', sessionStore.isPendingNewSession)
+
+  if (!modelsStore.selectedModel) {
+    showToast('请先选择一个模型再开始对话')
+    return
+  }
 
   // 确保处于 pending 新会话状态
   if (!sessionStore.currentSessionId && !sessionStore.isPendingNewSession) {
@@ -92,7 +111,25 @@ async function handleComposerSend(
 </script>
 
 <template>
-  <div class="new-session-view flex-1 flex flex-col items-center justify-center bg-bg">
+  <div class="new-session-view flex-1 flex flex-col items-center justify-center bg-bg relative">
+    <!-- Toast notification -->
+    <Transition name="toast">
+      <div
+        v-if="toastMessage"
+        class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-lg bg-surface border border-border flex items-center gap-3"
+      >
+        <div class="flex items-center gap-2 text-text">
+          <span class="text-sm">{{ toastMessage }}</span>
+        </div>
+        <button
+          @click="goToModelSettings"
+          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+        >
+          去设置
+        </button>
+      </div>
+    </Transition>
+
     <div class="w-full max-w-2xl mx-6">
       <div class="text-4xl font-bold text-text-muted/30 mb-4 text-center select-none">
         ELCODE
@@ -124,5 +161,17 @@ async function handleComposerSend(
   background-image:
     radial-gradient(ellipse at top left, var(--color-accent-glow) 0%, transparent 50%),
     radial-gradient(ellipse at bottom right, var(--color-accent-muted) 0%, transparent 50%);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}
+.toast-leave-to {
+  opacity: 0;
 }
 </style>

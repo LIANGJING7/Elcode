@@ -10,6 +10,8 @@ import RevertedMessagesPreview from './RevertedMessagesPreview.vue'
 import { useStreamingStore } from '../../stores/streaming'
 import { useSessionStore, parseMentions } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { useModelsStore } from '../../stores/models'
+import { useUiStore } from '../../stores/ui'
 import { useQuestionStore } from '../../stores/question'
 import { usePermissionStore } from '../../stores/permission'
 import QuestionPanel from '../question/QuestionPanel.vue'
@@ -32,10 +34,28 @@ const needInitialScroll = ref(false)
 const streamingStore = useStreamingStore()
 const sessionStore = useSessionStore()
 const workspaceStore = useWorkspaceStore()
+const modelsStore = useModelsStore()
+
+const toastMessage = ref('')
+
+function showToast(message: string) {
+  toastMessage.value = message
+  setTimeout(() => { toastMessage.value = '' }, 5000)
+}
+
+function goToModelSettings() {
+  toastMessage.value = ''
+  useUiStore().enterSettings()
+}
 const questionStore = useQuestionStore()
 const permissionStore = usePermissionStore()
 
 async function handleSend(content: string, options: Record<string, unknown>, attachments: Array<{ type: string; name?: string; path?: string; content?: string; mime?: string; url?: string; isBase64?: boolean }>) {
+  if (!modelsStore.selectedModel) {
+    showToast('请先选择一个模型再开始对话')
+    return
+  }
+
   const mode = options.mode as string | undefined
   const agent = mode === 'plan' ? 'plan' : 'build'
   const promptOptions: PromptOptions = { agent }
@@ -104,7 +124,25 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
 </script>
 
 <template>
-    <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg">
+    <div class="chat-view flex-1 flex flex-col min-h-0 min-w-0 bg-bg relative">
+    <!-- Toast notification -->
+    <Transition name="toast">
+      <div
+        v-if="toastMessage"
+        class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-lg bg-surface border border-border flex items-center gap-3"
+      >
+        <div class="flex items-center gap-2 text-text">
+          <span class="text-sm">{{ toastMessage }}</span>
+        </div>
+        <button
+          @click="goToModelSettings"
+          class="px-3 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+        >
+          去设置
+        </button>
+      </div>
+    </Transition>
+
     <ChatTimeline
       ref="timelineRef"
       :messages="messages"
@@ -142,3 +180,17 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
     />
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}
+.toast-leave-to {
+  opacity: 0;
+}
+</style>
