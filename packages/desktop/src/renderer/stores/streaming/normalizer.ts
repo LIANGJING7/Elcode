@@ -339,7 +339,7 @@ export function createNormalizer(ctx: NormalizerContext) {
           callId: props.callID as string,
           error: {
             type: error?.type ?? 'unknown',
-            message: error?.message ?? 'Unknown error'
+            message: error?.message ?? ''
           },
           version
         }

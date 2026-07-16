@@ -345,7 +345,7 @@ function toMessage(msg: BackendMessage): Message | null {
     const rawError = (msg.info as any).error
     const error = rawError ? {
       type: rawError.name || 'unknown',
-      message: rawError.data?.message || rawError.message || 'Unknown error'
+      message: rawError.data?.message || rawError.message || ''
     } : undefined
 
     return {
@@ -393,7 +393,7 @@ function toMessage(msg: BackendMessage): Message | null {
     const rawError = (msg as any).error
     const error = rawError ? {
       type: rawError.name || rawError.type || 'unknown',
-      message: rawError.data?.message || rawError.message || 'Unknown error'
+      message: rawError.data?.message || rawError.message || ''
     } : undefined
 
     console.log('[toMessage V2 Assistant] error:', error)
