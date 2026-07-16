@@ -157,7 +157,7 @@
           <div class="flex gap-2 mt-4 justify-end">
             <button
               class="px-3 py-1.5 text-xs bg-bg border border-border hover:border-border-light rounded text-text cursor-pointer"
-              @click="resetCustomForm; $emit('close')"
+              @click="resetCustomForm"
             >
               Cancel
             </button>

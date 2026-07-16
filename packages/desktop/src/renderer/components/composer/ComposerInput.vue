@@ -77,7 +77,7 @@ const effectivePlaceholder = computed(() => {
 
 watch(() => props.value, (val) => {
   internalValue.value = val
-  showSlashMenu.value = false
+  showSlashMenu.value = val === '/'
 })
 
 const slashCommands = [
@@ -94,8 +94,6 @@ function handleInput(e: Event) {
   internalValue.value = newValue
   emit('update:value', newValue)
   historyIndex.value = -1
-  showSlashMenu.value = false
-  emit('mention-check', newValue, target.selectionStart)
   showSlashMenu.value = newValue === '/'
   if (mentionCheckTimer) clearTimeout(mentionCheckTimer)
   mentionCheckTimer = setTimeout(() => {
