@@ -119,9 +119,6 @@ async function handleComposerSend(
         class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-lg bg-surface border border-border flex items-center gap-3"
       >
         <div class="flex items-center gap-2 text-text">
-          <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-          </svg>
           <span class="text-sm">{{ toastMessage }}</span>
         </div>
         <button
@@ -170,9 +167,11 @@ async function handleComposerSend(
 .toast-leave-active {
   transition: all 0.3s ease;
 }
-.toast-enter-from,
-.toast-leave-to {
+.toast-enter-from {
   opacity: 0;
   transform: translate(-50%, -20px);
+}
+.toast-leave-to {
+  opacity: 0;
 }
 </style>
