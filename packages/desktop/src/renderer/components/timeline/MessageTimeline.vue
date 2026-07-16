@@ -3,15 +3,13 @@
  * MessageTimeline - Adapter for history messages.
  *
  * Converts Message → TimelineNode[] using same grouping logic as streaming.
- * Preserves MessageAssistant features: duration display, reasoning threshold, code extraction.
+ * Preserves MessageAssistant features: duration display, reasoning threshold.
  */
 import { computed } from 'vue'
 import type { Message, ToolCall } from '../../../types/ipc'
 import type { TimelineNode } from '../../stores/streaming/selectors'
 import { getToolCategory } from '../../tool/registry'
 import TimelineRenderer from './TimelineRenderer.vue'
-import ReasoningBlock from '../chat/ReasoningBlock.vue'
-import CodeBlock from '../chat/CodeBlock.vue'
 import MessageError from '../part/MessageError.vue'
 
 const props = defineProps<{ message: Message }>()
@@ -48,17 +46,6 @@ const showReasoning = computed(() => {
   return true
 })
 
-const codeBlocks = computed(() => {
-  const content = props.message.content || ''
-  const matches = content.matchAll(/```(\w+)\n([\s\S]*?)```/g)
-  return Array.from(matches, (m) => ({ lang: m[1], code: m[2].trim() }))
-})
-
-const textContent = computed(() => {
-  const content = props.message.content || ''
-  return content.replace(/```(\w+)\n([\s\S]*?)```/g, '').trim()
-})
-
 const timelineNodes = computed(() => {
   const nodes: TimelineNode[] = []
   let order = 0
@@ -81,12 +68,13 @@ const timelineNodes = computed(() => {
     nodes.push({ ...node, order: order++ })
   }
 
-  if (textContent.value) {
+  const content = props.message.content || ''
+  if (content.trim()) {
     nodes.push({
       id: 'text',
       type: 'text',
       order: order++,
-      payload: { content: textContent.value }
+      payload: { content }
     })
   }
 
@@ -152,10 +140,6 @@ function buildGroupedToolNodes(tools: ToolCall[]): TimelineNode[] {
       @open-diff-file="emit('openDiffFile', $event)"
       @open-subagent-panel="handleOpenSubagentPanel($event)"
     />
-
-    <div v-if="codeBlocks.length" class="mt-2">
-      <CodeBlock v-for="(block, i) in codeBlocks" :key="i" :code="block.code" :lang="block.lang" />
-    </div>
 
     <MessageError v-if="message.error && message.error.type !== 'MessageAbortedError'" :error="message.error" />
 
