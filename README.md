@@ -1,6 +1,8 @@
 # Elcode
-
+[Releases](https://github.com/LIANGJING7/Elcode/releases) 
 基于 AI 的智能编程助手，通过自然语言对话帮助你编写、理解和修改代码。
+## agent 流程
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/5ef25b30-4119-46d5-bfbd-ac3adf51f47c" />
 
 ## 功能特性
 
