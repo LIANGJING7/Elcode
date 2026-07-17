@@ -47,6 +47,16 @@ const stepError = computed(() => stream.value?.stepError ?? null)
         <span class="text-xs text-text-muted thinking-text">思考中</span>
       </div>
 
+      <!-- Thinking indicator when streaming -->
+      <div v-if="isStreaming" class="thinking-indicator mt-3 flex items-center gap-2">
+        <div class="thinking-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <span class="text-xs text-text-muted">思考中</span>
+      </div>
+
       <MessageError v-if="stepError && stepError.type !== 'MessageAbortedError'" :error="stepError" />
 
       <div v-if="stepError?.type === 'MessageAbortedError'" class="text-xs text-error mt-2">
@@ -64,5 +74,50 @@ const stepError = computed(() => stream.value?.stepError ?? null)
 @keyframes thinking-fade {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+.thinking-indicator {
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: thinking-bounce 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 </style>
