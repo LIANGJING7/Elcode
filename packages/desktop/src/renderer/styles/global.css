@@ -7,6 +7,7 @@
   --color-bg-surface: #262626;
   --color-bg-hover: #303030;
   --color-bg-active: #3a3a3a;
+  --color-bg-muted: #252525;
 
   --color-text: #e8e4dc;
   --color-text-secondary: #a8a4a0;
@@ -91,6 +92,7 @@
   --color-bg-surface: #f2f1ef;
   --color-bg-hover: #e8e6e3;
   --color-bg-active: #ddd9d4;
+  --color-bg-muted: #f2f1ef;
 
   --color-text: #37352f;
   --color-text-secondary: #6b6b6b;
