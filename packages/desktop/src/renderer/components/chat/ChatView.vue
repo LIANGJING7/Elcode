@@ -121,6 +121,27 @@ watch(() => sessionStore.currentMessages.length, async (length) => {
     needInitialScroll.value = false
   })
 })
+
+// Auto-scroll during streaming
+watch(
+  () => streamingStore.isCurrentStreaming.value,
+  (isStreaming) => {
+    if (isStreaming) {
+      const interval = setInterval(() => {
+        timelineRef.value?.scrollToBottom({ behavior: 'auto' })
+      }, 100)
+      const stopWatch = watch(
+        () => streamingStore.isCurrentStreaming.value,
+        (stillStreaming) => {
+          if (!stillStreaming) {
+            clearInterval(interval)
+            stopWatch()
+          }
+        }
+      )
+    }
+  }
+)
 </script>
 
 <template>
