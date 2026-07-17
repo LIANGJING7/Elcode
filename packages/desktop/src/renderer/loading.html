@@ -13,7 +13,7 @@
       user-select: none;
       -webkit-user-select: none;
       -webkit-app-region: no-drag;
-      background: #202020;
+      background: var(--loading-bg, #fdfcfa);
     }
     
     .loading-container {
@@ -46,8 +46,36 @@
 <body>
   <div class="loading-container">
     <svg class="loading-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M65 25 C65 25 75 25 75 35 L75 65 C75 75 65 75 65 75 M65 45 C65 45 55 45 55 55 C55 65 65 65 65 65 M35 25 C35 25 25 25 25 35 L25 65 C25 75 35 75 35 75 M35 45 C35 45 45 45 45 35" stroke="white" stroke-width="8" stroke-linecap="round" fill="none"/>
+      <path d="M65 25 C65 25 75 25 75 35 L75 65 C75 75 65 75 65 75 M65 45 C65 45 55 45 55 55 C55 65 65 65 65 65 M35 25 C35 25 25 25 25 35 L25 65 C25 75 35 75 35 75 M35 45 C35 45 45 45 45 35" stroke="var(--loading-icon-color, #37352f)" stroke-width="8" stroke-linecap="round" fill="none"/>
     </svg>
   </div>
+  <script>
+    // Apply theme colors based on saved preference or default to light
+    (async function() {
+      let isDark = false;
+      
+      try {
+        if (window.desktop && window.desktop.globalState) {
+          const globalState = await window.desktop.globalState.get();
+          const saved = globalState.theme;
+          isDark = saved === 'dark';
+        }
+      } catch (e) {
+        // Default to light theme if no saved preference
+        console.log('[Loading] No saved theme, using light theme');
+      }
+      
+      document.documentElement.style.setProperty('--loading-bg', isDark ? '#202020' : '#f8f7f5');
+      document.documentElement.style.setProperty('--loading-icon-color', isDark ? '#e8e4dc' : '#37352f');
+      
+      // Title bar for loading page uses elevated background
+      if (window.desktop && window.desktop.window) {
+        window.desktop.window.setTitleBarOverlay({
+          color: isDark ? '#202020' : '#f8f7f5',
+          symbolColor: isDark ? '#a8a4a0' : '#37352f'
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

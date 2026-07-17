@@ -10,17 +10,18 @@ const codeThemeMap: Record<Theme, string> = {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const theme = ref<Theme>('dark')
+  const theme = ref<Theme>('light')
 
   async function loadTheme() {
     try {
-      const saved = await window.desktop.config.get('theme')
-      console.log('[ThemeStore] Loaded theme from config:', saved)
+      const globalState = await window.desktop.globalState.get()
+      const saved = globalState.theme as Theme | undefined
+      console.log('[ThemeStore] Loaded theme from globalState:', saved)
       if (saved === 'light' || saved === 'dark') {
         theme.value = saved
       }
     } catch (e) {
-      console.log('[ThemeStore] No saved theme, using default')
+      console.log('[ThemeStore] No saved theme, using default:', e)
     }
     applyTheme()
     updateTitleBarOverlay(theme.value)
@@ -29,8 +30,12 @@ export const useThemeStore = defineStore('theme', () => {
   async function setTheme(newTheme: Theme) {
     try {
       theme.value = newTheme
-      await window.desktop.config.set('theme', newTheme)
-      await window.desktop.config.set('codeTheme', codeThemeMap[newTheme])
+      const globalState = await window.desktop.globalState.get()
+      await window.desktop.globalState.set({
+        ...globalState,
+        theme: newTheme,
+        codeTheme: codeThemeMap[newTheme]
+      })
       applyTheme()
       updateTitleBarOverlay(newTheme)
     } catch (e) {

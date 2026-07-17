@@ -1,6 +1,10 @@
 import { BrowserWindow, app, nativeImage } from 'electron'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
+import path from 'path'
+import fs from 'fs/promises'
+import { xdgState } from 'xdg-basedir'
+import os from 'os'
 
 const __dirname = join(fileURLToPath(import.meta.url), '..')
 
@@ -16,8 +20,29 @@ function getIconPath(): string {
   return join(__dirname, '../../build', 'icon.png')
 }
 
+// Read saved theme from global state file
+async function getSavedTheme(): Promise<'dark' | 'light'> {
+  try {
+    const APP_NAME = 'lcode'
+    const STATE_DIR = path.join(xdgState ?? path.join(os.homedir(), '.local', 'state'), APP_NAME)
+    const STATE_FILE = path.join(STATE_DIR, 'lcode.json')
+    const content = await fs.readFile(STATE_FILE, 'utf-8')
+    const data = JSON.parse(content)
+    if (data && typeof data === 'object' && (data.theme === 'dark' || data.theme === 'light')) {
+      return data.theme
+    }
+  } catch {
+    // ignore
+  }
+  return 'light' // default to light theme
+}
+
 export async function createWindow(): Promise<BrowserWindow> {
   const icon = nativeImage.createFromPath(getIconPath())
+  
+  // Read saved theme to set initial title bar colors
+  const savedTheme = await getSavedTheme()
+  const isDark = savedTheme === 'dark'
   
   const win = new BrowserWindow({
     width: 1200,
@@ -26,11 +51,11 @@ export async function createWindow(): Promise<BrowserWindow> {
     minHeight: 600,
     icon,
     titleBarStyle: 'hidden',
-    backgroundColor: '#202020',
+    backgroundColor: isDark ? '#202020' : '#f8f7f5',
     frame: false,
     titleBarOverlay: {
-      color: '#202020',
-      symbolColor: '#a8a4a0',
+      color: isDark ? '#202020' : '#f8f7f5',
+      symbolColor: isDark ? '#a8a4a0' : '#37352f',
       height: 48,
     },
     webPreferences: {
