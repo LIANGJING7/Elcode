@@ -60,10 +60,10 @@ const readMeta: ToolMeta = {
     const limit = tool.args.limit
     let summary = '<b>读取</b> ' + fileName
     if (offset != null) {
-      summary += ' o=' + offset
+      summary += ' offset=' + offset
     }
     if (limit != null) {
-      summary += ' l=' + limit
+      summary += ' limit=' + limit
     }
     return summary
   },
