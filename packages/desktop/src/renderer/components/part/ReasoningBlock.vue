@@ -42,7 +42,7 @@ const durationText = computed(() => {
         >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
-        <span class="text-xs text-text-muted font-medium">思考过程</span>
+        <span class="text-xs text-text-muted font-medium">推理</span>
         <span v-if="durationText" class="text-xs text-text-muted"> &middot; {{ durationText }}</span>
       </template>
     </div>
