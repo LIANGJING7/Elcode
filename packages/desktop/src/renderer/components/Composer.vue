@@ -88,8 +88,9 @@
           />
 
           <!-- Send/Stop Button -->
-          <!-- Send Button (always visible) -->
+          <!-- Send Button (visible when not streaming) -->
           <button
+            v-if="!isStreaming"
             class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors relative"
             :class="canSend
               ? 'bg-accent hover:bg-accent-hover text-white'
@@ -110,8 +111,8 @@
           </button>
           <!-- Stop Button (visible during streaming) -->
           <button
-            v-if="isStreaming"
-            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors ml-1.5"
+            v-else
+            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
             title="Stop"
             @click="handleInterrupt"
           >
