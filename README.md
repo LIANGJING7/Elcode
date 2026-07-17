@@ -1,6 +1,7 @@
 # Elcode
 
 基于 AI 的智能编程助手，通过自然语言对话帮助你编写、理解和修改代码。
+<img width="1536" height="1024" alt="liuchengtu" src="https://github.com/user-attachments/assets/8f18e8fc-54c3-4896-b6f5-b463819fb84e" />
 
 ## 功能特性
 
