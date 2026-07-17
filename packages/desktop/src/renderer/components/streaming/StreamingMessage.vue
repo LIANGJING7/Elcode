@@ -43,10 +43,6 @@ const stepError = computed(() => stream.value?.stepError ?? null)
         @open-diff-file="emit('openDiffFile', $event)"
       />
 
-      <div v-if="nodes.length === 0" class="flex items-center gap-2">
-        <span class="text-xs text-text-muted thinking-text">思考中</span>
-      </div>
-
       <!-- Thinking indicator when streaming -->
       <div v-if="isStreaming" class="thinking-indicator mt-3 flex items-center gap-2">
         <div class="thinking-dots">
@@ -67,15 +63,6 @@ const stepError = computed(() => stream.value?.stepError ?? null)
 </template>
 
 <style scoped>
-.thinking-text {
-  animation: thinking-fade 1.5s ease-in-out infinite;
-}
-
-@keyframes thinking-fade {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
 .thinking-indicator {
   animation: thinking-pulse 2s ease-in-out infinite;
 }
