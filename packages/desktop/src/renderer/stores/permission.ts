@@ -71,6 +71,12 @@ export const usePermissionStore = defineStore('permission', () => {
         removeRequest(sessionID, requestID)
       }
     } catch (error) {
+      // If request not found on backend, remove it from local store anyway
+      if (String(error).includes('PermissionNotFoundError') || String(error).includes('404')) {
+        if (sessionID) {
+          removeRequest(sessionID, requestID)
+        }
+      }
       console.error('[Permission] Failed to reply:', error)
       throw error
     }
